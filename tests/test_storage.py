@@ -1,0 +1,249 @@
+import pytest
+from datetime import datetime
+from src.storage import Storage
+
+
+@pytest.fixture
+def storage(in_memory_db):
+    return Storage(connection=in_memory_db)
+
+
+class TestInsertTransaction:
+    def test_insert_manual_transaction(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual",
+            source_id="manual-20260416-001",
+            amount=12.50,
+            merchant="Toast Box",
+            description="Lunch",
+            transaction_date="2026-04-16T12:30:00",
+        )
+        assert tx_id == 1
+
+    def test_insert_returns_id(self, storage):
+        id1 = storage.insert_transaction(
+            source="manual", source_id="m1", amount=5.0,
+            merchant="Test", transaction_date="2026-04-16T12:00:00",
+        )
+        id2 = storage.insert_transaction(
+            source="manual", source_id="m2", amount=10.0,
+            merchant="Test2", transaction_date="2026-04-16T13:00:00",
+        )
+        assert id1 == 1
+        assert id2 == 2
+
+    def test_duplicate_source_id_raises(self, storage):
+        storage.insert_transaction(
+            source="dbs_paylah", source_id="email-123", amount=5.0,
+            merchant="Test", transaction_date="2026-04-16T12:00:00",
+        )
+        with pytest.raises(ValueError, match="duplicate"):
+            storage.insert_transaction(
+                source="dbs_paylah", source_id="email-123", amount=5.0,
+                merchant="Test", transaction_date="2026-04-16T12:00:00",
+            )
+
+    def test_insert_with_category(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            merchant="Toast Box", category="Food",
+            transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["category"] == "Food"
+
+    def test_insert_with_raw_data(self, storage):
+        tx_id = storage.insert_transaction(
+            source="dbs_paylah", source_id="e1", amount=5.0,
+            merchant="Test", raw_data="original email body here",
+            transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["raw_data"] == "original email body here"
+
+
+class TestGetTransaction:
+    def test_get_existing(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["merchant"] == "Toast Box"
+        assert tx["amount"] == 12.50
+
+    def test_get_nonexistent_returns_none(self, storage):
+        assert storage.get_transaction(999) is None
+
+
+class TestUpdateTransaction:
+    def test_update_merchant(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")
+        tx = storage.get_transaction(tx_id)
+        assert tx["merchant"] == "Ya Kun"
+
+    def test_update_category(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            merchant="Toast Box", category="Food",
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, category="Transport")
+        tx = storage.get_transaction(tx_id)
+        assert tx["category"] == "Transport"
+
+    def test_update_nonexistent_raises(self, storage):
+        with pytest.raises(ValueError, match="not found"):
+            storage.update_transaction(999, merchant="Test")
+
+
+class TestDeleteTransaction:
+    def test_delete_existing(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.delete_transaction(tx_id)
+        assert storage.get_transaction(tx_id) is None
+
+    def test_delete_nonexistent_raises(self, storage):
+        with pytest.raises(ValueError, match="not found"):
+            storage.delete_transaction(999)
+
+
+class TestQueryTransactions:
+    def test_query_by_date_range(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=10.0,
+            merchant="A", transaction_date="2026-04-15T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=20.0,
+            merchant="B", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m3", amount=30.0,
+            merchant="C", transaction_date="2026-04-17T12:00:00",
+        )
+        results = storage.query_transactions(start_date="2026-04-16", end_date="2026-04-16")
+        assert len(results) == 1
+        assert results[0]["merchant"] == "B"
+
+    def test_query_by_category(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=10.0,
+            merchant="A", category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=20.0,
+            merchant="B", category="Transport", transaction_date="2026-04-16T12:00:00",
+        )
+        results = storage.query_transactions(category="Food")
+        assert len(results) == 1
+        assert results[0]["category"] == "Food"
+
+    def test_query_by_merchant_search(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=10.0,
+            merchant="Toast Box Jurong", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=20.0,
+            merchant="Ya Kun Clementi", transaction_date="2026-04-16T12:00:00",
+        )
+        results = storage.query_transactions(merchant_search="Toast")
+        assert len(results) == 1
+        assert "Toast" in results[0]["merchant"]
+
+    def test_query_by_source(self, storage):
+        storage.insert_transaction(
+            source="dbs_paylah", source_id="d1", amount=10.0,
+            merchant="A", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.insert_transaction(
+            source="uob_paynow", source_id="u1", amount=20.0,
+            merchant="B", transaction_date="2026-04-16T12:00:00",
+        )
+        results = storage.query_transactions(source="dbs_paylah")
+        assert len(results) == 1
+
+    def test_query_spending_summary(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=10.0,
+            merchant="A", category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=20.0,
+            merchant="B", category="Food", transaction_date="2026-04-16T13:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m3", amount=30.0,
+            merchant="C", category="Transport", transaction_date="2026-04-16T14:00:00",
+        )
+        summary = storage.get_spending_summary(
+            start_date="2026-04-16", end_date="2026-04-16"
+        )
+        assert summary["total"] == 60.0
+        assert summary["by_category"]["Food"] == 30.0
+        assert summary["by_category"]["Transport"] == 30.0
+
+
+class TestCategories:
+    def test_load_categories(self, storage, sample_categories):
+        storage.load_categories(sample_categories)
+        cats = storage.get_categories()
+        assert len(cats) == 6
+        assert cats[0]["name"] == "Food"
+
+    def test_load_categories_idempotent(self, storage, sample_categories):
+        storage.load_categories(sample_categories)
+        storage.load_categories(sample_categories)
+        cats = storage.get_categories()
+        assert len(cats) == 6
+
+
+class TestIngestionState:
+    def test_get_initial_state(self, storage):
+        state = storage.get_ingestion_state("dbs_paylah")
+        assert state is None
+
+    def test_update_and_get_state(self, storage):
+        storage.update_ingestion_state("dbs_paylah", "msg-123", "2026-04-16T12:00:00")
+        state = storage.get_ingestion_state("dbs_paylah")
+        assert state["last_processed_id"] == "msg-123"
+
+    def test_update_state_overwrites(self, storage):
+        storage.update_ingestion_state("dbs_paylah", "msg-123", "2026-04-16T12:00:00")
+        storage.update_ingestion_state("dbs_paylah", "msg-456", "2026-04-16T13:00:00")
+        state = storage.get_ingestion_state("dbs_paylah")
+        assert state["last_processed_id"] == "msg-456"
+
+
+class TestDuplicateCheck:
+    def test_is_duplicate_false_for_new(self, storage):
+        assert storage.is_duplicate("dbs_paylah", "email-123") is False
+
+    def test_is_duplicate_true_after_insert(self, storage):
+        storage.insert_transaction(
+            source="dbs_paylah", source_id="email-123", amount=5.0,
+            merchant="Test", transaction_date="2026-04-16T12:00:00",
+        )
+        assert storage.is_duplicate("dbs_paylah", "email-123") is True
+
+    def test_recent_transaction_exists(self, storage):
+        storage.insert_transaction(
+            source="apple_wallet", source_id="aw-1", amount=12.50,
+            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
+        )
+        assert storage.recent_transaction_exists("Toast Box", 12.50, minutes=5) is True
+
+    def test_recent_transaction_not_exists_different_amount(self, storage):
+        storage.insert_transaction(
+            source="apple_wallet", source_id="aw-1", amount=12.50,
+            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
+        )
+        assert storage.recent_transaction_exists("Toast Box", 99.99, minutes=5) is False
