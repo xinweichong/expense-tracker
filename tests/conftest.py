@@ -1,0 +1,83 @@
+import pytest
+import sqlite3
+import tempfile
+import os
+from pathlib import Path
+
+
+@pytest.fixture
+def in_memory_db():
+    """Provide an in-memory SQLite connection with schema applied."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    schema = """
+    CREATE TABLE transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        source_id TEXT UNIQUE,
+        amount REAL NOT NULL,
+        currency TEXT DEFAULT 'SGD',
+        merchant TEXT,
+        description TEXT,
+        category TEXT,
+        transaction_date DATETIME,
+        ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        raw_data TEXT
+    );
+
+    CREATE TABLE categories (
+        name TEXT PRIMARY KEY,
+        keywords TEXT,
+        icon TEXT
+    );
+
+    CREATE TABLE ingestion_state (
+        source TEXT PRIMARY KEY,
+        last_processed_id TEXT,
+        last_processed_at DATETIME,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    """
+    conn.executescript(schema)
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def sample_categories():
+    return [
+        {"name": "Food", "keywords": "restaurant,cafe,food,kopitiam,toast box,ya kun", "icon": "🍜"},
+        {"name": "Transport", "keywords": "grab,gojek,comfortdelgro,mrt,bus,taxi,cdg", "icon": "🚗"},
+        {"name": "Shopping", "keywords": "shopee,lazada,fairprice,cold storage,ntuc", "icon": "🛒"},
+        {"name": "Bills", "keywords": "sp services,singtel,starhub,m1", "icon": "📄"},
+        {"name": "Entertainment", "keywords": "netflix,spotify", "icon": "🎬"},
+        {"name": "Other", "keywords": "", "icon": "📌"},
+    ]
+
+
+@pytest.fixture
+def sample_config():
+    return {
+        "gmail": {
+            "credentials_file": "credentials.json",
+            "poll_interval_seconds": 120,
+            "sender_filters": ["notification@dbs.com", "notification@uob.com"],
+        },
+        "server": {
+            "host": "0.0.0.0",
+            "port": 8080,
+            "webhook_base_url": "https://example.com",
+        },
+        "web": {
+            "password_hash": "$2b$12$examplehashedpassword",
+        },
+        "telegram": {
+            "bot_token": "test-token-123",
+        },
+        "categories": [
+            {"name": "Food", "keywords": ["restaurant", "cafe", "food"], "icon": "🍜"},
+            {"name": "Transport", "keywords": ["grab", "gojek"], "icon": "🚗"},
+            {"name": "Other", "keywords": [], "icon": "📌"},
+        ],
+    }
