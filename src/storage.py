@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 
@@ -149,7 +149,7 @@ class Storage:
     def recent_transaction_exists(
         self, merchant: str, amount: float, minutes: int = 5
     ) -> bool:
-        cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
         cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
         row = self.conn.execute(
             """SELECT 1 FROM transactions

@@ -15,6 +15,7 @@ from src.parsers.uob_paynow import UobPaynowParser
 from src.gmail_poller import GmailPoller
 from src.telegram_bot import TelegramBotService
 from src.webhook import create_webhook_app
+from src.web.app import create_dashboard_app
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,13 +111,9 @@ def main():
     for route in webhook_app.routes:
         app.routes.append(route)
 
-    # Mount dashboard if available
-    try:
-        from src.web.app import create_dashboard_app
-        dashboard_app = create_dashboard_app(storage, config.get("web", {}).get("password_hash", ""))
-        app.mount("/", dashboard_app)
-    except ImportError:
-        logger.warning("Web dashboard module not available — skipping dashboard")
+    # Mount dashboard
+    dashboard_app = create_dashboard_app(storage, config.get("web", {}).get("password_hash", ""))
+    app.mount("/", dashboard_app)
 
     server_config = config.get("server", {})
     host = server_config.get("host", "0.0.0.0")
