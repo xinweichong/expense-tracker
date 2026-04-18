@@ -307,3 +307,78 @@ class TestCrossSourceDedup:
             "Ban Mian", 8.20, "dbs_paylah"
         )
         assert result is None
+
+
+class TestCategoryCRUD:
+    def test_add_category(self, storage):
+        storage.add_category("Health", "clinic,pharmacy,guardian,watsons", "💊")
+        cats = storage.get_categories()
+        names = [c["name"] for c in cats]
+        assert "Health" in names
+        health = next(c for c in cats if c["name"] == "Health")
+        assert health["keywords"] == "clinic,pharmacy,guardian,watsons"
+        assert health["icon"] == "💊"
+
+    def test_add_duplicate_category_raises(self, storage):
+        storage.add_category("Food", "restaurant,cafe", "🍜")
+        with pytest.raises(ValueError, match="already exists"):
+            storage.add_category("Food", "other", "🍜")
+
+    def test_update_category_keywords(self, storage):
+        storage.add_category("Food", "restaurant,cafe", "🍜")
+        storage.update_category("Food", "restaurant,cafe,kopitiam")
+        cats = storage.get_categories()
+        food = next(c for c in cats if c["name"] == "Food")
+        assert "kopitiam" in food["keywords"]
+
+    def test_update_nonexistent_category_raises(self, storage):
+        with pytest.raises(ValueError, match="not found"):
+            storage.update_category("Nonexistent", "keywords")
+
+    def test_delete_category_reassigns_transactions(self, storage):
+        storage.add_category("Food", "restaurant", "🍜")
+        storage.add_category("Other", "", "📌")
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=10.0,
+            merchant="Test", category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=20.0,
+            merchant="Test2", category="Food", transaction_date="2026-04-16T13:00:00",
+        )
+        count = storage.delete_category("Food")
+        assert count == 2
+        txs = storage.query_transactions(category="Other")
+        assert len(txs) == 2
+        cats = storage.get_categories()
+        names = [c["name"] for c in cats]
+        assert "Food" not in names
+
+    def test_delete_nonexistent_category_raises(self, storage):
+        with pytest.raises(ValueError, match="not found"):
+            storage.delete_category("Nonexistent")
+
+
+class TestMerchantOverrides:
+    def test_set_and_get_override(self, storage):
+        storage.set_merchant_override("BAN MIAN", "Food")
+        overrides = storage.get_merchant_overrides()
+        assert "BAN MIAN" in overrides
+        assert overrides["BAN MIAN"] == "Food"
+
+    def test_set_override_upserts(self, storage):
+        storage.set_merchant_override("BAN MIAN", "Food")
+        storage.set_merchant_override("BAN MIAN", "Transport")
+        overrides = storage.get_merchant_overrides()
+        assert overrides["BAN MIAN"] == "Transport"
+        assert len(overrides) == 1
+
+    def test_remove_override(self, storage):
+        storage.set_merchant_override("BAN MIAN", "Food")
+        storage.remove_merchant_override("BAN MIAN")
+        overrides = storage.get_merchant_overrides()
+        assert "BAN MIAN" not in overrides
+
+    def test_get_overrides_empty(self, storage):
+        overrides = storage.get_merchant_overrides()
+        assert overrides == {}

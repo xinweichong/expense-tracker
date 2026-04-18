@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Expense Tracker</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/settings.css">
+</head>
+<body>
+    <div id="login-overlay" class="overlay">
+        <div class="login-card">
+            <h1>Expense Tracker</h1>
+            <form id="login-form">
+                <input type="password" id="password" placeholder="Password" required>
+                <button type="submit">Login</button>
+            </form>
+            <p id="login-error" class="error" style="display:none">Invalid password</p>
+        </div>
+    </div>
+
+    <div id="settings-page" style="display:none">
+        <header>
+            <h1><a href="/" style="color:#fff;text-decoration:none">Expense Tracker</a> / Settings</h1>
+        </header>
+
+        <div class="settings-container">
+            <section class="settings-section">
+                <div class="section-header">
+                    <h2>Categories</h2>
+                    <button class="btn btn-primary" onclick="showAddCategoryModal()">+ Add Category</button>
+                </div>
+                <div id="categories-list" class="item-list"></div>
+            </section>
+
+            <section class="settings-section">
+                <div class="section-header">
+                    <h2>Learned Merchant Overrides</h2>
+                </div>
+                <div id="overrides-list" class="item-list"></div>
+                <p id="no-overrides" style="display:none;color:#666;padding:1rem;">No learned overrides yet. Use /recategorize in Telegram or edit transactions to teach the categorizer.</p>
+            </section>
+        </div>
+    </div>
+
+    <!-- Add/Edit Category Modal -->
+    <div id="category-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <h3 id="modal-title">Add Category</h3>
+            <form id="category-form">
+                <input type="hidden" id="edit-mode" value="add">
+                <div class="form-group">
+                    <label for="cat-name">Name</label>
+                    <input type="text" id="cat-name" placeholder="e.g. Health" required>
+                </div>
+                <div class="form-group">
+                    <label for="cat-keywords">Keywords (comma-separated)</label>
+                    <input type="text" id="cat-keywords" placeholder="e.g. clinic,pharmacy,guardian">
+                </div>
+                <div class="form-group">
+                    <label for="cat-icon">Icon</label>
+                    <input type="text" id="cat-icon" value="" placeholder="e.g. &#x1F48A;">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="modal-submit">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/settings.js"></script>
+</body>
+</html>

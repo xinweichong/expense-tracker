@@ -86,6 +86,7 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("week", self._week))
         self.app.add_handler(CommandHandler("month", self._month))
         self.app.add_handler(CommandHandler("add", self._add))
+        self.app.add_handler(CommandHandler("recategorize", self._recategorize))
         self.app.add_handler(CommandHandler("help", self._help))
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -133,7 +134,7 @@ class TelegramBotService:
         tx_date = parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S")
         category = parsed["category"]
         if not category and self.categorizer:
-            category = self.categorizer.categorize(parsed["merchant"])
+            category, _ = self.categorizer.categorize(parsed["merchant"])
 
         tx_id = self.storage.insert_transaction(
             source="manual",
@@ -149,12 +150,51 @@ class TelegramBotService:
             + f" [#{tx_id}]"
         )
 
+    async def _recategorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not context.args or len(context.args) < 2:
+            await update.message.reply_text("Usage: /recategorize <transaction_id> <new_category>")
+            return
+        try:
+            tx_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("Transaction ID must be a number")
+            return
+        new_category = context.args[1]
+
+        tx = self.storage.get_transaction(tx_id)
+        if not tx:
+            await update.message.reply_text(f"Transaction #{tx_id} not found")
+            return
+
+        valid_categories = [c["name"] for c in self.storage.get_categories()]
+        if new_category not in valid_categories:
+            await update.message.reply_text(
+                f"Invalid category '{new_category}'. Valid: {', '.join(valid_categories)}"
+            )
+            return
+
+        old_category = tx["category"]
+        self.storage.update_transaction(tx_id, category=new_category)
+
+        # Save as merchant override so future transactions auto-categorize
+        merchant = tx["merchant"]
+        if merchant:
+            self.storage.set_merchant_override(merchant, new_category)
+            if self.categorizer:
+                self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
+
+        await update.message.reply_text(
+            f"Updated #{tx_id}: {old_category} -> {new_category}"
+            + (f" (learned: {merchant} = {new_category})" if merchant else "")
+        )
+
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         help_text = """*Commands:*
 /today — Today's spending
 /week — This week's summary
 /month — This month's summary
 /add <amount> <merchant> [category] [date] — Manual entry
+/recategorize <tx_id> <category> — Change category and learn override
 /search <merchant> — Find transactions
 /category <name> — Category spending this month"""
         await update.message.reply_text(help_text, parse_mode="Markdown")

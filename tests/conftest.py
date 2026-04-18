@@ -38,6 +38,13 @@ def in_memory_db():
         last_processed_at DATETIME,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS merchant_overrides (
+        merchant TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
+        source TEXT DEFAULT 'manual',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
     """
     conn.executescript(schema)
     yield conn
