@@ -92,6 +92,7 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("recategorize", self._recategorize))
         self.app.add_handler(CommandHandler("income", self._income))
         self.app.add_handler(CommandHandler("balance", self._balance))
+        self.app.add_handler(CommandHandler("insights", self._insights))
         self.app.add_handler(CommandHandler("help", self._help))
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -320,6 +321,26 @@ class TelegramBotService:
             f"Spent ${balance['expenses']:.2f}\n"
             f"Net: {net_sign}${balance['net']:.2f}"
         )
+
+    async def _insights(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        today = datetime.now()
+        start = f"{today.year}-{today.month:02d}-01"
+        end = today.strftime("%Y-%m-%d")
+
+        ranking = self.storage.get_merchant_ranking(start, end, limit=5)
+        avg = self.storage.get_average_daily(start, end)
+
+        lines = [f"*Spending Insights ({start} to {end})*", ""]
+        lines.append(f"Average daily spend: ${avg:.2f}")
+        lines.append("")
+        if ranking:
+            lines.append("*Top Merchants:*")
+            for i, r in enumerate(ranking, 1):
+                lines.append(f"  {i}. {r['merchant']} — ${r['total']:.2f} ({r['visits']} visit{'s' if r['visits'] != 1 else ''})")
+        else:
+            lines.append("No transactions yet this month")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         help_text = """*Commands:*

@@ -145,6 +145,34 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             results.append({"month": m_start[:7], "income": b["income"], "expenses": b["expenses"]})
         return list(reversed(results))
 
+    @app.get("/api/trend")
+    async def trend(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+        today = datetime.now()
+        start = start_date or f"{today.year}-{today.month:02d}-01"
+        end = end_date or today.strftime("%Y-%m-%d")
+        return storage.get_trend(start, end)
+
+    @app.get("/api/merchants")
+    async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+        today = datetime.now()
+        start = start_date or f"{today.year}-{today.month:02d}-01"
+        end = end_date or today.strftime("%Y-%m-%d")
+        rows = storage.conn.execute(
+            "SELECT DISTINCT merchant FROM transactions WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ? AND merchant IS NOT NULL ORDER BY merchant",
+            (start, end),
+        ).fetchall()
+        return [r["merchant"] for r in rows]
+
+    @app.get("/api/insights")
+    async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+        today = datetime.now()
+        start = start_date or f"{today.year}-{today.month:02d}-01"
+        end = end_date or today.strftime("%Y-%m-%d")
+        return {
+            "merchants": storage.get_merchant_ranking(start, end),
+            "average_daily": storage.get_average_daily(start, end),
+        }
+
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page():
         return (STATIC_DIR / "settings.html").read_text()

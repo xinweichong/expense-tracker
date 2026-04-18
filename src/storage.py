@@ -138,6 +138,62 @@ class Storage:
         income = self.get_income_summary(start_date, end_date)["total"]
         return {"income": income, "expenses": expenses, "net": income - expenses}
 
+    def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10) -> list[dict]:
+        rows = self.conn.execute(
+            """SELECT merchant, COUNT(*) as visits, SUM(amount * exchange_rate) as total
+               FROM transactions
+               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND merchant IS NOT NULL AND (type IS NULL OR type = 'expense')
+               GROUP BY merchant ORDER BY total DESC LIMIT ?""",
+            (start_date, end_date, limit),
+        ).fetchall()
+        return [{"merchant": r["merchant"], "visits": r["visits"], "total": r["total"]} for r in rows]
+
+    def get_average_daily(self, start_date: str, end_date: str) -> float:
+        row = self.conn.execute(
+            """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+               FROM transactions
+               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND (type IS NULL OR type = 'expense')""",
+            (start_date, end_date),
+        ).fetchone()
+        total = row["total"]
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
+        days = max((end - start).days + 1, 1)
+        return total / days
+
+    def get_trend(self, start_date: str, end_date: str) -> list[dict]:
+        rows = self.conn.execute(
+            """SELECT DATE(transaction_date) as date, SUM(amount * exchange_rate) as amount
+               FROM transactions
+               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND (type IS NULL OR type = 'expense')
+               GROUP BY DATE(transaction_date) ORDER BY date""",
+            (start_date, end_date),
+        ).fetchall()
+        return [{"date": r["date"], "amount": r["amount"]} for r in rows]
+
+    def get_period_comparison(self, current_start: str, current_end: str, prev_start: str, prev_end: str) -> dict:
+        curr_rows = self.conn.execute(
+            """SELECT category, SUM(amount * exchange_rate) as total FROM transactions
+               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND (type IS NULL OR type = 'expense') GROUP BY category""",
+            (current_start, current_end),
+        ).fetchall()
+        prev_rows = self.conn.execute(
+            """SELECT category, SUM(amount * exchange_rate) as total FROM transactions
+               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND (type IS NULL OR type = 'expense') GROUP BY category""",
+            (prev_start, prev_end),
+        ).fetchall()
+        curr_by_cat = {r["category"] or "Uncategorized": r["total"] for r in curr_rows}
+        prev_by_cat = {r["category"] or "Uncategorized": r["total"] for r in prev_rows}
+        return {
+            "current": {"total": sum(curr_by_cat.values()), "by_category": curr_by_cat},
+            "previous": {"total": sum(prev_by_cat.values()), "by_category": prev_by_cat},
+        }
+
     def get_categories(self) -> list[dict]:
         rows = self.conn.execute("SELECT * FROM categories ORDER BY ROWID").fetchall()
         return [dict(r) for r in rows]

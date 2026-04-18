@@ -471,3 +471,115 @@ class TestMerchantOverrides:
     def test_get_overrides_empty(self, storage):
         overrides = storage.get_merchant_overrides()
         assert overrides == {}
+
+
+class TestInsights:
+    def test_get_merchant_ranking(self, storage):
+        # Insert 3 transactions: 2 Toast Box ($10 + $8), 1 Grab ($25)
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=10.0,
+            merchant="Toast Box", transaction_date="2026-04-10T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=8.0,
+            merchant="Toast Box", transaction_date="2026-04-11T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m3", amount=25.0,
+            merchant="Grab", transaction_date="2026-04-12T12:00:00",
+        )
+        ranking = storage.get_merchant_ranking("2026-04-01", "2026-04-30")
+        assert len(ranking) == 2
+        # Grab should be first with highest total
+        assert ranking[0]["merchant"] == "Grab"
+        assert ranking[0]["total"] == 25.0
+        # Toast Box should have visits=2
+        toast = next(r for r in ranking if r["merchant"] == "Toast Box")
+        assert toast["visits"] == 2
+        assert toast["total"] == 18.0
+
+    def test_get_merchant_ranking_with_limit(self, storage):
+        # Insert 5 different merchants
+        merchants = [("A", 10.0), ("B", 20.0), ("C", 30.0), ("D", 40.0), ("E", 50.0)]
+        for i, (name, amount) in enumerate(merchants):
+            storage.insert_transaction(
+                source="manual", source_id=f"m{i}",
+                amount=amount, merchant=name,
+                transaction_date=f"2026-04-{10+i:02d}T12:00:00",
+            )
+        ranking = storage.get_merchant_ranking("2026-04-01", "2026-04-30", limit=3)
+        assert len(ranking) == 3
+        # Should be top 3 by total: E, D, C
+        assert ranking[0]["merchant"] == "E"
+        assert ranking[1]["merchant"] == "D"
+        assert ranking[2]["merchant"] == "C"
+
+    def test_get_average_daily(self, storage):
+        # Insert 5 transactions of $20 on different days over a 30-day range
+        for i in range(5):
+            storage.insert_transaction(
+                source="manual", source_id=f"m{i}",
+                amount=20.0, merchant="Test",
+                transaction_date=f"2026-04-{1+i*6:02d}T12:00:00",
+            )
+        # 5 * $20 = $100 total over 30 days
+        avg = storage.get_average_daily("2026-04-01", "2026-04-30")
+        assert avg == pytest.approx(100.0 / 30)
+
+    def test_get_trend(self, storage):
+        # Insert transactions on different dates
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=10.0,
+            merchant="A", transaction_date="2026-04-10T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=20.0,
+            merchant="B", transaction_date="2026-04-12T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m3", amount=15.0,
+            merchant="C", transaction_date="2026-04-11T12:00:00",
+        )
+        trend = storage.get_trend("2026-04-01", "2026-04-30")
+        assert len(trend) == 3
+        # Should be sorted by date
+        assert trend[0]["date"] == "2026-04-10"
+        assert trend[0]["amount"] == 10.0
+        assert trend[1]["date"] == "2026-04-11"
+        assert trend[1]["amount"] == 15.0
+        assert trend[2]["date"] == "2026-04-12"
+        assert trend[2]["amount"] == 20.0
+
+    def test_get_period_comparison(self, storage):
+        # Insert transactions in April (current)
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=100.0,
+            merchant="A", category="Food",
+            transaction_date="2026-04-10T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=50.0,
+            merchant="B", category="Transport",
+            transaction_date="2026-04-15T12:00:00",
+        )
+        # Insert transactions in March (previous)
+        storage.insert_transaction(
+            source="manual", source_id="m3", amount=80.0,
+            merchant="C", category="Food",
+            transaction_date="2026-03-10T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m4", amount=120.0,
+            merchant="D", category="Shopping",
+            transaction_date="2026-03-20T12:00:00",
+        )
+        comparison = storage.get_period_comparison(
+            "2026-04-01", "2026-04-30",
+            "2026-03-01", "2026-03-31",
+        )
+        assert comparison["current"]["total"] == 150.0
+        assert comparison["current"]["by_category"]["Food"] == 100.0
+        assert comparison["current"]["by_category"]["Transport"] == 50.0
+        assert comparison["previous"]["total"] == 200.0
+        assert comparison["previous"]["by_category"]["Food"] == 80.0
+        assert comparison["previous"]["by_category"]["Shopping"] == 120.0
