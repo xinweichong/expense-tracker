@@ -157,3 +157,19 @@ class Storage:
             (merchant, amount, cutoff_str),
         ).fetchone()
         return row is not None
+
+    def find_cross_source_duplicate(
+        self, merchant: str, amount: float, source: str, within_minutes: int = 10
+    ) -> Optional[dict]:
+        """Find a transaction from a different source with matching merchant and amount."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=within_minutes)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        row = self.conn.execute(
+            """SELECT * FROM transactions
+               WHERE amount = ? AND source != ? AND ingested_at >= ?
+               AND LOWER(merchant) = LOWER(?)
+               LIMIT 1""",
+            (amount, source, cutoff, merchant),
+        ).fetchone()
+        return dict(row) if row else None

@@ -72,10 +72,6 @@ class GmailPoller:
         subject = headers.get("Subject", "")
         message_id = headers.get("Message-ID", msg["id"])
 
-        if self.storage.is_duplicate("gmail", message_id):
-            logger.debug(f"Skipping duplicate: {message_id}")
-            return None
-
         parser = self._find_parser(sender, subject)
         if not parser:
             logger.warning(f"No parser for sender: {sender}")
@@ -89,6 +85,9 @@ class GmailPoller:
         result = parser.parse(body)
         if result:
             result.source_id = message_id
+            if self.storage.is_duplicate(result.source, message_id):
+                logger.debug("Skipping duplicate: %s", message_id)
+                return None
         else:
             if "dbs.com" in sender.lower():
                 logger.warning(
@@ -154,7 +153,16 @@ class GmailPoller:
             ).execute()
             result = self._process_message(msg)
             if result:
-                transactions.append(result)
+                dup = self.storage.find_cross_source_duplicate(
+                    result.merchant, result.amount, result.source
+                )
+                if dup:
+                    logger.info(
+                        "Cross-source duplicate: %s matches existing %s (id=%s)",
+                        result.source, dup["source"], dup["id"],
+                    )
+                else:
+                    transactions.append(result)
                 self.service.users().messages().modify(
                     userId="me",
                     id=msg["id"],

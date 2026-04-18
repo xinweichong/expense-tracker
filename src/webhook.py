@@ -27,9 +27,20 @@ def create_webhook_app(storage: Storage) -> FastAPI:
         if not payload.merchant:
             raise HTTPException(status_code=400, detail="missing required field: merchant")
 
-        # Dedup check
+        # Same-source dedup check
         if storage.recent_transaction_exists(payload.merchant, abs(payload.amount), minutes=5):
             return {"status": "duplicate", "transaction_id": None}
+
+        # Cross-source dedup (10-minute window)
+        dup = storage.find_cross_source_duplicate(
+            payload.merchant, abs(payload.amount), "apple_wallet"
+        )
+        if dup:
+            logger.info(
+                f"Cross-source duplicate: apple_wallet matches existing {dup['source']} "
+                f"(id={dup['id']})"
+            )
+            return {"status": "duplicate", "transaction_id": dup["id"]}
 
         try:
             result = parser.parse(payload.model_dump())

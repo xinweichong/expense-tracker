@@ -63,3 +63,29 @@ class TestAppleWalletWebhook:
         r2 = await client.post("/webhook/apple-wallet", json=payload)
         assert r2.status_code == 200
         assert r2.json()["status"] == "duplicate"
+
+
+class TestWebhookDedup:
+    @pytest.mark.asyncio
+    async def test_cross_source_duplicate_detected(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        # Simulate a DBS PayLah! transaction already in the DB
+        storage.insert_transaction(
+            source="dbs_paylah",
+            source_id="email-123",
+            amount=8.20,
+            merchant="BAN MIAN",
+            transaction_date="2026-04-16T12:00:00",
+        )
+        app = create_webhook_app(storage)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.post("/webhook/apple-wallet", json={
+                "amount": "-8.20",
+                "merchant": "BAN MIAN",
+                "card_last4": "DBS Debit",
+                "date": "16/04/2026 12:05:00",
+            })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "duplicate"
