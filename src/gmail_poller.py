@@ -1,6 +1,8 @@
 import base64
+import html
 import logging
 import os
+import re
 import time
 from typing import Callable, Optional
 
@@ -87,18 +89,55 @@ class GmailPoller:
         result = parser.parse(body)
         if result:
             result.source_id = message_id
+        else:
+            if "dbs.com" in sender.lower():
+                logger.warning(
+                    "DBS parser returned None for message %s. Body:\n%s",
+                    message_id,
+                    body[:500],
+                )
         return result
 
     def _extract_body(self, msg: dict) -> str:
         payload = msg["payload"]
+
+        # Try text/plain first
         if "parts" in payload:
             for part in payload["parts"]:
                 if part["mimeType"] == "text/plain":
                     data = part["body"]["data"]
                     return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+
+            # Fall back to text/html
+            for part in payload["parts"]:
+                if part["mimeType"] == "text/html":
+                    data = part["body"]["data"]
+                    raw_html = base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+                    return self._html_to_text(raw_html)
+
+        # No parts at all — try top-level body
         if "body" in payload and "data" in payload["body"]:
-            return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", errors="replace")
+            raw = base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", errors="replace")
+            return self._html_to_text(raw)
+
         return ""
+
+    def _html_to_text(self, html_str: str) -> str:
+        # Strip <style> and <script> blocks
+        text = re.sub(r"<style[^>]*>.*?</style>", "", html_str, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r"<script[^>]*>.*?</script>", "", text, flags=re.DOTALL | re.IGNORECASE)
+        # Convert <br> to newlines
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+        # Strip all remaining tags
+        text = re.sub(r"<[^>]+>", "", text)
+        # Decode HTML entities
+        text = html.unescape(text)
+        # Replace non-breaking spaces with regular spaces
+        text = text.replace("\xa0", " ")
+        # Collapse whitespace but preserve intentional newlines
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n\s*\n+", "\n", text)
+        return text.strip()
 
     def poll_once(self) -> list[ParseResult]:
         if not self.service:

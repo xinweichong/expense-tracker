@@ -15,19 +15,66 @@ class TestDbsPaylahParser:
     def test_cannot_parse_other_sender(self):
         assert self.parser.can_parse("other@bank.com", "Payment") is False
 
-    def test_parse_payment_email(self):
-        body = "You've made a payment of $12.50 to Toast Box (Jurong Point). Ref: 12345678"
+    def test_parse_real_email_format(self):
+        body = (
+            "Transaction Ref: PLPE4610710280328108\n"
+            "\n"
+            "Dear Sir / Madam,\n"
+            "We refer to your PayLah! Scan & Pay Transfer dated 17 Apr...\n"
+            "\n"
+            "Date & Time:    17 Apr 12:58 (SGT)\n"
+            "Amount:    SGD8.20\n"
+            "From:    PayLah! Wallet (Mobile ending 9680)\n"
+            "To:    BAN MIAN\n"
+        )
         result = self.parser.parse(body)
         assert isinstance(result, ParseResult)
-        assert result.amount == 12.50
-        assert result.merchant == "Toast Box (Jurong Point)"
+        assert result.amount == 8.20
+        assert result.merchant == "BAN MIAN"
         assert result.source == "dbs_paylah"
 
-    def test_parse_payment_with_decimal(self):
-        body = "You've made a payment of $1,234.56 to Best Denki Singapore. Ref: 87654321"
+    def test_parse_real_email_with_comma_amount(self):
+        body = (
+            "Transaction Ref: PLPE4610710280328108\n"
+            "\n"
+            "Dear Sir / Madam,\n"
+            "We refer to your PayLah! Scan & Pay Transfer dated 17 Apr...\n"
+            "\n"
+            "Date & Time:    17 Apr 12:58 (SGT)\n"
+            "Amount:    SGD1,234.56\n"
+            "From:    PayLah! Wallet (Mobile ending 9680)\n"
+            "To:    BAN MIAN\n"
+        )
         result = self.parser.parse(body)
+        assert result is not None
         assert result.amount == 1234.56
-        assert result.merchant == "Best Denki Singapore"
+        assert result.merchant == "BAN MIAN"
+
+    def test_parse_real_email_extracts_ref(self):
+        body = (
+            "Transaction Ref: PLPE4610710280328108\n"
+            "\n"
+            "Dear Sir / Madam,\n"
+            "\n"
+            "Amount:    SGD8.20\n"
+            "To:    BAN MIAN\n"
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.source_id == "PLPE4610710280328108"
+
+    def test_parse_real_email_no_ref_still_works(self):
+        body = (
+            "Dear Sir / Madam,\n"
+            "\n"
+            "Amount:    SGD8.20\n"
+            "To:    BAN MIAN\n"
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == 8.20
+        assert result.merchant == "BAN MIAN"
+        assert result.source_id is None
 
     def test_parse_no_match_returns_none(self):
         body = "This is a promotional email from DBS"
