@@ -24,7 +24,8 @@ def in_memory_db():
         category TEXT,
         transaction_date DATETIME,
         ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        raw_data TEXT
+        raw_data TEXT,
+        type TEXT DEFAULT 'expense'
     );
 
     CREATE TABLE categories (

@@ -90,6 +90,8 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("add", self._add))
         self.app.add_handler(CommandHandler("cash", self._cash))
         self.app.add_handler(CommandHandler("recategorize", self._recategorize))
+        self.app.add_handler(CommandHandler("income", self._income))
+        self.app.add_handler(CommandHandler("balance", self._balance))
         self.app.add_handler(CommandHandler("help", self._help))
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -254,6 +256,69 @@ class TelegramBotService:
         await update.message.reply_text(
             f"Updated #{tx_id}: {old_category} -> {new_category}"
             + (f" (learned: {merchant} = {new_category})" if merchant else "")
+        )
+
+    async def _income(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not context.args:
+            await update.message.reply_text(
+                "Usage: /income <amount> <description> [date]\nExample: /income 5000 salary"
+            )
+            return
+
+        try:
+            amount = float(context.args[0])
+        except ValueError:
+            await update.message.reply_text("Invalid amount. Usage: /income <amount> <description> [date]")
+            return
+
+        if amount <= 0:
+            await update.message.reply_text("Amount must be positive.")
+            return
+
+        remaining = list(context.args[1:])
+        tx_date = None
+
+        # Check if last token is a date
+        if remaining:
+            try:
+                datetime.strptime(remaining[-1], "%Y-%m-%d")
+                tx_date = remaining[-1]
+                remaining = remaining[:-1]
+            except ValueError:
+                pass
+
+        description = " ".join(remaining) if remaining else "Income"
+        now = datetime.now()
+        date_str = tx_date or now.strftime("%Y-%m-%dT%H:%M:%S")
+
+        tx_id = self.storage.insert_transaction(
+            source="manual",
+            source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{amount}",
+            amount=amount,
+            merchant=description,
+            category="Income",
+            transaction_date=date_str,
+            tx_type="income",
+        )
+
+        await update.message.reply_text(f"Income: ${amount:.2f} — {description} [#{tx_id}]")
+
+    async def _balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        today = datetime.now()
+        start = f"{today.year}-{today.month:02d}-01"
+        end = today.strftime("%Y-%m-%d")
+        balance = self.storage.get_balance(start, end)
+
+        if balance["income"] == 0 and balance["expenses"] == 0:
+            await update.message.reply_text("No transactions this month")
+            return
+
+        net_sign = "+" if balance["net"] >= 0 else ""
+        await update.message.reply_text(
+            f"This month:\n"
+            f"Earned ${balance['income']:.2f}\n"
+            f"Spent ${balance['expenses']:.2f}\n"
+            f"Net: {net_sign}${balance['net']:.2f}"
         )
 
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
