@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from src.categorizer import Categorizer
 from src.exchange import ExchangeRateService
@@ -95,6 +95,17 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("insights", self._insights))
         self.app.add_handler(CommandHandler("subscriptions", self._subscriptions))
         self.app.add_handler(CommandHandler("help", self._help))
+
+        # Redirect removed commands to web
+        self.app.add_handler(CommandHandler("categories", self._redirect_to_web))
+        self.app.add_handler(CommandHandler("addcategory", self._redirect_to_web))
+        self.app.add_handler(CommandHandler("editcategory", self._redirect_to_web))
+        self.app.add_handler(CommandHandler("deletecategory", self._redirect_to_web))
+        self.app.add_handler(CommandHandler("uncategorized", self._redirect_to_web))
+
+        # Catch-all must be last
+        self.app.add_handler(MessageHandler(filters.COMMAND, self._unknown))
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._unknown_text))
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(
@@ -372,15 +383,58 @@ class TelegramBotService:
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        help_text = """*Commands:*
+        help_text = """*Expense Tracker — Quick Commands*
+
+*Quick View:*
 /today — Today's spending
-/week — This week's summary
-/month — This month's summary
-/add <amount> <merchant> [category] [date] — Manual entry
-/recategorize <tx_id> <category> — Change category and learn override
-/search <merchant> — Find transactions
-/category <name> — Category spending this month"""
+/week — Weekly summary with trends
+/month — Monthly breakdown
+/balance — Income vs expenses
+
+*Quick Entry:*
+/add <amount> <merchant> [category] [date]
+/cash <amount> <merchant> [category]
+/income <amount> <description> [date]
+  Multi-currency: /add 500 THB street food
+
+*Quick Edit:*
+/recategorize <id> <category>
+
+*Insights:*
+/insights — Spending patterns
+/subscriptions — Recurring transactions
+
+*Full dashboard:* Open the web app for charts, categories, insights, and more."""
         await update.message.reply_text(help_text, parse_mode="Markdown")
+
+    async def _unknown(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        text = update.message.text or ""
+        cmd = text.split()[0]
+        await update.message.reply_text(
+            f"Unknown command: {cmd}\n\n"
+            "Available commands:\n"
+            "/today /week /month — view spending\n"
+            "/balance — income vs expenses\n"
+            "/add — manual entry\n"
+            "/cash — quick cash entry\n"
+            "/income — record income\n"
+            "/recategorize — change category\n"
+            "/insights — spending patterns\n"
+            "/subscriptions — recurring transactions\n"
+            "/help — full command reference"
+        )
+
+    async def _unknown_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await update.message.reply_text(
+            "I understand commands starting with /.\n"
+            "Type /help for a full list."
+        )
+
+    async def _redirect_to_web(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await update.message.reply_text(
+            "Category and subscription management is available on the web dashboard. "
+            "Open your browser to manage these."
+        )
 
     def run(self) -> None:
         self.setup_handlers()
