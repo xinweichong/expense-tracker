@@ -93,6 +93,7 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("income", self._income))
         self.app.add_handler(CommandHandler("balance", self._balance))
         self.app.add_handler(CommandHandler("insights", self._insights))
+        self.app.add_handler(CommandHandler("subscriptions", self._subscriptions))
         self.app.add_handler(CommandHandler("help", self._help))
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -340,6 +341,34 @@ class TelegramBotService:
         else:
             lines.append("No transactions yet this month")
 
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+    async def _subscriptions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        rows = self.storage.conn.execute(
+            "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
+        ).fetchall()
+        if not rows:
+            await update.message.reply_text("No recurring transactions detected yet.")
+            return
+
+        monthly_total = 0.0
+        lines = ["*Recurring Transactions*"]
+        for r in rows:
+            freq = r["frequency"]
+            amount = r["avg_amount"]
+            merchant = r["merchant"]
+            category = r["category"]
+            if freq == "monthly":
+                monthly_total += amount
+                freq_label = "/mo"
+            elif freq == "weekly":
+                monthly_total += amount * 4.33
+                freq_label = "/wk"
+            else:
+                freq_label = f"/{freq}"
+            cat_label = f" ({category})" if category else ""
+            lines.append(f"{merchant} — ${amount:.2f}{freq_label}{cat_label}")
+        lines.insert(1, f"Monthly total: ~${monthly_total:.2f}")
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

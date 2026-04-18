@@ -173,6 +173,13 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             "average_daily": storage.get_average_daily(start, end),
         }
 
+    @app.get("/api/recurring")
+    async def recurring(_auth=Depends(require_auth)):
+        rows = storage.conn.execute(
+            "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page():
         return (STATIC_DIR / "settings.html").read_text()
