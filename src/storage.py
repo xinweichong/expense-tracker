@@ -158,6 +158,45 @@ class Storage:
         ).fetchone()
         return row is not None
 
+    def add_category(self, name: str, keywords: str, icon: str = "📌") -> None:
+        existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
+        if existing:
+            raise ValueError(f"category '{name}' already exists")
+        self.conn.execute("INSERT INTO categories (name, keywords, icon) VALUES (?, ?, ?)", (name, keywords, icon))
+        self.conn.commit()
+
+    def update_category(self, name: str, keywords: str) -> None:
+        existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
+        if not existing:
+            raise ValueError(f"category '{name}' not found")
+        self.conn.execute("UPDATE categories SET keywords = ? WHERE name = ?", (keywords, name))
+        self.conn.commit()
+
+    def delete_category(self, name: str) -> int:
+        existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
+        if not existing:
+            raise ValueError(f"category '{name}' not found")
+        count = self.conn.execute("UPDATE transactions SET category = 'Other' WHERE category = ?", (name,)).rowcount
+        self.conn.execute("DELETE FROM merchant_overrides WHERE category = ?", (name,))
+        self.conn.execute("DELETE FROM categories WHERE name = ?", (name,))
+        self.conn.commit()
+        return count
+
+    def set_merchant_override(self, merchant: str, category: str) -> None:
+        self.conn.execute(
+            "INSERT OR REPLACE INTO merchant_overrides (merchant, category, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+            (merchant, category),
+        )
+        self.conn.commit()
+
+    def get_merchant_overrides(self) -> dict[str, str]:
+        rows = self.conn.execute("SELECT merchant, category FROM merchant_overrides").fetchall()
+        return {r["merchant"]: r["category"] for r in rows}
+
+    def remove_merchant_override(self, merchant: str) -> None:
+        self.conn.execute("DELETE FROM merchant_overrides WHERE merchant = ?", (merchant,))
+        self.conn.commit()
+
     def find_cross_source_duplicate(
         self, merchant: str, amount: float, source: str, within_minutes: int = 10
     ) -> Optional[dict]:

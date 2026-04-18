@@ -77,4 +77,50 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
     async def categories(_auth=Depends(require_auth)):
         return storage.get_categories()
 
+    @app.post("/api/categories")
+    async def create_category(request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        name = body.get("name", "").strip()
+        keywords = body.get("keywords", "")
+        icon = body.get("icon", "📌")
+        if not name:
+            raise HTTPException(status_code=400, detail="Category name is required")
+        try:
+            storage.add_category(name, keywords, icon)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return {"status": "ok", "name": name}
+
+    @app.put("/api/categories/{name}")
+    async def update_category(name: str, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        keywords = body.get("keywords", "")
+        try:
+            storage.update_category(name, keywords)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok", "name": name}
+
+    @app.delete("/api/categories/{name}")
+    async def delete_category(name: str, _auth=Depends(require_auth)):
+        try:
+            count = storage.delete_category(name)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok", "reassigned": count}
+
+    @app.get("/api/merchant-overrides")
+    async def merchant_overrides(_auth=Depends(require_auth)):
+        overrides = storage.get_merchant_overrides()
+        return [{"merchant": m, "category": c} for m, c in overrides.items()]
+
+    @app.delete("/api/merchant-overrides/{merchant}")
+    async def remove_merchant_override(merchant: str, _auth=Depends(require_auth)):
+        storage.remove_merchant_override(merchant)
+        return {"status": "ok"}
+
+    @app.get("/settings", response_class=HTMLResponse)
+    async def settings_page():
+        return (STATIC_DIR / "settings.html").read_text()
+
     return app

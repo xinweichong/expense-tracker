@@ -3,31 +3,71 @@ from src.categorizer import Categorizer
 
 
 @pytest.fixture
-def categorizer():
-    categories = [
+def categories():
+    return [
         {"name": "Food", "keywords": ["restaurant", "cafe", "food", "kopitiam", "toast box", "ya kun"], "icon": "🍜"},
         {"name": "Transport", "keywords": ["grab", "gojek", "comfortdelgro", "mrt", "bus", "taxi", "cdg"], "icon": "🚗"},
         {"name": "Shopping", "keywords": ["shopee", "lazada", "fairprice", "cold storage", "ntuc"], "icon": "🛒"},
         {"name": "Other", "keywords": [], "icon": "📌"},
     ]
-    return Categorizer(categories)
 
 
-class TestCategorizer:
-    def test_match_exact_keyword(self, categorizer):
-        assert categorizer.categorize("Toast Box Jurong") == "Food"
+class TestCategorizerBasic:
+    def test_keyword_match(self, categories):
+        c = Categorizer(categories)
+        category, source = c.categorize("Toast Box Jurong")
+        assert category == "Food"
+        assert source == "keyword:toast box"
 
-    def test_match_case_insensitive(self, categorizer):
-        assert categorizer.categorize("GRAB RIDE") == "Transport"
+    def test_no_match_default(self, categories):
+        c = Categorizer(categories)
+        category, source = c.categorize("Unknown Merchant XYZ")
+        assert category == "Other"
+        assert source == "default"
 
-    def test_match_partial_merchant(self, categorizer):
-        assert categorizer.categorize("FairPrice Finest") == "Shopping"
+    def test_empty_merchant(self, categories):
+        c = Categorizer(categories)
+        category, source = c.categorize("")
+        assert category == "Other"
+        assert source == "default"
 
-    def test_no_match_returns_other(self, categorizer):
-        assert categorizer.categorize("Unknown Merchant XYZ") == "Other"
+    def test_case_insensitive(self, categories):
+        c = Categorizer(categories)
+        category, source = c.categorize("GRAB RIDE")
+        assert category == "Transport"
+        assert source == "keyword:grab"
 
-    def test_empty_merchant_returns_other(self, categorizer):
-        assert categorizer.categorize("") == "Other"
 
-    def test_first_match_wins(self, categorizer):
-        assert categorizer.categorize("food court") == "Food"
+class TestCategorizerOverrides:
+    def test_override_priority(self, categories):
+        c = Categorizer(categories, overrides={"toast box": "Transport"})
+        category, source = c.categorize("Toast Box")
+        assert category == "Transport"
+        assert source == "learned"
+
+    def test_case_insensitive_override(self, categories):
+        c = Categorizer(categories, overrides={"GRAB": "Food"})
+        category, source = c.categorize("grab ride")
+        assert category == "Food"
+        assert source == "learned"
+
+    def test_keyword_when_no_override(self, categories):
+        c = Categorizer(categories, overrides={})
+        category, source = c.categorize("Toast Box")
+        assert category == "Food"
+        assert "keyword" in source
+
+    def test_reload_overrides(self, categories):
+        c = Categorizer(categories, overrides={})
+        category, _ = c.categorize("Toast Box")
+        assert category == "Food"
+        c.reload_overrides({"toast box": "Transport"})
+        category, source = c.categorize("Toast Box")
+        assert category == "Transport"
+        assert source == "learned"
+
+    def test_override_beats_keyword(self, categories):
+        c = Categorizer(categories, overrides={"fairprice": "Food"})
+        category, source = c.categorize("FairPrice Finest")
+        assert category == "Food"
+        assert source == "learned"

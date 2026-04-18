@@ -1,9 +1,14 @@
 """Expense Tracker — main entry point. Starts all services."""
 import logging
+import logging.handlers
 import os
+import sys
 import sqlite3
 import threading
 from pathlib import Path
+
+# Add project root to sys.path so `src.*` imports work when run directly
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import uvicorn
 
@@ -59,9 +64,29 @@ def init_db(db_path: str) -> sqlite3.Connection:
             last_processed_at DATETIME,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS merchant_overrides (
+            merchant TEXT PRIMARY KEY,
+            category TEXT NOT NULL,
+            source TEXT DEFAULT 'manual',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     conn.commit()
     return conn
+
+
+def _run_bot(bot: TelegramBotService) -> None:
+    """Run the Telegram bot in a background thread using asyncio."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(bot.app.initialize())
+        loop.run_until_complete(bot.app.start())
+        loop.run_until_complete(bot.app.updater.start_polling())
+        loop.run_forever()
+    except Exception as e:
+        logger.error(f"Telegram bot error: {e}")
 
 
 def main():
@@ -69,7 +94,7 @@ def main():
     Path("logs").mkdir(exist_ok=True)
 
     # Add file handler after directory is created
-    file_handler = logging.FileHandler("logs/app.log", maxBytes=10_000_000, backupCount=5)
+    file_handler = logging.handlers.RotatingFileHandler("logs/app.log", maxBytes=10_000_000, backupCount=5)
     file_handler.setFormatter(logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s"))
     logging.getLogger().addHandler(file_handler)
 
@@ -83,7 +108,10 @@ def main():
         for c in config.get("categories", [])
     ]
     storage.load_categories(cat_data)
-    categorizer = Categorizer(config.get("categories", []))
+    categorizer = Categorizer(
+        config.get("categories", []),
+        overrides=storage.get_merchant_overrides(),
+    )
 
     # Set up parsers
     parsers = [DbsPaylahParser(), UobPaynowParser()]
@@ -135,7 +163,7 @@ def main():
     # Start Telegram bot in background thread
     if bot_token:
         bot.setup_handlers()
-        bot_thread = threading.Thread(target=bot.app.run_polling, daemon=True)
+        bot_thread = threading.Thread(target=lambda: _run_bot(bot), daemon=True)
         bot_thread.start()
         logger.info("Telegram bot started")
     else:
