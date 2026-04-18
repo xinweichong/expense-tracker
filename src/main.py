@@ -73,6 +73,16 @@ def init_db(db_path: str) -> sqlite3.Connection:
             source TEXT DEFAULT 'manual',
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS recurring_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            merchant TEXT NOT NULL,
+            avg_amount REAL NOT NULL,
+            frequency TEXT NOT NULL,
+            category TEXT,
+            first_seen DATETIME,
+            last_seen DATETIME,
+            occurrences INTEGER DEFAULT 2
+        );
     """)
     # Migrate: add exchange_rate column if missing
     try:
