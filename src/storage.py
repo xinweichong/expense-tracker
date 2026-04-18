@@ -17,16 +17,17 @@ class Storage:
         description: Optional[str] = None,
         category: Optional[str] = None,
         currency: str = "SGD",
+        exchange_rate: float = 1.0,
         transaction_date: Optional[str] = None,
         raw_data: Optional[str] = None,
     ) -> int:
         try:
             cursor = self.conn.execute(
                 """INSERT INTO transactions
-                   (source, source_id, amount, currency, merchant, description,
+                   (source, source_id, amount, currency, exchange_rate, merchant, description,
                     category, transaction_date, raw_data)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (source, source_id, amount, currency, merchant, description,
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (source, source_id, amount, currency, exchange_rate, merchant, description,
                  category, transaction_date, raw_data),
             )
             self.conn.commit()
@@ -97,7 +98,7 @@ class Storage:
         self, start_date: str, end_date: str
     ) -> dict:
         rows = self.conn.execute(
-            """SELECT category, SUM(amount) as total
+            """SELECT category, SUM(amount * exchange_rate) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                GROUP BY category""",
