@@ -86,6 +86,7 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("week", self._week))
         self.app.add_handler(CommandHandler("month", self._month))
         self.app.add_handler(CommandHandler("add", self._add))
+        self.app.add_handler(CommandHandler("cash", self._cash))
         self.app.add_handler(CommandHandler("recategorize", self._recategorize))
         self.app.add_handler(CommandHandler("help", self._help))
 
@@ -146,6 +147,49 @@ class TelegramBotService:
         )
         await update.message.reply_text(
             f"Added: ${parsed['amount']:.2f} at {parsed['merchant']}"
+            + (f" ({category})" if category else "")
+            + f" [#{tx_id}]"
+        )
+
+    async def _cash(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not context.args:
+            await update.message.reply_text(
+                "Usage: /cash <amount> <merchant> [category] [date]\n"
+                "Example: /cash 12.50 Toast Box food"
+            )
+            return
+        text = " ".join(context.args)
+        parsed = self.parse_add_command(text)
+        if not parsed:
+            # Distinguish between bad amount and missing merchant
+            parts = text.strip().split()
+            try:
+                amount = float(parts[0])
+            except (ValueError, IndexError):
+                await update.message.reply_text("Invalid amount. Usage: /cash <amount> <merchant> [category] [date]")
+                return
+            if amount <= 0:
+                await update.message.reply_text("Amount must be positive. Usage: /cash <amount> <merchant> [category] [date]")
+                return
+            await update.message.reply_text("Missing merchant. Usage: /cash <amount> <merchant> [category] [date]")
+            return
+
+        now = datetime.now()
+        tx_date = parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S")
+        category = parsed["category"]
+        if not category and self.categorizer:
+            category, _ = self.categorizer.categorize(parsed["merchant"])
+
+        tx_id = self.storage.insert_transaction(
+            source="cash",
+            source_id=f"cash-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
+            amount=parsed["amount"],
+            merchant=parsed["merchant"],
+            category=category,
+            transaction_date=tx_date,
+        )
+        await update.message.reply_text(
+            f"Cash: ${parsed['amount']:.2f} at {parsed['merchant']}"
             + (f" ({category})" if category else "")
             + f" [#{tx_id}]"
         )
