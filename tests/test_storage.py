@@ -359,6 +359,95 @@ class TestCategoryCRUD:
             storage.delete_category("Nonexistent")
 
 
+class TestIncomeTracking:
+    def test_insert_income(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual",
+            source_id="inc-1",
+            amount=5000.0,
+            merchant="Salary",
+            category="Income",
+            transaction_date="2026-04-01T09:00:00",
+            tx_type="income",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["type"] == "income"
+
+    def test_get_spending_summary_excludes_income(self, storage):
+        storage.insert_transaction(
+            source="manual",
+            source_id="exp-1",
+            amount=50.0,
+            merchant="Lunch",
+            category="Food",
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual",
+            source_id="inc-1",
+            amount=5000.0,
+            merchant="Salary",
+            category="Income",
+            transaction_date="2026-04-16T09:00:00",
+            tx_type="income",
+        )
+        summary = storage.get_spending_summary(
+            start_date="2026-04-16", end_date="2026-04-16"
+        )
+        assert summary["total"] == 50.0
+
+    def test_get_income_summary(self, storage):
+        storage.insert_transaction(
+            source="manual",
+            source_id="inc-1",
+            amount=5000.0,
+            merchant="Salary",
+            category="Salary",
+            transaction_date="2026-04-01T09:00:00",
+            tx_type="income",
+        )
+        storage.insert_transaction(
+            source="manual",
+            source_id="inc-2",
+            amount=500.0,
+            merchant="Freelance",
+            category="Freelance",
+            transaction_date="2026-04-15T10:00:00",
+            tx_type="income",
+        )
+        summary = storage.get_income_summary(
+            start_date="2026-04-01", end_date="2026-04-30"
+        )
+        assert summary["total"] == 5500.0
+        assert summary["by_category"]["Salary"] == 5000.0
+        assert summary["by_category"]["Freelance"] == 500.0
+
+    def test_get_balance(self, storage):
+        storage.insert_transaction(
+            source="manual",
+            source_id="exp-1",
+            amount=100.0,
+            merchant="Groceries",
+            category="Food",
+            transaction_date="2026-04-10T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual",
+            source_id="inc-1",
+            amount=5000.0,
+            merchant="Salary",
+            category="Salary",
+            transaction_date="2026-04-01T09:00:00",
+            tx_type="income",
+        )
+        balance = storage.get_balance(
+            start_date="2026-04-01", end_date="2026-04-30"
+        )
+        assert balance["income"] == 5000.0
+        assert balance["expenses"] == 100.0
+        assert balance["net"] == 4900.0
+
+
 class TestMerchantOverrides:
     def test_set_and_get_override(self, storage):
         storage.set_merchant_override("BAN MIAN", "Food")

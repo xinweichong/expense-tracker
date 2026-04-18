@@ -53,7 +53,8 @@ def init_db(db_path: str) -> sqlite3.Connection:
             category TEXT,
             transaction_date DATETIME,
             ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            raw_data TEXT
+            raw_data TEXT,
+            type TEXT DEFAULT 'expense'
         );
         CREATE TABLE IF NOT EXISTS categories (
             name TEXT PRIMARY KEY,
@@ -76,6 +77,11 @@ def init_db(db_path: str) -> sqlite3.Connection:
     # Migrate: add exchange_rate column if missing
     try:
         conn.execute("ALTER TABLE transactions ADD COLUMN exchange_rate REAL DEFAULT 1.0")
+    except Exception:
+        pass
+    # Migrate: add type column if missing
+    try:
+        conn.execute("ALTER TABLE transactions ADD COLUMN type TEXT DEFAULT 'expense'")
     except Exception:
         pass
     conn.commit()

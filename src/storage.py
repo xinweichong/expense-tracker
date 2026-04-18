@@ -20,15 +20,16 @@ class Storage:
         exchange_rate: float = 1.0,
         transaction_date: Optional[str] = None,
         raw_data: Optional[str] = None,
+        tx_type: str = "expense",
     ) -> int:
         try:
             cursor = self.conn.execute(
                 """INSERT INTO transactions
                    (source, source_id, amount, currency, exchange_rate, merchant, description,
-                    category, transaction_date, raw_data)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    category, transaction_date, raw_data, type)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (source, source_id, amount, currency, exchange_rate, merchant, description,
-                 category, transaction_date, raw_data),
+                 category, transaction_date, raw_data, tx_type),
             )
             self.conn.commit()
             return cursor.lastrowid
@@ -101,6 +102,7 @@ class Storage:
             """SELECT category, SUM(amount * exchange_rate) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND (type IS NULL OR type = 'expense')
                GROUP BY category""",
             (start_date, end_date),
         ).fetchall()
@@ -118,6 +120,23 @@ class Storage:
                 (cat["name"], cat["keywords"], cat["icon"]),
             )
         self.conn.commit()
+
+    def get_income_summary(self, start_date: str, end_date: str) -> dict:
+        rows = self.conn.execute(
+            """SELECT category, SUM(amount * exchange_rate) as total
+               FROM transactions
+               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND type = 'income'
+               GROUP BY category""",
+            (start_date, end_date),
+        ).fetchall()
+        by_category = {r["category"] or "Uncategorized": r["total"] for r in rows}
+        return {"total": sum(by_category.values()), "by_category": by_category}
+
+    def get_balance(self, start_date: str, end_date: str) -> dict:
+        expenses = self.get_spending_summary(start_date, end_date)["total"]
+        income = self.get_income_summary(start_date, end_date)["total"]
+        return {"income": income, "expenses": expenses, "net": income - expenses}
 
     def get_categories(self) -> list[dict]:
         rows = self.conn.execute("SELECT * FROM categories ORDER BY ROWID").fetchall()

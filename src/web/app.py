@@ -119,6 +119,32 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         storage.remove_merchant_override(merchant)
         return {"status": "ok"}
 
+    @app.get("/api/balance")
+    async def balance(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+        today = datetime.now()
+        start = start_date or f"{today.year}-{today.month:02d}-01"
+        end = end_date or today.strftime("%Y-%m-%d")
+        return storage.get_balance(start, end)
+
+    @app.get("/api/income-vs-expense")
+    async def income_vs_expense(months: int = 6, _auth=Depends(require_auth)):
+        today = datetime.now()
+        results = []
+        for i in range(months):
+            m = today.month - i
+            y = today.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            m_start = f"{y}-{m:02d}-01"
+            if m == 12:
+                m_end = f"{y+1}-01-01"
+            else:
+                m_end = f"{y}-{m+1:02d}-01"
+            b = storage.get_balance(m_start, m_end)
+            results.append({"month": m_start[:7], "income": b["income"], "expenses": b["expenses"]})
+        return list(reversed(results))
+
     @app.get("/settings", response_class=HTMLResponse)
     async def settings_page():
         return (STATIC_DIR / "settings.html").read_text()
