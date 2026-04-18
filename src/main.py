@@ -21,6 +21,7 @@ from src.gmail_poller import GmailPoller
 from src.telegram_bot import TelegramBotService
 from src.webhook import create_webhook_app
 from src.web.app import create_dashboard_app
+from src.exchange import ExchangeRateService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,6 +47,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
             source_id TEXT UNIQUE,
             amount REAL NOT NULL,
             currency TEXT DEFAULT 'SGD',
+            exchange_rate REAL DEFAULT 1.0,
             merchant TEXT,
             description TEXT,
             category TEXT,
@@ -71,6 +73,11 @@ def init_db(db_path: str) -> sqlite3.Connection:
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
     """)
+    # Migrate: add exchange_rate column if missing
+    try:
+        conn.execute("ALTER TABLE transactions ADD COLUMN exchange_rate REAL DEFAULT 1.0")
+    except Exception:
+        pass
     conn.commit()
     return conn
 
@@ -128,7 +135,15 @@ def main():
 
     # Set up Telegram bot
     bot_token = config.get("telegram", {}).get("bot_token", "")
-    bot = TelegramBotService(storage=storage, bot_token=bot_token, categorizer=categorizer)
+    exchange_config = config.get("exchange_rates", {})
+    exchange_service = ExchangeRateService(
+        api_url=exchange_config.get("api_url"),
+        cache_hours=exchange_config.get("cache_hours", 24),
+    )
+    bot = TelegramBotService(
+        storage=storage, bot_token=bot_token,
+        categorizer=categorizer, exchange_service=exchange_service,
+    )
 
     # Build combined FastAPI app
     from fastapi import FastAPI

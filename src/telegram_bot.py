@@ -7,16 +7,18 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from src.categorizer import Categorizer
+from src.exchange import ExchangeRateService
 from src.storage import Storage
 
 logger = logging.getLogger(__name__)
 
 
 class TelegramBotService:
-    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None):
+    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None, exchange_service: Optional[ExchangeRateService] = None):
         self.storage = storage
         self.bot_token = bot_token
         self.categorizer = categorizer
+        self.exchange_service = exchange_service
         self.app = None
 
     def parse_add_command(self, text: str) -> Optional[dict]:
@@ -123,12 +125,27 @@ class TelegramBotService:
 
     async def _add(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not context.args:
-            await update.message.reply_text("Usage: /add <amount> <merchant> [category] [date]")
+            await update.message.reply_text("Usage: /add <amount> [currency] <merchant> [category] [date]")
             return
         text = " ".join(context.args)
+
+        # Detect currency in the amount portion
+        currency = "SGD"
+        exchange_rate = 1.0
+        amount_text = context.args[0]
+        if self.exchange_service and len(context.args) >= 2:
+            # Check if second arg is a currency code
+            from src.exchange import CURRENCY_CODES
+            if context.args[1].upper() in CURRENCY_CODES:
+                currency = context.args[1].upper()
+                amount_text = f"{context.args[0]} {context.args[1]}"
+                # Rebuild text without currency for parse_add_command
+                text = " ".join([context.args[0]] + list(context.args[2:]))
+                exchange_rate = self.exchange_service.get_rate(currency)
+
         parsed = self.parse_add_command(text)
         if not parsed:
-            await update.message.reply_text("Invalid format. Usage: /add <amount> <merchant> [category] [date]")
+            await update.message.reply_text("Invalid format. Usage: /add <amount> [currency] <merchant> [category] [date]")
             return
 
         now = datetime.now()
@@ -143,13 +160,20 @@ class TelegramBotService:
             amount=parsed["amount"],
             merchant=parsed["merchant"],
             category=category,
+            currency=currency,
+            exchange_rate=exchange_rate,
             transaction_date=tx_date,
         )
-        await update.message.reply_text(
-            f"Added: ${parsed['amount']:.2f} at {parsed['merchant']}"
+
+        sgd_equivalent = parsed["amount"] * exchange_rate
+        reply = (
+            f"Added: {parsed['amount']:.2f} {currency} at {parsed['merchant']}"
             + (f" ({category})" if category else "")
-            + f" [#{tx_id}]"
         )
+        if currency != "SGD":
+            reply += f"\n~ SGD ${sgd_equivalent:.2f}"
+        reply += f" [#{tx_id}]"
+        await update.message.reply_text(reply)
 
     async def _cash(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not context.args:

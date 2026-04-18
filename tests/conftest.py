@@ -18,6 +18,7 @@ def in_memory_db():
         source_id TEXT UNIQUE,
         amount REAL NOT NULL,
         currency TEXT DEFAULT 'SGD',
+        exchange_rate REAL DEFAULT 1.0,
         merchant TEXT,
         description TEXT,
         category TEXT,
