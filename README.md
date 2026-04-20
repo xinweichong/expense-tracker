@@ -38,9 +38,7 @@ Single Python process. SQLite storage with WAL mode. FastAPI for webhooks and da
 - **Python 3.11+**
 - **Gmail account** with API credentials (for email ingestion) — see setup guide
 - **Telegram Bot Token** (from [@BotFather](https://t.me/botfather))
-- **One of:**
-  - A server reachable from your iPhone (Tailscale, Cloudflare Tunnel, or public IP) for local deployment
-  - A [Railway](https://railway.app/) account for cloud deployment (no server needed)
+- **A [Railway](https://railway.app/) account** for cloud deployment
 
 ## Quick Start
 
@@ -367,7 +365,7 @@ expense-tracker/
 |-------|----------|
 | Automation doesn't fire | Settings → Shortcuts → Advanced → enable "Allow Running Scripts". Check Focus modes |
 | Server returns 400 | Add "Show Result" to inspect JSON payload. Verify amount is a number and merchant is not empty |
-| Server unreachable | Verify URL works in Safari on iPhone. For Tailscale, both devices must be connected |
+| Server unreachable | Verify the Railway URL works in Safari on your iPhone |
 | Amount wrong sign | The If/End If block must contain the Combine Text + Set Variable actions |
 | Duplicate transactions | Server deduplicates by `source_id` (unique constraint) + cross-source matching (merchant + amount within 10 minutes) |
 
@@ -398,7 +396,7 @@ feature/xxx ──merge --no-ff──> develop ──test──> main (tagged re
 
 ## Documentation
 
-- **[docs/setup-guide.md](docs/setup-guide.md)** — Full setup walkthrough with Telegram, Gmail, Tailscale, Railway, and troubleshooting
+- **[docs/setup-guide.md](docs/setup-guide.md)** — Full setup walkthrough with Telegram, Gmail, Railway, and troubleshooting
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history
 - **[AGENTS.md](AGENTS.md)** — AI agent context and architecture notes
 
