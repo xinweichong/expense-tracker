@@ -2,52 +2,111 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Expenses">
     <title>Expense Tracker</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+
+    <!-- Login Overlay -->
     <div id="login-overlay" class="overlay">
         <div class="login-card">
+            <div class="login-logo">$</div>
             <h1>Expense Tracker</h1>
+            <p class="login-sub">Sign in to your dashboard</p>
             <form id="login-form">
-                <input type="password" id="password" placeholder="Password" required>
-                <button type="submit">Login</button>
+                <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+                <button type="submit" id="login-btn">Sign In</button>
             </form>
             <p id="login-error" class="error" style="display:none">Invalid password</p>
         </div>
     </div>
 
+    <!-- Dashboard -->
     <div id="dashboard" style="display:none">
-        <header>
-            <h1>Expense Tracker</h1>
-            <div class="date-filter">
-                <input type="date" id="start-date">
-                <span>to</span>
-                <input type="date" id="end-date">
-                <button onclick="loadDashboard()">Refresh</button>
+        <header class="dash-header">
+            <div class="header-left">
+                <span class="logo-mark">$</span>
+                <span class="logo-text">Expenses</span>
             </div>
+            <a href="/settings" class="gear-btn" title="Settings">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </a>
         </header>
-        <div class="summary-cards" id="summary-cards"></div>
-        <div class="charts">
-            <div class="chart-container">
-                <h2>Monthly Trend</h2>
-                <canvas id="trend-chart"></canvas>
+
+        <main class="container">
+            <!-- Period Selector -->
+            <div class="period-bar">
+                <div class="period-tabs">
+                    <button class="period-tab active" data-period="day">Day</button>
+                    <button class="period-tab" data-period="week">Week</button>
+                    <button class="period-tab" data-period="month">Month</button>
+                </div>
+                <div class="period-nav">
+                    <button class="nav-arrow" id="prev-period" aria-label="Previous period">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <span class="period-label" id="period-label"></span>
+                    <button class="nav-arrow" id="next-period" aria-label="Next period">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
             </div>
-            <div class="chart-container">
-                <h2>Category Breakdown</h2>
-                <canvas id="category-chart"></canvas>
+
+            <!-- Hero Total -->
+            <div class="hero" id="hero"></div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <div class="card chart-card">
+                    <h3 class="card-title">By Category</h3>
+                    <div class="chart-wrap">
+                        <canvas id="donut-chart"></canvas>
+                    </div>
+                    <div class="donut-legend" id="donut-legend"></div>
+                </div>
+                <div class="card chart-card">
+                    <h3 class="card-title">Spending Trend</h3>
+                    <div class="chart-wrap">
+                        <canvas id="line-chart"></canvas>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div class="table-container">
-            <h2>Recent Transactions</h2>
-            <table id="tx-table">
-                <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Amount</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
+
+            <!-- Insights Panel -->
+            <div class="insights-panel" id="insights-panel"></div>
+
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <select id="filter-category" class="filter-select">
+                    <option value="">All Categories</option>
+                </select>
+                <select id="filter-merchant" class="filter-select">
+                    <option value="">All Merchants</option>
+                </select>
+                <div class="sort-group">
+                    <button class="sort-btn active" data-sort="date" title="Sort by date">Date</button>
+                    <button class="sort-btn" data-sort="amount" title="Sort by amount">Amount</button>
+                    <button class="sort-btn" data-sort="category" title="Sort by category">Category</button>
+                </div>
+            </div>
+
+            <!-- Transaction List -->
+            <div class="tx-list" id="tx-list"></div>
+            <button class="load-more-btn" id="load-more" style="display:none">Load More</button>
+        </main>
     </div>
+
     <script src="/static/dashboard.js"></script>
 </body>
 </html>
