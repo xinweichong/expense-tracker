@@ -392,6 +392,7 @@ class TelegramBotService:
 /week — Weekly summary with trends
 /month — Monthly breakdown
 /balance — Income vs expenses
+/dashboard — Open web dashboard
 
 *Quick Entry:*
 /add <amount> <merchant> [category] [date]
@@ -423,6 +424,7 @@ class TelegramBotService:
             "Available commands:\n"
             "/today /week /month — view spending\n"
             "/balance — income vs expenses\n"
+            "/dashboard — open web dashboard\n"
             "/add — manual entry\n"
             "/cash — quick cash entry\n"
             "/income — record income\n"
