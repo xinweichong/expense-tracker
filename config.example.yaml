@@ -35,3 +35,8 @@ categories:
   - name: Other
     keywords: []
     icon: "📌"
+
+# Exchange rate settings (optional — defaults used if omitted)
+exchange_rates:
+  api_url: "https://open.er-api.com/v6/latest/SGD"
+  cache_hours: 24
