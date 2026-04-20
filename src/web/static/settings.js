@@ -51,16 +51,16 @@ async function loadCategories() {
     list.innerHTML = '';
     categories.forEach(cat => {
         const row = document.createElement('div');
-        row.className = 'item-row';
+        row.className = 'settings-item';
         row.innerHTML = `
-            <div class="item-info">
-                <span class="item-icon">${cat.icon || ''}</span>
-                <span class="item-name">${cat.name}</span>
-                <span class="item-keywords">${cat.keywords || '(no keywords)'}</span>
+            <div class="settings-item-info">
+                <span class="settings-item-icon">${cat.icon || ''}</span>
+                <span class="settings-item-name">${cat.name}</span>
+                <span class="settings-item-keywords">${cat.keywords || '(no keywords)'}</span>
             </div>
-            <div class="item-actions">
-                <button class="btn btn-secondary btn-sm" onclick="editCategory('${cat.name}', '${escapeAttr(cat.keywords || '')}', '${escapeAttr(cat.icon || '')}')">Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteCategory('${cat.name}')">Delete</button>
+            <div class="settings-item-actions">
+                <button class="btn-secondary" onclick="editCategory('${cat.name}', '${escapeAttr(cat.keywords || '')}', '${escapeAttr(cat.icon || '')}')">Edit</button>
+                <button class="btn-danger" onclick="deleteCategory('${cat.name}')">Delete</button>
             </div>
         `;
         list.appendChild(row);
@@ -80,15 +80,15 @@ async function loadOverrides() {
     noOverrides.style.display = 'none';
     overrides.forEach(o => {
         const row = document.createElement('div');
-        row.className = 'item-row';
+        row.className = 'settings-item';
         row.innerHTML = `
-            <div class="item-info">
+            <div class="settings-item-info">
                 <span class="override-merchant">${o.merchant}</span>
                 <span class="override-arrow">&rarr;</span>
                 <span class="override-category">${o.category}</span>
             </div>
-            <div class="item-actions">
-                <button class="btn btn-danger btn-sm" onclick="removeOverride('${escapeAttr(o.merchant)}')">Remove</button>
+            <div class="settings-item-actions">
+                <button class="btn-danger" onclick="removeOverride('${escapeAttr(o.merchant)}')">Remove</button>
             </div>
         `;
         list.appendChild(row);
