@@ -1,4 +1,5 @@
 """Expense Tracker — main entry point. Starts all services."""
+import base64
 import logging
 import logging.handlers
 import os
@@ -122,6 +123,20 @@ def main():
     logging.getLogger().addHandler(file_handler)
 
     config = load_config(CONFIG_PATH)
+
+    # Decode Gmail credentials from environment (for Docker/Railway deployments)
+    gmail_config = config.get("gmail", {})
+    if gmail_creds_b64 := os.environ.get("GMAIL_CREDENTIALS_JSON"):
+        creds_path = gmail_config.get("credentials_file", "credentials.json")
+        with open(creds_path, "w") as f:
+            f.write(base64.b64decode(gmail_creds_b64).decode())
+        logger.info("Decoded Gmail credentials from environment")
+
+    if gmail_token_b64 := os.environ.get("GMAIL_TOKEN_JSON"):
+        with open("token.json", "w") as f:
+            f.write(base64.b64decode(gmail_token_b64).decode())
+        logger.info("Decoded Gmail token from environment")
+
     conn = init_db(DB_PATH)
     storage = Storage(connection=conn)
 
@@ -176,7 +191,7 @@ def main():
 
     server_config = config.get("server", {})
     host = server_config.get("host", "0.0.0.0")
-    port = server_config.get("port", 8080)
+    port = int(os.environ.get("PORT", server_config.get("port", 8080)))
 
     # Start Gmail poller in background thread
     poll_interval = gmail_config.get("poll_interval_seconds", 120)
