@@ -1,6 +1,6 @@
 # Setup Guide — Getting Everything Running
 
-This guide walks you through every step to get the expense tracker fully operational: Telegram bot, Gmail email ingestion, Tailscale networking for Apple Wallet webhooks, and configuring which emails are crawled.
+This guide walks you through every step to get the expense tracker fully operational: Telegram bot, Gmail email ingestion, Railway cloud deployment, and configuring which emails are crawled.
 
 ---
 
@@ -10,24 +10,23 @@ This guide walks you through every step to get the expense tracker fully operati
 2. [Project Setup](#2-project-setup)
 3. [Telegram Bot Setup](#3-telegram-bot-setup)
 4. [Gmail API Setup](#4-gmail-api-setup)
-5. [Tailscale Setup](#5-tailscale-setup)
-6. [Configuration](#6-configuration)
-7. [Running the Application](#7-running-the-application)
-8. [iOS Shortcut Setup](#8-ios-shortcut-setup)
-9. [Configuring Email Addresses](#9-configuring-email-addresses)
-10. [Adding a New Bank](#10-adding-a-new-bank)
-11. [Running as a Service](#11-running-as-a-service)
-12. [Troubleshooting](#12-troubleshooting)
+5. [Configuration](#5-configuration)
+6. [Running the Application](#6-running-the-application)
+7. [iOS Shortcut Setup](#7-ios-shortcut-setup)
+8. [Configuring Email Addresses](#8-configuring-email-addresses)
+9. [Adding a New Bank](#9-adding-a-new-bank)
+10. [Running as a Service](#10-running-as-a-service)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Railway Deployment](#12-railway-deployment)
 
 ---
 
 ## 1. Prerequisites
 
-- **Python 3.11+** installed on your server machine
+- **Python 3.11+** (for local development)
 - **A Gmail account** that receives bank transaction emails
 - **An iPhone** for Telegram + Apple Wallet
-- **A server machine** (Mac, Linux, Raspberry Pi) that stays on — this runs 24/7
-- **Tailscale account** (free) for secure networking between your iPhone and server
+- **A [Railway](https://railway.app/) account** for cloud deployment
 
 ---
 
@@ -164,73 +163,7 @@ Both are gitignored — run `git status` to confirm they don't show up.
 
 ---
 
-## 5. Tailscale Setup
-
-Tailscale creates a secure private network between your devices. Your iPhone needs to reach the server's webhook endpoint for Apple Wallet transactions to flow through.
-
-### 5.1 Install Tailscale on the Server
-
-**macOS:**
-```bash
-# Via Homebrew
-brew install --cask tailscale
-# Or download from https://tailscale.com/download/mac
-```
-
-**Linux (Ubuntu/Debian):**
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-```
-
-### 5.2 Install Tailscale on Your iPhone
-
-1. Open the App Store → search **Tailscale** → install
-2. Open Tailscale → sign in with the same account
-3. Enable the VPN connection
-
-### 5.3 Get the Server's Tailscale IP
-
-On the server machine:
-```bash
-tailscale ip -4
-```
-
-This returns an IP like `100.64.0.1`. This is your server's private Tailscale IP — only devices on your Tailscale network can reach it.
-
-### 5.4 Verify Connectivity
-
-On your iPhone, open Safari and visit:
-```
-http://100.64.0.1:8080
-```
-(replace with your server's Tailscale IP)
-
-You should see the expense tracker login page. If you do, Tailscale is working.
-
-### 5.5 Alternative: Cloudflare Tunnel
-
-If you don't want Tailscale, you can use Cloudflare Tunnel to expose the server:
-
-```bash
-# Install cloudflared
-brew install cloudflared
-
-# Authenticate
-cloudflared tunnel login
-
-# Create a tunnel
-cloudflared tunnel create expense-tracker
-
-# Run it
-cloudflared tunnel run --url http://localhost:8080 expense-tracker
-```
-
-This gives you a public `https://xxx.trycloudflare.com` URL. Use this as your `webhook_base_url`.
-
----
-
-## 6. Configuration
+## 5. Configuration
 
 Edit `config.yaml` with your actual values:
 
@@ -247,7 +180,7 @@ gmail:
 server:
   host: "0.0.0.0"                        # listen on all interfaces
   port: 8080                             # port for web dashboard + webhooks
-  webhook_base_url: "http://100.64.0.1:8080"  # your Tailscale URL (from step 5.3)
+  webhook_base_url: "https://your-app.up.railway.app"  # your Railway URL
 
 # Web dashboard password
 web:
@@ -279,7 +212,7 @@ categories:
     icon: "📌"
 ```
 
-### 6.1 Generate the Web Dashboard Password
+### 5.1 Generate the Web Dashboard Password
 
 ```bash
 source venv/bin/activate
@@ -288,19 +221,17 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'your-actual-password', bcrypt.ge
 
 Copy the output (starts with `$2b$12$...`) and paste it as `web.password_hash`.
 
-### 6.2 Set the Webhook URL
+### 5.2 Set the Webhook URL
 
 This is the URL your iPhone will POST Apple Wallet transactions to:
 
-- **Tailscale:** `http://100.64.0.1:8080` (replace with your server's Tailscale IP)
-- **Cloudflare Tunnel:** `https://your-subdomain.trycloudflare.com`
-- **Static IP:** `http://your.public.ip:8080`
+- **Railway:** `https://your-app.up.railway.app` (from the Railway dashboard)
 
 The full webhook path is: `{webhook_base_url}/webhook/apple-wallet`
 
 ---
 
-## 7. Running the Application
+## 6. Running the Application
 
 ```bash
 source venv/bin/activate
@@ -323,7 +254,7 @@ You should see output like:
 - Try `/today` — should say "No transactions on 2026-04-17" (or show any existing data)
 
 **Web dashboard:**
-- Open `http://100.64.0.1:8080` in a browser (on any device on your Tailscale network)
+- Open `https://your-app.up.railway.app` in a browser
 - Enter the password you set in `web.password_hash`
 - You should see the dashboard with empty charts
 
@@ -334,22 +265,22 @@ You should see output like:
 
 ---
 
-## 8. iOS Shortcut Setup (Apple Wallet)
+## 7. iOS Shortcut Setup (Apple Wallet)
 
 See the detailed iOS Shortcut instructions in the [README.md](../README.md) under "iOS Shortcut Setup". The key points:
 
 1. Open Shortcuts → Automation → Transaction trigger
 2. Build ~14 actions to extract date, card, merchant, amount
-3. POST JSON to `http://100.64.0.1:8080/webhook/apple-wallet`
+3. POST JSON to `https://your-app.up.railway.app/webhook/apple-wallet`
 4. Set to **Run Immediately** with no notification
 
 ---
 
-## 9. Configuring Email Addresses
+## 8. Configuring Email Addresses
 
 The Gmail poller checks for unread emails from specific senders. This is controlled by two things:
 
-### 9.1 Sender Filters in config.yaml
+### 8.1 Sender Filters in config.yaml
 
 The `sender_filters` list tells the poller which email addresses to look for:
 
@@ -365,7 +296,7 @@ The poller constructs a Gmail query like:
 (from:notification@dbs.com OR from:notification@uob.com) is:unread
 ```
 
-### 9.2 How to Find the Exact Sender Address
+### 8.2 How to Find the Exact Sender Address
 
 If you're unsure what email address your bank sends from:
 
@@ -385,7 +316,7 @@ Common Singapore bank notification senders:
 
 > These are starting points — **always verify by checking actual emails in your Gmail**. Banks sometimes change their sender addresses.
 
-### 9.3 Adding or Removing Senders
+### 8.3 Adding or Removing Senders
 
 Edit `config.yaml` and update the list:
 
@@ -399,7 +330,7 @@ gmail:
 
 Then restart the application. The poller will start checking for emails from the new sender on the next poll cycle.
 
-### 9.4 Poll Interval
+### 8.4 Poll Interval
 
 The `poll_interval_seconds` controls how often Gmail is checked:
 
@@ -414,11 +345,11 @@ gmail:
 
 ---
 
-## 10. Adding a New Bank
+## 9. Adding a New Bank
 
 To support a bank that isn't DBS PayLah! or UOB PayNow, you need a new parser.
 
-### 10.1 Create the Parser
+### 9.1 Create the Parser
 
 Create `src/parsers/<bank_name>.py`:
 
@@ -456,7 +387,7 @@ class MyBankParser(BankParser):
         )
 ```
 
-### 10.2 Register the Parser
+### 9.2 Register the Parser
 
 Edit `src/parsers/__init__.py` to import and register it:
 
@@ -465,7 +396,7 @@ from src.parsers.mybank import MyBankParser
 ALL_PARSERS = [DbsPaylahParser, UobPaynowParser, MyBankParser]
 ```
 
-### 10.3 Add to main.py
+### 9.3 Add to main.py
 
 Edit `src/main.py` to instantiate the parser:
 
@@ -475,7 +406,7 @@ from src.parsers.mybank import MyBankParser
 parsers = [DbsPaylahParser(), UobPaynowParser(), MyBankParser()]
 ```
 
-### 10.4 Add Sender Filter
+### 9.4 Add Sender Filter
 
 Edit `config.yaml`:
 
@@ -487,7 +418,7 @@ gmail:
     - notification@mybank.com    # ← new
 ```
 
-### 10.5 Test
+### 9.5 Test
 
 1. Find a real email from the bank in your Gmail
 2. Copy the email body text
@@ -510,7 +441,7 @@ class TestMyBankParser:
 
 ---
 
-## 11. Running as a Service
+## 10. Running as a Service
 
 ### macOS — launchd
 
@@ -592,7 +523,7 @@ sudo journalctl -u expense-tracker -f
 
 ---
 
-## 12. Troubleshooting
+## 11. Troubleshooting
 
 ### Gmail
 
@@ -612,14 +543,6 @@ sudo journalctl -u expense-tracker -f
 | Bot not sending alerts | Alerts are only sent for new transactions after the bot starts. Old transactions won't trigger alerts. |
 | `/add` gives "Invalid format" | Format is: `/add 12.50 MerchantName [category] [YYYY-MM-DD]`. Amount must be a number. |
 
-### Tailscale
-
-| Problem | Fix |
-|---------|-----|
-| Can't reach server from iPhone | Make sure Tailscale is running on **both** devices and connected. Check both show as "Online" in the Tailscale admin panel. |
-| Connection refused | The server app might not be running, or `server.host` is not `0.0.0.0`. Check the app is listening on the correct port. |
-| Timeout | Check firewall settings on the server. macOS: System Settings → Network → Firewall. Allow incoming connections on port 8080. |
-
 ### Web Dashboard
 
 | Problem | Fix |
@@ -636,6 +559,15 @@ sudo journalctl -u expense-tracker -f
 | Server returns 400 | The JSON payload is malformed. Add a "Show Result" action in the Shortcut to inspect the JSON before sending. |
 | Amount shows as positive instead of negative | Check the If block in the Shortcut — the Combine Text + Set Variable must be inside the If condition. |
 | Takes ~8 purchases to get working | Normal. Each real transaction lets you verify the Shortcut output and tweak the regex or payload format. |
+
+### Railway
+
+| Problem | Fix |
+|---------|-----|
+| Deploy fails | Check `railway logs`. Ensure `Dockerfile` exists and `requirements.txt` is valid |
+| Gmail not working | Verify `GMAIL_CREDENTIALS_JSON` and `GMAIL_TOKEN_JSON` are base64-encoded correctly: `base64 -i credentials.json` |
+| Database resets on deploy | Add a persistent volume mounted at `/data` and set `EXPENSE_DB_PATH=/data/expense_tracker.db` |
+| Server unreachable from iPhone | Verify the Railway URL works in Safari on your iPhone |
 
 ### Logs
 
@@ -657,16 +589,16 @@ grep "Gmail authenticated" logs/app.log
 
 ---
 
-## 13. Railway Deployment
+## 12. Railway Deployment
 
 Deploy the expense tracker to [Railway](https://railway.app/) for a cloud-hosted setup that doesn't require your local machine to stay on.
 
-### 13.1 Create a Railway Account
+### 12.1 Create a Railway Account
 
 1. Go to [railway.app](https://railway.app/) and sign up (GitHub login is easiest)
 2. Verify your email if prompted
 
-### 13.2 Install the Railway CLI
+### 12.2 Install the Railway CLI
 
 ```bash
 npm i -g @railway/cli
@@ -675,7 +607,7 @@ railway login
 
 This opens a browser to authenticate your CLI session.
 
-### 13.3 Initialize the Project
+### 12.3 Initialize the Project
 
 ```bash
 cd expense-tracker
@@ -684,7 +616,7 @@ railway init
 
 Select **"Empty project"** and give it a name like `expense-tracker`. Railway creates a new project and links this directory.
 
-### 13.4 Set Environment Variables
+### 12.4 Set Environment Variables
 
 In the Railway dashboard (or via CLI), set these environment variables:
 
@@ -719,7 +651,7 @@ railway variables set GMAIL_TOKEN_JSON="$(base64 -i token.json)"
 railway variables set EXPENSE_DB_PATH="/data/expense_tracker.db"
 ```
 
-### 13.5 Add a Persistent Volume
+### 12.5 Add a Persistent Volume
 
 The database must survive redeployments. Add a volume mounted at `/data`:
 
@@ -728,7 +660,7 @@ The database must survive redeployments. Add a volume mounted at `/data`:
 3. Set mount path: `/data`
 4. Set size: **1 GB** (sufficient for years of transaction data)
 
-### 13.6 Deploy
+### 12.6 Deploy
 
 ```bash
 railway up
@@ -750,7 +682,7 @@ Telegram bot started
 Starting web server on 0.0.0.0:8080
 ```
 
-### 13.7 Get the Public URL
+### 12.7 Get the Public URL
 
 Railway assigns a public URL automatically. Find it in the Railway dashboard under **Settings** -> **Networking** -> **Public URL**, or via CLI:
 
@@ -770,14 +702,14 @@ Then redeploy:
 railway up
 ```
 
-### 13.8 Update iOS Shortcut
+### 12.8 Update iOS Shortcut
 
 Change the webhook URL in your iOS Shortcut to point to the Railway URL:
 
 - Old: `http://100.64.0.1:8080/webhook/apple-wallet`
 - New: `https://your-app.up.railway.app/webhook/apple-wallet`
 
-### 13.9 How It Works
+### 12.9 How It Works
 
 When deployed on Railway:
 
