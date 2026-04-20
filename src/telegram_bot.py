@@ -14,11 +14,12 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramBotService:
-    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None, exchange_service: Optional[ExchangeRateService] = None):
+    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None, exchange_service: Optional[ExchangeRateService] = None, dashboard_url: str = ""):
         self.storage = storage
         self.bot_token = bot_token
         self.categorizer = categorizer
         self.exchange_service = exchange_service
+        self.dashboard_url = dashboard_url
         self.app = None
 
     def parse_add_command(self, text: str) -> Optional[dict]:
@@ -95,6 +96,7 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("insights", self._insights))
         self.app.add_handler(CommandHandler("subscriptions", self._subscriptions))
         self.app.add_handler(CommandHandler("help", self._help))
+        self.app.add_handler(CommandHandler("dashboard", self._dashboard))
 
         # Redirect removed commands to web
         self.app.add_handler(CommandHandler("categories", self._redirect_to_web))
@@ -406,6 +408,12 @@ class TelegramBotService:
 
 *Full dashboard:* Open the web app for charts, categories, insights, and more."""
         await update.message.reply_text(help_text, parse_mode="Markdown")
+
+    async def _dashboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if self.dashboard_url:
+            await update.message.reply_text(f"Open dashboard: {self.dashboard_url}")
+        else:
+            await update.message.reply_text("Dashboard URL not configured.")
 
     async def _unknown(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = update.message.text or ""
