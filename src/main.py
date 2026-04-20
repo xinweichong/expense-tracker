@@ -171,9 +171,13 @@ def main():
         api_url=exchange_config.get("api_url"),
         cache_hours=exchange_config.get("cache_hours", 24),
     )
+    server_config = config.get("server", {})
+    dashboard_url = server_config.get("webhook_base_url", "")
+
     bot = TelegramBotService(
         storage=storage, bot_token=bot_token,
         categorizer=categorizer, exchange_service=exchange_service,
+        dashboard_url=dashboard_url,
     )
 
     # Build combined FastAPI app
@@ -189,7 +193,6 @@ def main():
     dashboard_app = create_dashboard_app(storage, config.get("web", {}).get("password_hash", ""))
     app.mount("/", dashboard_app)
 
-    server_config = config.get("server", {})
     host = server_config.get("host", "0.0.0.0")
     port = int(os.environ.get("PORT", server_config.get("port", 8080)))
 
