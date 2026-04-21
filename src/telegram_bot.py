@@ -1,10 +1,11 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
 from typing import Optional
 
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from src.categorizer import Categorizer
 from src.exchange import ExchangeRateService
@@ -21,6 +22,8 @@ class TelegramBotService:
         self.exchange_service = exchange_service
         self.dashboard_url = dashboard_url
         self.app = None
+        self.chat_id: Optional[int] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def parse_add_command(self, text: str) -> Optional[dict]:
         parts = text.strip().split()
@@ -60,26 +63,76 @@ class TelegramBotService:
             "date": date,
         }
 
+    @staticmethod
+    def _format_tx_block(tx: dict) -> str:
+        tx_date = (tx.get("transaction_date") or "")[:10]
+        merchant = tx.get("merchant") or tx.get("description") or "Unknown"
+        category = tx.get("category") or "Other"
+        amount = tx.get("amount", 0)
+        currency = tx.get("currency", "SGD")
+        rate = tx.get("exchange_rate", 1.0)
+        source = tx.get("source", "unknown")
+
+        sgd = amount * rate
+        lines = [f"#{tx['id']} | {tx_date}"]
+        lines.append(f"{merchant} · {category}")
+        if currency != "SGD" and rate != 1.0:
+            lines.append(f"${sgd:.2f} SGD ({currency} {amount:.2f})")
+        else:
+            lines.append(f"${amount:.2f} {currency}")
+        lines.append(f"Source: {source}")
+        return "\n".join(lines)
+
+    async def _send_long_message(self, update: Update, text: str, parse_mode: str = "Markdown") -> None:
+        limit = 3800
+        if len(text) <= limit:
+            await update.message.reply_text(text, parse_mode=parse_mode)
+            return
+        parts = []
+        while text:
+            if len(text) <= limit:
+                parts.append(text)
+                break
+            split_at = text.rfind("\n", 0, limit)
+            if split_at == -1:
+                split_at = limit
+            parts.append(text[:split_at])
+            text = text[split_at:].lstrip("\n")
+        for part in parts:
+            await update.message.reply_text(part, parse_mode=parse_mode)
+
+    def _build_summary_with_transactions(self, header: str, summary: dict, start_date: str, end_date: str) -> str:
+        lines = [header, f"Total: ${summary['total']:.2f}", ""]
+        for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
+            lines.append(f"  {cat}: ${total:.2f}")
+
+        transactions = self.storage.query_transactions(start_date=start_date, end_date=end_date, limit=200)
+        if transactions:
+            lines.append("")
+            lines.append("*Transactions:*")
+            for tx in transactions:
+                lines.append("")
+                lines.append(self._format_tx_block(tx))
+
+        return "\n".join(lines)
+
     def format_daily_summary(self, date: str) -> str:
         summary = self.storage.get_spending_summary(start_date=date, end_date=date)
         if summary["total"] == 0:
             return f"No transactions on {date}"
 
-        lines = [f"*Spending for {date}*", f"Total: ${summary['total']:.2f}", ""]
-        for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
-            lines.append(f"  {cat}: ${total:.2f}")
-        return "\n".join(lines)
+        return self._build_summary_with_transactions(
+            f"*Spending for {date}*", summary, date, date
+        )
 
     def format_weekly_summary(self, start_date: str, end_date: str) -> str:
         summary = self.storage.get_spending_summary(start_date=start_date, end_date=end_date)
         if summary["total"] == 0:
             return "No transactions in this period"
 
-        lines = [f"*Weekly Summary ({start_date} to {end_date})*",
-                 f"Total: ${summary['total']:.2f}", ""]
-        for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
-            lines.append(f"  {cat}: ${total:.2f}")
-        return "\n".join(lines)
+        return self._build_summary_with_transactions(
+            f"*Weekly Summary ({start_date} to {end_date})*", summary, start_date, end_date
+        )
 
     def setup_handlers(self) -> None:
         self.app = Application.builder().token(self.bot_token).build()
@@ -105,26 +158,29 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("deletecategory", self._redirect_to_web))
         self.app.add_handler(CommandHandler("uncategorized", self._redirect_to_web))
 
+        self.app.add_handler(CallbackQueryHandler(self._category_callback))
+
         # Catch-all must be last
         self.app.add_handler(MessageHandler(filters.COMMAND, self._unknown))
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._unknown_text))
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        self.chat_id = update.effective_chat.id
         await update.message.reply_text(
             "Expense Tracker bot ready! Commands: /today /week /month /add /help"
         )
 
     async def _today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         today = datetime.now().strftime("%Y-%m-%d")
-        summary = self.format_daily_summary(today)
-        await update.message.reply_text(summary, parse_mode="Markdown")
+        text = self.format_daily_summary(today)
+        await self._send_long_message(update, text)
 
     async def _week(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         today = datetime.now()
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = today.strftime("%Y-%m-%d")
-        summary = self.format_weekly_summary(start, end)
-        await update.message.reply_text(summary, parse_mode="Markdown")
+        text = self.format_weekly_summary(start, end)
+        await self._send_long_message(update, text)
 
     async def _month(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         today = datetime.now()
@@ -134,11 +190,10 @@ class TelegramBotService:
         if summary["total"] == 0:
             await update.message.reply_text("No transactions this month")
             return
-        lines = [f"*Monthly Summary ({start} to {end})*",
-                 f"Total: ${summary['total']:.2f}", ""]
-        for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
-            lines.append(f"  {cat}: ${total:.2f}")
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        text = self._build_summary_with_transactions(
+            f"*Monthly Summary ({start} to {end})*", summary, start, end
+        )
+        await self._send_long_message(update, text)
 
     async def _add(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not context.args:
@@ -439,6 +494,56 @@ class TelegramBotService:
             "I understand commands starting with /.\n"
             "Type /help for a full list."
         )
+
+    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
+        """Send a transaction notification. Called from the Gmail poller thread."""
+        if not self.chat_id or not self._loop or not self.app:
+            return
+        asyncio.run_coroutine_threadsafe(
+            self._async_notify(tx_id, amount, merchant, category, source),
+            self._loop,
+        )
+
+    async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
+        text = f"New transaction: ${amount:.2f} at {merchant} [{source}]"
+        if category and category != "Other":
+            text = f"New transaction: ${amount:.2f} at {merchant} ({category}) [{source}]"
+            await self.app.bot.send_message(chat_id=self.chat_id, text=text)
+        else:
+            categories = self.storage.get_categories()
+            keyboard = [
+                [InlineKeyboardButton(
+                    f"{cat['icon']} {cat['name']}",
+                    callback_data=f"cat:{tx_id}:{cat['name']}",
+                )]
+                for cat in categories
+            ]
+            text += "\nPick a category:"
+            await self.app.bot.send_message(
+                chat_id=self.chat_id,
+                text=text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+
+    async def _category_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        await query.answer()
+
+        _, tx_id_str, category = query.data.split(":", 2)
+        tx_id = int(tx_id_str)
+        tx = self.storage.get_transaction(tx_id)
+        if not tx:
+            await query.edit_message_text("Transaction not found.")
+            return
+
+        self.storage.update_transaction(tx_id, category=category)
+        merchant = tx["merchant"]
+        if merchant:
+            self.storage.set_merchant_override(merchant, category)
+            if self.categorizer:
+                self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
+
+        await query.edit_message_text(f"{merchant} → {category}")
 
     async def _redirect_to_web(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(

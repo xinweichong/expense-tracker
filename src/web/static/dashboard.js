@@ -164,6 +164,22 @@ function initDashboard() {
   document.getElementById('filter-merchant').addEventListener('change', () => { txOffset = 0; loadTransactions(); });
   // Load more
   document.getElementById('load-more').addEventListener('click', loadMoreTransactions);
+  // Transaction action buttons (event delegation)
+  document.getElementById('tx-list').addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.tx-action-edit');
+    if (editBtn) {
+      openEditModal(parseInt(editBtn.dataset.txId));
+      return;
+    }
+    const deleteBtn = e.target.closest('.tx-action-delete');
+    if (deleteBtn) {
+      openDeleteModal(
+        parseInt(deleteBtn.dataset.txId),
+        deleteBtn.dataset.merchant,
+        deleteBtn.dataset.amount
+      );
+    }
+  });
 
   populateFilters();
   loadAll();
@@ -481,12 +497,16 @@ function renderTransactions() {
     const dateStr = (tx.transaction_date || '').split('T')[0];
 
     return `
-      <div class="tx-item">
+      <div class="tx-item" data-tx-id="${tx.id}">
         <div class="tx-icon ${bg}">${(cat[0] || '?').toUpperCase()}</div>
         <div class="tx-body">
           <div class="tx-merchant">${tx.merchant || tx.description || 'Unknown'}</div>
           <div class="tx-date">${dateStr}</div>
           <span class="tx-cat-badge ${cc}">${cat}</span>
+        </div>
+        <div class="tx-actions">
+          <button class="tx-action-btn tx-action-edit" data-tx-id="${tx.id}" title="Edit">&#9998;</button>
+          <button class="tx-action-btn tx-action-delete" data-tx-id="${tx.id}" data-merchant="${(tx.merchant || '').replace(/"/g, '&quot;')}" data-amount="${sign}$${sgd.toFixed(2)}" title="Delete">&#128465;</button>
         </div>
         <div class="tx-right">
           <div class="tx-amount ${amountClass}">${sign}$${sgd.toFixed(2)}</div>
@@ -496,3 +516,101 @@ function renderTransactions() {
     `;
   }).join('');
 }
+
+// === Edit Modal ===
+let editCategories = [];
+
+async function loadEditCategories() {
+  if (editCategories.length) return;
+  try {
+    editCategories = await fetch(`${API}/api/categories`).then(r => r.json());
+  } catch { editCategories = []; }
+}
+
+async function openEditModal(txId) {
+  const tx = allTransactions.find(t => t.id === txId);
+  if (!tx) return;
+  await loadEditCategories();
+
+  document.getElementById('edit-tx-id').textContent = `#${tx.id}`;
+  document.getElementById('edit-merchant').value = tx.merchant || '';
+  document.getElementById('edit-amount').value = tx.amount || '';
+  document.getElementById('edit-currency').value = tx.currency || 'SGD';
+  document.getElementById('edit-date').value = (tx.transaction_date || '').split('T')[0];
+
+  const catSelect = document.getElementById('edit-category');
+  catSelect.innerHTML = editCategories.map(c =>
+    `<option value="${c.name}" ${c.name === tx.category ? 'selected' : ''}>${c.name}</option>`
+  ).join('');
+
+  document.getElementById('edit-modal').dataset.txId = txId;
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').style.display = 'none';
+}
+
+document.getElementById('edit-cancel').addEventListener('click', closeEditModal);
+document.getElementById('edit-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeEditModal();
+});
+
+document.getElementById('edit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const txId = document.getElementById('edit-modal').dataset.txId;
+  const body = {
+    merchant: document.getElementById('edit-merchant').value,
+    amount: parseFloat(document.getElementById('edit-amount').value),
+    currency: document.getElementById('edit-currency').value || 'SGD',
+    category: document.getElementById('edit-category').value,
+    transaction_date: document.getElementById('edit-date').value,
+  };
+  try {
+    const res = await fetch(`${API}/api/transactions/${txId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error('Update failed');
+    closeEditModal();
+    txOffset = 0;
+    allTransactions = [];
+    loadTransactions();
+    loadAll();
+  } catch {
+    alert('Failed to update transaction.');
+  }
+});
+
+// === Delete Modal ===
+function openDeleteModal(txId, merchant, amountStr) {
+  document.getElementById('delete-msg').textContent =
+    `Delete transaction #${txId} \u2014 ${merchant} (${amountStr})?`;
+  document.getElementById('delete-modal').dataset.txId = txId;
+  document.getElementById('delete-modal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').style.display = 'none';
+}
+
+document.getElementById('delete-cancel').addEventListener('click', closeDeleteModal);
+document.getElementById('delete-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeDeleteModal();
+});
+
+document.getElementById('delete-confirm').addEventListener('click', async () => {
+  const txId = document.getElementById('delete-modal').dataset.txId;
+  try {
+    const res = await fetch(`${API}/api/transactions/${txId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Delete failed');
+    closeDeleteModal();
+    txOffset = 0;
+    allTransactions = [];
+    loadTransactions();
+    loadAll();
+  } catch {
+    alert('Failed to delete transaction.');
+  }
+});
