@@ -18,6 +18,7 @@ from src.storage import Storage
 from src.categorizer import Categorizer
 from src.parsers.dbs_paylah import DbsPaylahParser
 from src.parsers.uob_paynow import UobPaynowParser
+from src.parsers.uob_card import UobCardParser
 from src.gmail_poller import GmailPoller
 from src.telegram_bot import TelegramBotService
 from src.webhook import create_webhook_app
@@ -33,11 +34,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("EXPENSE_DB_PATH", "expense_tracker.db")
+# In Railway/containers, use /data for persistent storage
+_db_env = os.environ.get("EXPENSE_DB_PATH", "")
+DB_PATH = _db_env if _db_env else ("/data/expense_tracker.db" if os.path.isdir("/data") else "expense_tracker.db")
 CONFIG_PATH = os.environ.get("EXPENSE_CONFIG_PATH", "config.yaml")
 
 
 def init_db(db_path: str) -> sqlite3.Connection:
+    is_new = not os.path.exists(db_path)
+    logger.info(f"Database: {db_path} (exists={not is_new})")
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -96,6 +101,9 @@ def init_db(db_path: str) -> sqlite3.Connection:
     except Exception:
         pass
     conn.commit()
+    tx_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+    cat_count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
+    logger.info(f"Database ready: {tx_count} transactions, {cat_count} categories")
     return conn
 
 
@@ -136,6 +144,8 @@ def main():
         with open("token.json", "w") as f:
             f.write(base64.b64decode(gmail_token_b64).decode())
         logger.info("Decoded Gmail token from environment")
+    else:
+        logger.warning("GMAIL_TOKEN_JSON not set — Gmail polling will not work")
 
     conn = init_db(DB_PATH)
     storage = Storage(connection=conn)
@@ -152,7 +162,7 @@ def main():
     )
 
     # Set up parsers
-    parsers = [DbsPaylahParser(), UobPaynowParser()]
+    parsers = [DbsPaylahParser(), UobPaynowParser(), UobCardParser()]
 
     # Set up Gmail poller
     gmail_config = config.get("gmail", {})

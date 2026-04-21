@@ -46,10 +46,12 @@ class GmailPoller:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    self.credentials_path, SCOPES
-                )
-                creds = flow.run_local_server(port=0)
+                if not os.path.exists(self.credentials_path):
+                    logger.error("Gmail credentials file not found and no valid token available")
+                    return
+                logger.error("Gmail token is invalid and cannot refresh interactively in headless environment. "
+                             "Re-generate token.json locally and update GMAIL_TOKEN_JSON env var.")
+                return
             with open(self.token_path, "w") as f:
                 f.write(creds.to_json())
 
@@ -176,7 +178,23 @@ class GmailPoller:
         self.authenticate()
         while True:
             try:
-                self.poll_once()
+                results = self.poll_once()
+                for result in results:
+                    try:
+                        self.storage.insert_transaction(
+                            source=result.source,
+                            source_id=result.source_id,
+                            amount=result.amount,
+                            merchant=result.merchant,
+                            description=result.description,
+                            transaction_date=result.transaction_date,
+                            raw_data=result.raw_data,
+                        )
+                        logger.info(f"Stored transaction: {result.merchant} ${result.amount:.2f}")
+                        if self.on_transaction:
+                            self.on_transaction(result)
+                    except Exception as e:
+                        logger.error(f"Failed to store transaction: {e}")
             except Exception as e:
                 logger.error(f"Poll error: {e}")
             time.sleep(interval_seconds)

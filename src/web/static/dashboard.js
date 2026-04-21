@@ -5,7 +5,7 @@ let donutChart = null;
 let lineChart = null;
 
 // State
-let currentPeriod = 'month';
+let currentPeriod = 'day';
 let periodDate = new Date();
 let txOffset = 0;
 const TX_PAGE = 20;
@@ -46,7 +46,10 @@ function catIconClass(cat) {
 
 // === Date helpers ===
 function fmtDate(d) {
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
