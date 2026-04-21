@@ -91,6 +91,11 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
         storage.update_transaction(tx_id, **fields)
+        # Auto-learn merchant override when category changes
+        if "category" in fields and fields["category"] != tx.get("category"):
+            merchant = fields.get("merchant") or tx.get("merchant")
+            if merchant:
+                storage.set_merchant_override(merchant, fields["category"])
         return {"status": "ok"}
 
     @app.delete("/api/transactions/{tx_id}")

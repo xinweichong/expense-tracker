@@ -24,6 +24,24 @@ class TelegramBotService:
         self.app = None
         self.chat_id: Optional[int] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        # Restore persisted chat_id
+        self._load_chat_id()
+
+    def _load_chat_id(self) -> None:
+        row = self.storage.conn.execute(
+            "SELECT last_processed_id FROM ingestion_state WHERE source = 'telegram_chat_id'"
+        ).fetchone()
+        if row and row["last_processed_id"]:
+            self.chat_id = int(row["last_processed_id"])
+            logger.info("Restored Telegram chat_id: %s", self.chat_id)
+
+    def _save_chat_id(self, chat_id: int) -> None:
+        self.storage.conn.execute(
+            """INSERT OR REPLACE INTO ingestion_state (source, last_processed_id, last_processed_at, updated_at)
+               VALUES ('telegram_chat_id', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
+            (str(chat_id),),
+        )
+        self.storage.conn.commit()
 
     def parse_add_command(self, text: str) -> Optional[dict]:
         parts = text.strip().split()
@@ -64,14 +82,21 @@ class TelegramBotService:
         }
 
     @staticmethod
+    def _escape_md(text: str) -> str:
+        """Escape Telegram Markdown special characters in user-provided text."""
+        for ch in ("_", "*", "`", "["):
+            text = text.replace(ch, f"\\{ch}")
+        return text
+
+    @staticmethod
     def _format_tx_block(tx: dict) -> str:
         tx_date = (tx.get("transaction_date") or "")[:10]
-        merchant = tx.get("merchant") or tx.get("description") or "Unknown"
+        merchant = TelegramBotService._escape_md(tx.get("merchant") or tx.get("description") or "Unknown")
         category = tx.get("category") or "Other"
         amount = tx.get("amount", 0)
         currency = tx.get("currency", "SGD")
         rate = tx.get("exchange_rate", 1.0)
-        source = tx.get("source", "unknown")
+        source = TelegramBotService._escape_md(tx.get("source", "unknown"))
 
         sgd = amount * rate
         lines = [f"#{tx['id']} | {tx_date}"]
@@ -104,7 +129,7 @@ class TelegramBotService:
     def _build_summary_with_transactions(self, header: str, summary: dict, start_date: str, end_date: str) -> str:
         lines = [header, f"Total: ${summary['total']:.2f}", ""]
         for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
-            lines.append(f"  {cat}: ${total:.2f}")
+            lines.append(f"  {self._escape_md(cat)}: ${total:.2f}")
 
         transactions = self.storage.query_transactions(start_date=start_date, end_date=end_date, limit=200)
         if transactions:
@@ -166,6 +191,7 @@ class TelegramBotService:
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.chat_id = update.effective_chat.id
+        self._save_chat_id(self.chat_id)
         await update.message.reply_text(
             "Expense Tracker bot ready! Commands: /today /week /month /add /help"
         )
@@ -497,7 +523,11 @@ class TelegramBotService:
 
     def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
         """Send a transaction notification. Called from the Gmail poller thread."""
-        if not self.chat_id or not self._loop or not self.app:
+        if not self.chat_id:
+            logger.debug("Cannot notify: no chat_id (send /start to the bot)")
+            return
+        if not self._loop or not self.app:
+            logger.debug("Cannot notify: bot not started yet")
             return
         asyncio.run_coroutine_threadsafe(
             self._async_notify(tx_id, amount, merchant, category, source),
