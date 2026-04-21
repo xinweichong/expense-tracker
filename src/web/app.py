@@ -73,6 +73,34 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             limit=limit,
         )
 
+    @app.get("/api/transactions/{tx_id}")
+    async def get_transaction(tx_id: int, _auth=Depends(require_auth)):
+        tx = storage.get_transaction(tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        return tx
+
+    @app.put("/api/transactions/{tx_id}")
+    async def update_transaction(tx_id: int, request: Request, _auth=Depends(require_auth)):
+        tx = storage.get_transaction(tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        body = await request.json()
+        allowed = {"merchant", "amount", "currency", "exchange_rate", "category", "description", "transaction_date", "type"}
+        fields = {k: v for k, v in body.items() if k in allowed}
+        if not fields:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        storage.update_transaction(tx_id, **fields)
+        return {"status": "ok"}
+
+    @app.delete("/api/transactions/{tx_id}")
+    async def delete_transaction(tx_id: int, _auth=Depends(require_auth)):
+        tx = storage.get_transaction(tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        storage.delete_transaction(tx_id)
+        return {"status": "ok"}
+
     @app.get("/api/categories")
     async def categories(_auth=Depends(require_auth)):
         return storage.get_categories()
