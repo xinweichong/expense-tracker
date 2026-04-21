@@ -188,7 +188,7 @@ class GmailPoller:
                 results = self.poll_once()
                 for result in results:
                     try:
-                        self.storage.insert_transaction(
+                        tx_id = self.storage.insert_transaction(
                             source=result.source,
                             source_id=result.source_id,
                             amount=result.amount,
@@ -199,7 +199,7 @@ class GmailPoller:
                         )
                         logger.info(f"Stored transaction: {result.merchant} ${result.amount:.2f}")
                         if self.on_transaction:
-                            self.on_transaction(result)
+                            self.on_transaction(result, tx_id)
                     except Exception as e:
                         logger.error(f"Failed to store transaction: {e}")
             except Exception as e:

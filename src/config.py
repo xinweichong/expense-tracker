@@ -6,7 +6,7 @@ import yaml
 
 
 DEFAULTS = {
-    "server": {"host": "0.0.0.0", "port": 8080, "webhook_base_url": "http://localhost:8080"},
+    "server": {"host": "0.0.0.0", "port": 8080, "webhook_base_url": ""},
     "gmail": {"poll_interval_seconds": 120, "sender_filters": []},
 }
 
@@ -32,7 +32,7 @@ def _config_from_env() -> dict[str, Any]:
 
     poll_interval = int(os.environ.get("GMAIL_POLL_INTERVAL", "120"))
 
-    webhook_base_url = os.environ.get("WEBHOOK_BASE_URL", f"http://localhost:{port}")
+    webhook_base_url = os.environ.get("WEBHOOK_BASE_URL", "")
 
     config: dict[str, Any] = {
         "server": {

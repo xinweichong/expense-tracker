@@ -112,6 +112,7 @@ def _run_bot(bot: TelegramBotService) -> None:
     import asyncio
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    bot._loop = loop
     try:
         loop.run_until_complete(bot.app.initialize())
         loop.run_until_complete(bot.app.start())
@@ -165,13 +166,18 @@ def main():
     parsers = [DbsPaylahParser(), UobPaynowParser(), UobCardParser()]
 
     # Set up Gmail poller
-    gmail_config = config.get("gmail", {})
+    def on_transaction(result, tx_id):
+        category, _ = categorizer.categorize(result.merchant)
+        storage.update_transaction(tx_id, category=category)
+        bot.notify_transaction(tx_id, result.amount, result.merchant, category, result.source)
+
     poller = GmailPoller(
         credentials_path=gmail_config.get("credentials_file", "credentials.json"),
         token_path="token.json",
         sender_filters=gmail_config.get("sender_filters", []),
         parsers=parsers,
         storage=storage,
+        on_transaction=on_transaction,
     )
 
     # Set up Telegram bot

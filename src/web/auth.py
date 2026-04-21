@@ -1,7 +1,7 @@
 import secrets
 import bcrypt
 
-# In-memory session store — fine for single-user local app
+# In-memory session store
 _sessions: set[str] = set()
 
 
