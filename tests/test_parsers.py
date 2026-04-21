@@ -32,6 +32,8 @@ class TestDbsPaylahParser:
         assert result.amount == 8.20
         assert result.merchant == "BAN MIAN"
         assert result.source == "dbs_paylah"
+        assert result.transaction_date is not None
+        assert result.transaction_date.endswith("-04-17T00:00:00")
 
     def test_parse_real_email_with_comma_amount(self):
         body = (
@@ -75,6 +77,7 @@ class TestDbsPaylahParser:
         assert result.amount == 8.20
         assert result.merchant == "BAN MIAN"
         assert result.source_id is None
+        assert result.transaction_date is None  # no date in body
 
     def test_parse_no_match_returns_none(self):
         body = "This is a promotional email from DBS"

@@ -7,7 +7,6 @@ import time
 from typing import Callable, Optional
 
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
@@ -16,7 +15,7 @@ from src.storage import Storage
 
 logger = logging.getLogger(__name__)
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 
 class GmailPoller:
@@ -59,6 +58,8 @@ class GmailPoller:
         logger.info("Gmail authenticated successfully")
 
     def _build_query(self) -> str:
+        if not self.sender_filters:
+            return ""
         senders = " OR ".join(f"from:{s}" for s in self.sender_filters)
         return f"({senders}) is:unread"
 
@@ -76,7 +77,7 @@ class GmailPoller:
 
         parser = self._find_parser(sender, subject)
         if not parser:
-            logger.warning(f"No parser for sender: {sender}")
+            logger.debug("No parser for sender: %s", sender)
             return None
 
         body = self._extract_body(msg)
@@ -145,6 +146,9 @@ class GmailPoller:
             raise RuntimeError("Not authenticated. Call authenticate() first.")
 
         query = self._build_query()
+        if not query:
+            logger.warning("No sender filters configured — skipping poll")
+            return []
         results = self.service.users().messages().list(userId="me", q=query).execute()
         messages = results.get("messages", [])
 
@@ -165,11 +169,14 @@ class GmailPoller:
                     )
                 else:
                     transactions.append(result)
-                self.service.users().messages().modify(
-                    userId="me",
-                    id=msg["id"],
-                    body={"removeLabelIds": ["UNREAD"]},
-                ).execute()
+                try:
+                    self.service.users().messages().modify(
+                        userId="me",
+                        id=msg["id"],
+                        body={"removeLabelIds": ["UNREAD"]},
+                    ).execute()
+                except Exception as e:
+                    logger.warning("Could not mark message as read: %s", e)
 
         logger.info(f"Processed {len(transactions)} new transactions")
         return transactions
