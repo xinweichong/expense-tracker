@@ -107,6 +107,19 @@ class TestMerchantAnalysis:
         result = get_merchant_trend(db_with_transactions, merchant="Food place 0")
         assert "current_month" in result
         assert "previous_month" in result
+        assert result["current_month"] == 100.0
+        assert result["previous_month"] == 100.0
+        assert result["trend"] == "stable"
+        assert isinstance(result["months"], list)
+
+    def test_merchant_trend_unknown_merchant(self):
+        conn = make_db()
+        result = get_merchant_trend(conn, merchant="Nonexistent")
+        assert result["current_month"] == 0
+        assert result["previous_month"] == 0
+        assert result["trend"] == "stable"
+        assert result["months"] == []
+        conn.close()
 
     def test_top_merchants_limit(self):
         conn = make_db()

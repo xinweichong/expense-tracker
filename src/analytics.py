@@ -154,7 +154,7 @@ def get_top_merchants(
 def get_merchant_trend(
     conn: sqlite3.Connection, merchant: str
 ) -> dict:
-    """Get spending trend for a specific merchant across months."""
+    """Get spending trend for a specific merchant across months (ASC order for charting)."""
     rows = conn.execute(
         """
         SELECT strftime('%Y-%m', transaction_date) as month,
@@ -163,15 +163,24 @@ def get_merchant_trend(
         FROM transactions
         WHERE type = 'expense' AND merchant = ?
         GROUP BY strftime('%Y-%m', transaction_date)
-        ORDER BY month DESC
+        ORDER BY month ASC
         LIMIT 6
         """,
         [merchant],
     ).fetchall()
 
     months = [dict(r) for r in rows]
-    current_month = months[0]["total"] if months else 0
-    previous_month = months[1]["total"] if len(months) > 1 else 0
+
+    now = datetime.now()
+    current_month_str = now.strftime("%Y-%m")
+    if now.month == 1:
+        prev_month_str = now.replace(year=now.year - 1, month=12).strftime("%Y-%m")
+    else:
+        prev_month_str = now.replace(month=now.month - 1).strftime("%Y-%m")
+
+    months_by_key = {m["month"]: m["total"] for m in months}
+    current_month = months_by_key.get(current_month_str, 0)
+    previous_month = months_by_key.get(prev_month_str, 0)
 
     return {
         "merchant": merchant,
