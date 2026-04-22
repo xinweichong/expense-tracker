@@ -115,6 +115,16 @@ def init_db(db_path: str) -> sqlite3.Connection:
     except Exception:
         pass
     conn.commit()
+    # Create indexes for query performance (idempotent — IF NOT EXISTS)
+    index_statements = [
+        "CREATE INDEX IF NOT EXISTS idx_tx_date     ON transactions(DATE(transaction_date))",
+        "CREATE INDEX IF NOT EXISTS idx_tx_category ON transactions(category)",
+        "CREATE INDEX IF NOT EXISTS idx_tx_type     ON transactions(type)",
+        "CREATE INDEX IF NOT EXISTS idx_tx_merchant ON transactions(merchant)",
+    ]
+    for stmt in index_statements:
+        conn.execute(stmt)
+    conn.commit()
     tx_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
     cat_count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
     logger.info(f"Database ready: {tx_count} transactions, {cat_count} categories")

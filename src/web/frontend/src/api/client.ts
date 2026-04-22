@@ -8,7 +8,10 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
       ...opts?.headers,
     },
   });
-  if (res.status === 401) throw new Error('Unauthorized');
+  if (res.status === 401) {
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`API error: ${res.status} ${body}`);

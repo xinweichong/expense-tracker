@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { type Transaction } from '@/api/client';
 import { formatCurrency, formatDate, getCategoryColor } from '@/lib/utils';
 import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/useTransactions';
@@ -27,6 +27,22 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
   const { data: categories } = useCategories();
+
+  const iconMap = useMemo(
+    () => Object.fromEntries((categories ?? []).map(c => [c.name, c.icon ?? ''])),
+    [categories]
+  );
+  const categoryColor = getCategoryColor(tx.category ?? '');
+  const categoryIcon = tx.category ? (iconMap[tx.category] ?? tx.category[0] ?? '•') : '•';
+
+  const SOURCE_LABELS: Record<string, string> = {
+    dbs_paylah:   'DBS PayLah!',
+    uob_paynow:   'UOB PayNow',
+    uob_card:     'UOB Card',
+    apple_wallet: 'Apple Wallet',
+    manual:       'Manual',
+    cash:         'Cash',
+  };
 
   const handleSave = () => {
     updateTx.mutate(
@@ -76,7 +92,12 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
 
   return (
     <div className="group px-4 py-3 flex items-center gap-3 border-b border-border hover:bg-card/50 transition-colors last:border-b-0">
-      <div className="w-1 h-8 rounded-full shrink-0" style={{ backgroundColor: getCategoryColor(tx.category ?? '') }} />
+      <div
+        className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-base"
+        style={{ backgroundColor: `${categoryColor}26` }}
+      >
+        {categoryIcon}
+      </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{tx.merchant || tx.description || 'Transaction'}</p>
         <div className="flex items-center gap-2 flex-wrap">
@@ -84,6 +105,11 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
           {tx.category && (
             <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 border-border">
               {tx.category}
+            </Badge>
+          )}
+          {tx.source && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 border-border text-muted">
+              {SOURCE_LABELS[tx.source] ?? tx.source}
             </Badge>
           )}
           {tx.currency !== 'SGD' && (

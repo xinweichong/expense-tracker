@@ -24,6 +24,15 @@ from src.storage import Storage
 
 logger = logging.getLogger(__name__)
 
+SOURCE_LABELS: dict[str, str] = {
+    "dbs_paylah":   "DBS PayLah!",
+    "uob_paynow":   "UOB PayNow",
+    "uob_card":     "UOB Card",
+    "apple_wallet": "Apple Wallet",
+    "manual":       "Manual",
+    "cash":         "Cash",
+}
+
 
 def get_category_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMarkup:
     """Create a 2-column grid of category buttons for recategorization."""
@@ -140,24 +149,28 @@ class TelegramBotService:
             text = text.replace(ch, f"\\{ch}")
         return text
 
-    @staticmethod
-    def _format_tx_block(tx: dict) -> str:
-        tx_date = (tx.get("transaction_date") or "")[:10]
-        merchant = TelegramBotService._escape_md(tx.get("merchant") or tx.get("description") or "Unknown")
-        category = tx.get("category") or "Other"
-        amount = tx.get("amount", 0)
-        currency = tx.get("currency", "SGD")
-        rate = tx.get("exchange_rate", 1.0)
-        source = TelegramBotService._escape_md(tx.get("source", "unknown"))
+    def _format_tx_block(self, tx: dict, icon_map: dict[str, str] | None = None) -> str:
+        if icon_map is None:
+            icon_map = {}
+        merchant  = self._escape_md(str(tx.get("merchant") or tx.get("description") or "Unknown"))
+        category  = str(tx.get("category") or "Uncategorized")
+        icon      = icon_map.get(category, "")
+        cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
+        amount    = float(tx.get("amount", 0))
+        currency  = str(tx.get("currency", "SGD"))
+        rate      = float(tx.get("exchange_rate") or 1.0)
+        tx_date   = str(tx.get("transaction_date", ""))[:10]
+        tx_id     = tx.get("id", "?")
+        raw_source = str(tx.get("source", "unknown"))
+        source_label = self._escape_md(SOURCE_LABELS.get(raw_source, raw_source))
 
-        sgd = amount * rate
-        lines = [f"#{tx['id']} | {tx_date}"]
-        lines.append(f"{merchant} · {category}")
+        lines = [f"*{merchant}* · {cat_display}"]
         if currency != "SGD" and rate != 1.0:
-            lines.append(f"${sgd:.2f} SGD ({currency} {amount:.2f})")
+            sgd = amount * rate
+            lines.append(f"`${sgd:.2f} SGD` `({currency} {amount:.2f})` · {source_label}")
         else:
-            lines.append(f"${amount:.2f} {currency}")
-        lines.append(f"Source: {source}")
+            lines.append(f"`${amount:.2f} {currency}` · {source_label}")
+        lines.append(f"_{tx_id} · {tx_date}_")
         return "\n".join(lines)
 
     async def _send_long_message(self, update: Update, text: str, parse_mode: str = "Markdown", reply_markup=None) -> None:
@@ -187,17 +200,20 @@ class TelegramBotService:
             await _send(part, markup)
 
     def _build_summary_with_transactions(self, header: str, summary: dict, start_date: str, end_date: str) -> str:
-        lines = [header, f"Total: ${summary['total']:.2f}", ""]
+        icon_map = self.storage.get_category_icon_map()
+        lines = [header, f"Total: `${summary['total']:.2f}`", ""]
         for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
-            lines.append(f"  {self._escape_md(cat)}: ${total:.2f}")
+            icon = icon_map.get(cat, "")
+            prefix = f"{icon} " if icon else ""
+            lines.append(f"{prefix}{self._escape_md(cat)}: `${total:.2f}`")
 
         transactions = self.storage.query_transactions(start_date=start_date, end_date=end_date, limit=200)
         if transactions:
             lines.append("")
             lines.append("*Transactions:*")
             for tx in transactions:
-                lines.append("")
-                lines.append(self._format_tx_block(tx))
+                lines.append("─────────")
+                lines.append(self._format_tx_block(tx, icon_map))
 
         return "\n".join(lines)
 
@@ -363,14 +379,12 @@ class TelegramBotService:
         )
 
         sgd_equivalent = parsed["amount"] * exchange_rate
-        reply = (
-            f"Added: {parsed['amount']:.2f} {currency} at {parsed['merchant']}"
-            + (f" ({category})" if category else "")
-        )
+        icon = self.storage.get_category_icon_map().get(category, "")
+        cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
+        msg = f"✅ *Added* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} {currency}`"
         if currency != "SGD":
-            reply += f"\n~ SGD ${sgd_equivalent:.2f}"
-        reply += f" [#{tx_id}]"
-        await update.message.reply_text(reply)
+            msg += f"\n~ SGD `${sgd_equivalent:.2f}`"
+        await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _cash(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not context.args:
@@ -409,11 +423,10 @@ class TelegramBotService:
             category=category,
             transaction_date=tx_date,
         )
-        await update.message.reply_text(
-            f"Cash: ${parsed['amount']:.2f} at {parsed['merchant']}"
-            + (f" ({category})" if category else "")
-            + f" [#{tx_id}]"
-        )
+        icon = self.storage.get_category_icon_map().get(category, "")
+        cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
+        msg = f"✅ *Cash* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} SGD`"
+        await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _recategorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not context.args:
@@ -508,7 +521,8 @@ class TelegramBotService:
             tx_type="income",
         )
 
-        await update.message.reply_text(f"Income: ${amount:.2f} — {description} [#{tx_id}]")
+        msg = f"💰 *Income* #{tx_id}\n*{self._escape_md(description)}* · `${amount:.2f} SGD`"
+        await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         today = datetime.now()
@@ -554,14 +568,14 @@ class TelegramBotService:
 
         lines = ["*Insights This Month*", ""]
         for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
-            lines.append(f"  {cat}: *${total:.2f}*")
+            lines.append(f"  {self._escape_md(cat)}: *${total:.2f}*")
         lines.append("")
         lines.append(f"*Daily average:* ${avg:.2f}")
         lines.append("")
         if ranking:
             lines.append("*Top Merchants*")
             for i, r in enumerate(ranking[:3], 1):
-                lines.append(f"  {i}. {r['merchant']} — ${r['total']:.2f}")
+                lines.append(f"  {i}. {self._escape_md(r['merchant'])} — ${r['total']:.2f}")
 
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("📊 Compare", callback_data="cmd_compare"),
@@ -635,7 +649,7 @@ class TelegramBotService:
         lines = ["*Top Merchants This Month*\n"]
         for i, m in enumerate(merchants, 1):
             lines.append(
-                f"{i}. *{m['merchant']}* \u2014 ${m['total']:.2f} ({m['count']}x)"
+                f"{i}. *{self._escape_md(m['merchant'])}* \u2014 ${m['total']:.2f} ({m['count']}x)"
             )
 
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
@@ -770,10 +784,13 @@ class TelegramBotService:
         )
 
     async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
-        text = f"New transaction: ${amount:.2f} at {merchant} [{source}]"
+        icon_map = self.storage.get_category_icon_map()
         if category and category != "Other":
-            text = f"New transaction: ${amount:.2f} at {merchant} ({category}) [{source}]"
-            await self.app.bot.send_message(chat_id=self.chat_id, text=text)
+            icon = icon_map.get(category, "")
+            cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
+            source_label = SOURCE_LABELS.get(source, source)
+            text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{cat_display} · {self._escape_md(source_label)}"
+            await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
         else:
             categories = self.storage.get_categories()
             buttons = []
@@ -789,10 +806,12 @@ class TelegramBotService:
             if row:
                 buttons.append(row)
             keyboard = InlineKeyboardMarkup(buttons)
-            text += "\nPick a category:"
+            source_label = SOURCE_LABELS.get(source, source)
+            text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{self._escape_md(source_label)} · Pick a category:"
             await self.app.bot.send_message(
                 chat_id=self.chat_id,
                 text=text,
+                parse_mode="Markdown",
                 reply_markup=keyboard,
             )
 
