@@ -3,6 +3,7 @@ import calendar
 import logging
 import re
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from typing import Optional
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonCommands, Update
@@ -873,15 +874,16 @@ class TelegramBotService:
         if not handler:
             return
 
-        # Build a synthetic message so handlers can use update.message.reply_text
-        chat_id = query.message.chat_id if query.message else (self.chat_id or query.from_user.id)
+        # Update is frozen in python-telegram-bot v21+ — build a lightweight
+        # stand-in with a .message that supports reply_text via bot.send_message.
+        chat_id = (
+            query.message.chat_id
+            if query.message and hasattr(query.message, "chat_id")
+            else (self.chat_id or query.from_user.id)
+        )
+        proxy_update = SimpleNamespace(message=_ReplyProxy(context.bot, chat_id))
         try:
-            if query.message and hasattr(query.message, "reply_text"):
-                update.message = query.message
-            else:
-                # Message inaccessible — use a wrapper that sends via bot API
-                update.message = _ReplyProxy(context.bot, chat_id)
-            await handler(update, context)
+            await handler(proxy_update, context)
         except Exception as e:
             logger.error("Error handling callback %s: %s", data, e, exc_info=True)
             try:
