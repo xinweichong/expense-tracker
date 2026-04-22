@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { type Transaction } from '@/api/client';
+import { useQuery } from '@tanstack/react-query';
+import { type Transaction, api } from '@/api/client';
 import { formatCurrency, formatDate, getCategoryColor } from '@/lib/utils';
 import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
@@ -29,14 +30,27 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
   const [hovered, setHovered] = useState(false);
   const [merchant, setMerchant] = useState(tx.merchant ?? '');
   const [category, setCategory] = useState(tx.category ?? '');
+  const [description, setDescription] = useState(tx.description ?? '');
+
+  const isAppleWallet = tx.source === 'apple_wallet';
+
   useEffect(() => {
     setMerchant(tx.merchant ?? '');
     setCategory(tx.category ?? '');
-  }, [tx.id, tx.merchant, tx.category]);
+    setDescription(tx.description ?? '');
+  }, [tx.id, tx.merchant, tx.category, tx.description]);
 
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
   const { data: categories } = useCategories();
+
+  // Fetch known Apple Wallet card names only when editing an apple_wallet transaction
+  const { data: appleWalletCards } = useQuery({
+    queryKey: ['apple-wallet-cards'],
+    queryFn: api.getAppleWalletCards,
+    enabled: isAppleWallet && editing,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const iconMap = useMemo(
     () => Object.fromEntries((categories ?? []).map(c => [c.name, c.icon ?? ''])),
@@ -46,8 +60,10 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
   const categoryIcon = tx.category ? (iconMap[tx.category] ?? tx.category[0] ?? '•') : '•';
 
   const handleSave = () => {
+    const data: Partial<Transaction> = { merchant, category };
+    if (isAppleWallet) data.description = description;
     updateTx.mutate(
-      { id: tx.id, data: { merchant, category } },
+      { id: tx.id, data },
       { onSuccess: () => setEditing(false) }
     );
   };
@@ -82,6 +98,18 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
             </SelectContent>
           </Select>
         </div>
+        {isAppleWallet && appleWalletCards && appleWalletCards.length > 0 && (
+          <Select value={description} onValueChange={setDescription}>
+            <SelectTrigger className="w-full bg-background border-border text-sm">
+              <SelectValue placeholder="Card (Apple Wallet)" />
+            </SelectTrigger>
+            <SelectContent>
+              {appleWalletCards.map((card) => (
+                <SelectItem key={card} value={card}>{card}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="flex gap-2 justify-end">
           <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
             <XIcon className="w-4 h-4" />

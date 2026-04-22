@@ -226,7 +226,12 @@ def main():
     app = FastAPI()
 
     # Mount webhook routes
-    webhook_app = create_webhook_app(storage)
+    webhook_app = create_webhook_app(
+        storage,
+        exchange_service=exchange_service,
+        categorizer=categorizer,
+        on_transaction=bot.notify_transaction,
+    )
     for route in webhook_app.routes:
         app.routes.append(route)
 

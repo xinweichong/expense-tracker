@@ -162,7 +162,10 @@ class TelegramBotService:
         tx_date   = str(tx.get("transaction_date", ""))[:10]
         tx_id     = tx.get("id", "?")
         raw_source = str(tx.get("source", "unknown"))
-        source_label = self._escape_md(SOURCE_LABELS.get(raw_source, raw_source))
+        if raw_source == "apple_wallet" and str(tx.get("description", "")).startswith("Apple Wallet"):
+            source_label = self._escape_md(str(tx.get("description", "Apple Wallet")))
+        else:
+            source_label = self._escape_md(SOURCE_LABELS.get(raw_source, raw_source))
 
         lines = [f"*{merchant}* · {cat_display}"]
         if currency != "SGD" and rate != 1.0:
@@ -785,10 +788,16 @@ class TelegramBotService:
 
     async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
         icon_map = self.storage.get_category_icon_map()
+        # For Apple Wallet, show the card name stored in description
+        if source == "apple_wallet":
+            _tx = self.storage.get_transaction(tx_id)
+            _desc = (_tx.get("description") or "") if _tx else ""
+            source_label = _desc if _desc.startswith("Apple Wallet") else SOURCE_LABELS.get(source, source)
+        else:
+            source_label = SOURCE_LABELS.get(source, source)
         if category and category != "Other":
             icon = icon_map.get(category, "")
             cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
-            source_label = SOURCE_LABELS.get(source, source)
             text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{cat_display} · {self._escape_md(source_label)}"
             await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
         else:
@@ -806,7 +815,6 @@ class TelegramBotService:
             if row:
                 buttons.append(row)
             keyboard = InlineKeyboardMarkup(buttons)
-            source_label = SOURCE_LABELS.get(source, source)
             text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{self._escape_md(source_label)} · Pick a category:"
             await self.app.bot.send_message(
                 chat_id=self.chat_id,
