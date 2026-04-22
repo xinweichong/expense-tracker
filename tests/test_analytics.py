@@ -242,6 +242,10 @@ class TestSummaryReport:
         assert result["transaction_count"] == 4
         assert "top_category" in result
         assert "biggest_transaction" in result
+        # Verify all required keys are present
+        for key in ["type", "start_date", "end_date", "previous_total", "change", "change_percent", "new_merchant_count", "generated_at"]:
+            assert key in result, f"Missing key: {key}"
+        assert result["type"] == "monthly"
 
     def test_summary_cached_to_file(self, db_with_transactions, tmp_path):
         generate_summary(

@@ -337,7 +337,20 @@ def generate_summary(
     change = total_spent - prev_total
     change_pct = (change / prev_total * 100) if prev_total > 0 else (None if total_spent > 0 else 0)
 
-    new_merchants = check_new_merchants(conn)
+    new_merchant_count_row = conn.execute(
+        """
+        WITH first_seen AS (
+            SELECT merchant, MIN(transaction_date) as first_date
+            FROM transactions
+            WHERE type = 'expense' AND merchant IS NOT NULL
+            GROUP BY merchant
+        )
+        SELECT COUNT(DISTINCT f.merchant) as cnt
+        FROM first_seen f
+        WHERE f.first_date >= ? AND f.first_date <= ?
+        """,
+        [start, end],
+    ).fetchone()
 
     report = {
         "type": report_type,
@@ -350,7 +363,7 @@ def generate_summary(
         "previous_total": round(prev_total, 2),
         "change": round(change, 2),
         "change_percent": round(change_pct, 1) if change_pct is not None else None,
-        "new_merchant_count": len(new_merchants),
+        "new_merchant_count": new_merchant_count_row["cnt"],
         "generated_at": datetime.now().isoformat(),
     }
 
