@@ -1,4 +1,5 @@
 import asyncio
+import calendar
 import logging
 import re
 from datetime import datetime, timedelta
@@ -19,6 +20,21 @@ from src.exchange import ExchangeRateService
 from src.storage import Storage
 
 logger = logging.getLogger(__name__)
+
+
+def estimate_next_date(frequency: str, last_seen: str) -> str:
+    """Estimate next occurrence date based on frequency."""
+    last = datetime.strptime(last_seen[:10], "%Y-%m-%d")
+    if frequency == "weekly":
+        next_d = last + timedelta(weeks=1)
+    elif frequency == "biweekly":
+        next_d = last + timedelta(weeks=2)
+    else:  # monthly
+        if last.month == 12:
+            next_d = last.replace(year=last.year + 1, month=1)
+        else:
+            next_d = last.replace(month=last.month + 1)
+    return next_d.strftime("%d %b")
 
 
 class TelegramBotService:
@@ -420,12 +436,23 @@ class TelegramBotService:
             await update.message.reply_text("No transactions this month")
             return
 
-        net_sign = "+" if balance["net"] >= 0 else ""
+        month_str = today.strftime("%B %Y")
+        days_in_month = calendar.monthrange(today.year, today.month)[1]
+        days_remaining = days_in_month - today.day
+
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("📊 Insights", callback_data="cmd_insights"),
+            InlineKeyboardButton("🏠 Menu", callback_data="cmd_menu"),
+        ]])
+
         await update.message.reply_text(
-            f"This month:\n"
-            f"Earned ${balance['income']:.2f}\n"
-            f"Spent ${balance['expenses']:.2f}\n"
-            f"Net: {net_sign}${balance['net']:.2f}"
+            f"*Balance for {month_str}*\n\n"
+            f"💸 Income: *${balance['income']:.2f}*\n"
+            f"💵 Expenses: *${balance['expenses']:.2f}*\n"
+            f"💳 Net: *${balance['net']:.2f}*\n\n"
+            f"_{days_remaining} days remaining this month_",
+            parse_mode="Markdown",
+            reply_markup=keyboard,
         )
 
     async def _insights(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -433,20 +460,27 @@ class TelegramBotService:
         start = f"{today.year}-{today.month:02d}-01"
         end = today.strftime("%Y-%m-%d")
 
+        summary = self.storage.get_spending_summary(start, end)
         ranking = self.storage.get_merchant_ranking(start, end, limit=5)
         avg = self.storage.get_average_daily(start, end)
 
-        lines = [f"*Spending Insights ({start} to {end})*", ""]
-        lines.append(f"Average daily spend: ${avg:.2f}")
+        lines = ["*Insights This Month*", ""]
+        for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
+            lines.append(f"  {cat}: *${total:.2f}*")
+        lines.append("")
+        lines.append(f"*Daily average:* ${avg:.2f}")
         lines.append("")
         if ranking:
-            lines.append("*Top Merchants:*")
-            for i, r in enumerate(ranking, 1):
-                lines.append(f"  {i}. {r['merchant']} — ${r['total']:.2f} ({r['visits']} visit{'s' if r['visits'] != 1 else ''})")
-        else:
-            lines.append("No transactions yet this month")
+            lines.append("*Top Merchants*")
+            for i, r in enumerate(ranking[:3], 1):
+                lines.append(f"  {i}. {r['merchant']} — ${r['total']:.2f}")
 
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("📊 Compare", callback_data="cmd_compare"),
+            InlineKeyboardButton("🏠 Menu", callback_data="cmd_menu"),
+        ]])
+
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
 
     async def _subscriptions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         rows = self.storage.conn.execute(
@@ -456,24 +490,26 @@ class TelegramBotService:
             await update.message.reply_text("No recurring transactions detected yet.")
             return
 
-        monthly_total = 0.0
         lines = ["*Recurring Transactions*"]
         for r in rows:
             freq = r["frequency"]
             amount = r["avg_amount"]
             merchant = r["merchant"]
-            category = r["category"]
+            last_seen = r["last_seen"]
             if freq == "monthly":
-                monthly_total += amount
-                freq_label = "/mo"
+                monthly_eq = amount
             elif freq == "weekly":
-                monthly_total += amount * 4.33
-                freq_label = "/wk"
+                monthly_eq = amount * 4.33
+            elif freq == "biweekly":
+                monthly_eq = amount * 2.17
             else:
-                freq_label = f"/{freq}"
-            cat_label = f" ({category})" if category else ""
-            lines.append(f"{merchant} — ${amount:.2f}{freq_label}{cat_label}")
-        lines.insert(1, f"Monthly total: ~${monthly_total:.2f}")
+                monthly_eq = amount
+            next_date = estimate_next_date(freq, last_seen)
+            lines.append(
+                f"🔄 *{merchant}*\n"
+                f"  ${amount:.2f} · {freq}\n"
+                f"  Next: {next_date} · ~${monthly_eq:.2f}/mo"
+            )
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _compare(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
