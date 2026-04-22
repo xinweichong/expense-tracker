@@ -40,7 +40,10 @@ class ExchangeRateService:
             resp.raise_for_status()
             data = resp.json()
             rates = data.get("rates", {})
-            self._rates = rates
+            # API returns rates with SGD as base (e.g. rates["GBP"] = 0.58 means
+            # 1 SGD buys 0.58 GBP). We need "SGD per 1 unit of foreign currency"
+            # (i.e. the inverse) so that amount * exchange_rate gives SGD value.
+            self._rates = {k: (1.0 / v if v else 1.0) for k, v in rates.items()}
             self._rates_fetched_at = datetime.now()
             logger.info("Fetched exchange rates: %d currencies", len(rates))
             return rates

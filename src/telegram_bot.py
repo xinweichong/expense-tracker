@@ -162,7 +162,10 @@ class TelegramBotService:
         tx_date   = str(tx.get("transaction_date", ""))[:10]
         tx_id     = tx.get("id", "?")
         raw_source = str(tx.get("source", "unknown"))
-        source_label = self._escape_md(SOURCE_LABELS.get(raw_source, raw_source))
+        if raw_source == "apple_wallet" and str(tx.get("description", "")).startswith("Apple Wallet"):
+            source_label = self._escape_md(str(tx.get("description", "Apple Wallet")))
+        else:
+            source_label = self._escape_md(SOURCE_LABELS.get(raw_source, raw_source))
 
         lines = [f"*{merchant}* · {cat_display}"]
         if currency != "SGD" and rate != 1.0:
@@ -770,7 +773,7 @@ class TelegramBotService:
             self._loop,
         )
 
-    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
+    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
         """Send a transaction notification. Called from the Gmail poller thread."""
         if not self.chat_id:
             logger.debug("Cannot notify: no chat_id (send /start to the bot)")
@@ -779,17 +782,22 @@ class TelegramBotService:
             logger.debug("Cannot notify: bot not started yet")
             return
         asyncio.run_coroutine_threadsafe(
-            self._async_notify(tx_id, amount, merchant, category, source),
+            self._async_notify(tx_id, amount, merchant, category, match_source, source),
             self._loop,
         )
 
-    async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
+    async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
         icon_map = self.storage.get_category_icon_map()
-        if category and category != "Other":
-            icon = icon_map.get(category, "")
-            cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
+        # For Apple Wallet, show the card name stored in description
+        if source == "apple_wallet":
+            _tx = self.storage.get_transaction(tx_id)
+            _desc = (_tx.get("description") or "") if _tx else ""
+            source_label = _desc if _desc.startswith("Apple Wallet") else SOURCE_LABELS.get(source, source)
+        else:
             source_label = SOURCE_LABELS.get(source, source)
-            text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{cat_display} · {self._escape_md(source_label)}"
+        if category and match_source != "default":
+            tx = self.storage.get_transaction(tx_id)
+            text = self._format_tx_block(tx, icon_map)
             await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
         else:
             categories = self.storage.get_categories()
@@ -806,7 +814,6 @@ class TelegramBotService:
             if row:
                 buttons.append(row)
             keyboard = InlineKeyboardMarkup(buttons)
-            source_label = SOURCE_LABELS.get(source, source)
             text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{self._escape_md(source_label)} · Pick a category:"
             await self.app.bot.send_message(
                 chat_id=self.chat_id,
@@ -836,7 +843,12 @@ class TelegramBotService:
             if self.categorizer:
                 self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
 
-        await query.edit_message_text(f"{merchant} → {category}")
+        icon_map = self.storage.get_category_icon_map()
+        updated_tx = self.storage.get_transaction(tx_id)
+        await query.edit_message_text(
+            self._format_tx_block(updated_tx, icon_map),
+            parse_mode="Markdown",
+        )
 
     async def _recat_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -860,8 +872,11 @@ class TelegramBotService:
             if self.categorizer:
                 self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
 
+        icon_map = self.storage.get_category_icon_map()
+        updated_tx = self.storage.get_transaction(tx_id)
         await query.edit_message_text(
-            f"#{tx_id} {merchant}: {old_category} → {category}"
+            self._format_tx_block(updated_tx, icon_map),
+            parse_mode="Markdown",
         )
 
     async def _cmd_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

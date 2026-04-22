@@ -160,6 +160,22 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         storage.delete_transaction(tx_id)
         return {"status": "ok"}
 
+    @app.get("/api/apple-wallet/cards")
+    async def apple_wallet_cards(_auth=Depends(require_auth)):
+        """Return distinct card names known from Apple Wallet transactions.
+
+        Only returns descriptions that have a real card name — i.e. the format
+        'Apple Wallet - <something>' where <something> is non-empty.  Used to
+        populate the description dropdown in the transaction edit form.
+        """
+        rows = storage.conn.execute(
+            "SELECT DISTINCT description FROM transactions "
+            "WHERE source = 'apple_wallet' "
+            "AND description LIKE 'Apple Wallet - _%' "
+            "ORDER BY description"
+        ).fetchall()
+        return [r["description"] for r in rows]
+
     @app.get("/api/categories")
     async def categories(_auth=Depends(require_auth)):
         return storage.get_categories()

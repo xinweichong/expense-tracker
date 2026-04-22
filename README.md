@@ -235,44 +235,24 @@ This sets up an iOS Automation that **automatically fires** whenever an Apple Wa
 **Action 5 — Set Merchant variable:**
 - **"Set Variable"**: name `Merchant`, value = **Updated Text** from Action 4
 
-### Part C: Amount (7 actions)
+### Part C: Send to Server (2 actions)
 
-The amount from Apple Wallet is text, not a number. It needs parsing and negation.
-
-**Action 6 — Strip non-numeric:**
-- **"Replace Text"**: regex `[^\d\.]` → empty, in **Shortcut Input → Amount**
-- Enable **"Regular Expression"**
-
-**Action 7 — Set Amount variable:**
-- **"Set Variable"**: name `Amount`, value = **Updated Text**
-
-**Action 8 — Check for negative sign:**
-- **"Match Text"**: search for `-` in **Amount** variable
-
-**Action 9 — If NOT negative, negate:**
-- **"If"**: **Matches** **"does not have any value"**
-
-**Action 10 — Prepend negative (inside If):**
-- **"Combine Text"**: `-` + **Amount** variable, separator empty
-
-**Action 11 — Update Amount (inside If):**
-- **"Set Variable"**: name `Amount`, value = **Combined Text**
-
-### Part D: Send to Server (2 actions)
-
-**Action 12 — Build JSON:**
+**Action 6 — Build JSON:**
 - **"Text"** action with:
 ```json
 {"card":"Card","date":"Formatted Date","merchant":"Merchant","amount":"Amount"}
 ```
-(Replace placeholders with magic variables by tapping in the text field)
+- Replace `Card`, `Formatted Date`, and `Merchant` with the magic variables from Actions 3, 1, and 5
+- Replace `Amount` with the **raw** magic variable **Shortcut Input → Amount** (not a Set Variable — tap the Amount placeholder and select the original Shortcut Input directly)
 
-**Action 13 — POST to server:**
+The server handles all currency parsing automatically — iOS sends the raw amount string (e.g. `"PLN 3.78"`, `"£12.50"`, `"S$9.90"`, or a bare `"12.50"` for SGD).
+
+**Action 7 — POST to server:**
 - **"Get Contents of URL"**
 - URL: `https://YOUR-SERVER/webhook/apple-wallet`
 - Method: **POST**
 - Headers: `Content-Type: application/json`
-- Request Body: **File** → the Text variable from Action 12
+- Request Body: **File** → the Text variable from Action 6
 
 ### Testing
 

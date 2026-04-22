@@ -129,6 +129,10 @@ export const api = {
       method: 'DELETE',
     }),
 
+  // Apple Wallet
+  getAppleWalletCards: () =>
+    request<string[]>('/api/apple-wallet/cards'),
+
   // Analytics endpoints
   getAnalyticsComparison: (period: string, date?: string) => {
     const params = new URLSearchParams({ period });
