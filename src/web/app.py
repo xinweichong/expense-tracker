@@ -140,7 +140,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
         body = await request.json()
-        allowed = {"merchant", "amount", "currency", "exchange_rate", "category", "description", "transaction_date", "type", "source"}
+        allowed = {"merchant", "amount", "currency", "exchange_rate", "category", "description", "transaction_date", "type"}
         fields = {k: v for k, v in body.items() if k in allowed}
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
