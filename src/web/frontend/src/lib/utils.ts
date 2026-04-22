@@ -14,7 +14,7 @@ export function formatCurrency(amount: number, currency = 'SGD'): string {
 }
 
 export function formatDate(date: string): string {
-  const [y, m, d] = date.split('-').map(Number);
+  const [y, m, d] = date.split('T')[0].split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-SG', {
     day: 'numeric',
     month: 'short',
@@ -23,7 +23,7 @@ export function formatDate(date: string): string {
 }
 
 export function formatShortDate(date: string): string {
-  const [y, m, d] = date.split('-').map(Number);
+  const [y, m, d] = date.split('T')[0].split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-SG', {
     day: 'numeric',
     month: 'short',
