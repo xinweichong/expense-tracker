@@ -11,7 +11,10 @@ from pathlib import Path
 # Add project root to sys.path so `src.*` imports work when run directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import atexit
+
 import uvicorn
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from src.analytics import generate_summary
 from src.config import load_config
@@ -43,6 +46,7 @@ SUMMARY_CACHE_DIR = os.environ.get(
     "SUMMARY_CACHE_DIR",
     os.path.join(os.path.dirname(__file__), "..", "data", "summaries")
 )
+os.makedirs(SUMMARY_CACHE_DIR, exist_ok=True)
 
 
 def init_db(db_path: str) -> sqlite3.Connection:
@@ -262,11 +266,11 @@ def main():
             except Exception as e:
                 logger.error(f"Failed to generate/send {report_type} summary: {e}")
 
-        from apscheduler.schedulers.background import BackgroundScheduler
         scheduler = BackgroundScheduler()
         scheduler.add_job(lambda: _format_and_send_summary("weekly"), 'cron', day_of_week='sun', hour=9)
         scheduler.add_job(lambda: _format_and_send_summary("monthly"), 'cron', day=1, hour=9)
         scheduler.start()
+        atexit.register(lambda: scheduler.shutdown(wait=False))
         logger.info("APScheduler started for weekly/monthly summaries")
 
     # Start web server (blocking)
