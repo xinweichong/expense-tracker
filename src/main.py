@@ -130,6 +130,7 @@ def _run_bot(bot: TelegramBotService) -> None:
     try:
         loop.run_until_complete(bot.app.initialize())
         loop.run_until_complete(bot.app.start())
+        loop.run_until_complete(bot.app.post_init(bot.app))  # triggers set_my_commands + menu button
         loop.run_until_complete(bot.app.updater.start_polling())
         loop.run_forever()
     except Exception as e:
