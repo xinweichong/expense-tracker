@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
-import { useSummary, useTrend, useBalance } from '@/hooks/useCategories';
+import { useSummary, useTrend, useBalance, useCategories } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
 import type { Transaction } from '@/api/client';
 import { formatCurrency, formatDate, getCategoryColor, cn } from '@/lib/utils';
@@ -61,6 +61,12 @@ export function OverviewPage() {
   const { data: trend } = useTrend(start, end);
   const { data: balance } = useBalance(start, end);
   const { data: recentTransactions } = useTransactions({ start_date: start, end_date: end, limit: 50 });
+  const { data: categoryList } = useCategories();
+
+  const iconMap = useMemo(
+    () => Object.fromEntries((categoryList ?? []).map(c => [c.name, c.icon ?? ''])),
+    [categoryList]
+  );
 
   // API returns { by_category: { "Food": 50, ... } } — transform to array
   const categories = useMemo(() => {
@@ -180,32 +186,44 @@ export function OverviewPage() {
           {!recentTransactions || recentTransactions.length === 0 ? (
             <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
           ) : (
-            <ul className="divide-y divide-border">
-              {recentTransactions.map((tx: Transaction) => (
-                <li key={tx.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <span
-                    className="inline-block w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: getCategoryColor(tx.category ?? 'Other') }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {tx.merchant || tx.description || 'Transaction'}
-                    </p>
-                    <p className="text-xs text-muted">
-                      {tx.category ?? 'Uncategorized'} &middot; {formatDate(tx.transaction_date)}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      'text-sm font-semibold whitespace-nowrap',
-                      tx.type === 'income' ? 'text-success' : 'text-foreground',
-                    )}
+            <ul className="flex flex-col gap-1">
+              {recentTransactions.map((tx: Transaction) => {
+                const catColor = getCategoryColor(tx.category ?? 'Other');
+                const catIcon = tx.category
+                  ? (iconMap[tx.category] ?? tx.category[0] ?? '•')
+                  : '•';
+                return (
+                  <li
+                    key={tx.id}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                    style={{ backgroundColor: `${catColor}0D` }}
                   >
-                    {tx.type === 'income' ? '+' : '-'}
-                    {formatCurrency(tx.amount)}
-                  </span>
-                </li>
-              ))}
+                    <div
+                      className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-base"
+                      style={{ backgroundColor: `${catColor}33` }}
+                    >
+                      {catIcon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {tx.merchant || tx.description || 'Transaction'}
+                      </p>
+                      <p className="text-xs text-muted">
+                        {tx.category ?? 'Uncategorized'} &middot; {formatDate(tx.transaction_date)}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        'text-sm font-semibold whitespace-nowrap',
+                        tx.type === 'income' ? 'text-success' : 'text-foreground',
+                      )}
+                    >
+                      {tx.type === 'income' ? '+' : '-'}
+                      {formatCurrency(tx.amount)}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </CardContent>

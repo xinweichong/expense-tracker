@@ -22,8 +22,8 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
         <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#FF6B6B" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#FF6B6B" stopOpacity={0} />
+              <stop offset="5%" stopColor="#00D4AA" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#00D4AA" stopOpacity={0} />
             </linearGradient>
           </defs>
           <XAxis
@@ -54,7 +54,7 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
           <Area
             type="monotone"
             dataKey="amount"
-            stroke="#FF6B6B"
+            stroke="#00D4AA"
             strokeWidth={2}
             fill={`url(#${gradientId})`}
           />

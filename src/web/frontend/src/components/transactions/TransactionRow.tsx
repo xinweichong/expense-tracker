@@ -15,8 +15,18 @@ import {
 } from '@/components/ui/select';
 import { Pencil, Trash2, Check, X as XIcon } from 'lucide-react';
 
+const SOURCE_LABELS: Record<string, string> = {
+  dbs_paylah:   'DBS PayLah!',
+  uob_paynow:   'UOB PayNow',
+  uob_card:     'UOB Card',
+  apple_wallet: 'Apple Wallet',
+  manual:       'Manual',
+  cash:         'Cash',
+};
+
 export function TransactionRow({ tx }: { tx: Transaction }) {
   const [editing, setEditing] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const [merchant, setMerchant] = useState(tx.merchant ?? '');
   const [category, setCategory] = useState(tx.category ?? '');
   useEffect(() => {
@@ -35,15 +45,6 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
   const categoryColor = getCategoryColor(tx.category ?? '');
   const categoryIcon = tx.category ? (iconMap[tx.category] ?? tx.category[0] ?? '•') : '•';
 
-  const SOURCE_LABELS: Record<string, string> = {
-    dbs_paylah:   'DBS PayLah!',
-    uob_paynow:   'UOB PayNow',
-    uob_card:     'UOB Card',
-    apple_wallet: 'Apple Wallet',
-    manual:       'Manual',
-    cash:         'Cash',
-  };
-
   const handleSave = () => {
     updateTx.mutate(
       { id: tx.id, data: { merchant, category } },
@@ -59,7 +60,10 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
 
   if (editing) {
     return (
-      <div className="px-4 py-3 space-y-2 border-b border-border bg-card/50">
+      <div
+        className="px-4 py-3 space-y-2 border-b border-border"
+        style={{ backgroundColor: `${categoryColor}1A` }}
+      >
         <div className="flex gap-2">
           <Input
             value={merchant}
@@ -91,10 +95,15 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
   }
 
   return (
-    <div className="group px-4 py-3 flex items-center gap-3 border-b border-border hover:bg-card/50 transition-colors last:border-b-0">
+    <div
+      className="group px-4 py-3 flex items-center gap-3 border-b border-border transition-colors last:border-b-0"
+      style={{ backgroundColor: `${categoryColor}${hovered ? '1A' : '0D'}` }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div
         className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-base"
-        style={{ backgroundColor: `${categoryColor}26` }}
+        style={{ backgroundColor: `${categoryColor}33` }}
       >
         {categoryIcon}
       </div>
@@ -126,7 +135,7 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(true)}>
           <Pencil className="w-3.5 h-3.5" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-accent" onClick={handleDelete}>
+        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={handleDelete}>
           <Trash2 className="w-3.5 h-3.5" />
         </Button>
       </div>
