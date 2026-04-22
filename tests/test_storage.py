@@ -622,3 +622,34 @@ class TestTrendByCategory:
         assert len(result) == 1
         assert "Income" not in result[0]
         assert result[0]["Food"] == pytest.approx(15.0)
+
+    def test_trend_by_category_gap_fills_missing_categories(self, storage):
+        """Every date must have an explicit None for categories absent that day.
+        Without gap-filling, Recharts connectNulls cannot connect lines across
+        dates where a category key is simply missing from the data object."""
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=20.0,
+            merchant="A", category="Food", transaction_date="2026-04-01T09:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=12.0,
+            merchant="B", category="Transport", transaction_date="2026-04-02T09:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m3", amount=35.0,
+            merchant="C", category="Food", transaction_date="2026-04-03T09:00:00",
+        )
+        result = storage.get_trend_by_category("2026-04-01", "2026-04-30")
+        by_date = {r["date"]: r for r in result}
+
+        # Apr 1: Food present, Transport absent → must be None
+        assert by_date["2026-04-01"]["Food"] == pytest.approx(20.0)
+        assert by_date["2026-04-01"]["Transport"] is None
+
+        # Apr 2: Transport present, Food absent → must be None
+        assert by_date["2026-04-02"]["Transport"] == pytest.approx(12.0)
+        assert by_date["2026-04-02"]["Food"] is None
+
+        # Apr 3: Food present, Transport absent → must be None
+        assert by_date["2026-04-03"]["Food"] == pytest.approx(35.0)
+        assert by_date["2026-04-03"]["Transport"] is None

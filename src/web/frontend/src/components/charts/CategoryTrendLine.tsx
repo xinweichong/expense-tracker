@@ -53,7 +53,8 @@ export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
               dataKey={cat}
               stroke={getCategoryColor(cat)}
               strokeWidth={2}
-              dot={false}
+              dot={{ r: 2, fill: getCategoryColor(cat) }}
+              activeDot={{ r: 4 }}
               connectNulls
             />
           ))}
