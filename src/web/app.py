@@ -54,15 +54,18 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         end_date: Optional[str] = None,
         category: Optional[str] = None,
         merchant_search: Optional[str] = None,
+        merchant: Optional[str] = None,  # alias used by frontend
         limit: int = 50,
+        offset: int = 0,
         _auth=Depends(require_auth),
     ):
         return storage.query_transactions(
             start_date=start_date,
             end_date=end_date,
             category=category,
-            merchant_search=merchant_search,
+            merchant_search=merchant_search or merchant,
             limit=limit,
+            offset=offset,
         )
 
     @app.get("/api/transactions/{tx_id}")
