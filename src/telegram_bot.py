@@ -618,6 +618,19 @@ class TelegramBotService:
             "Type /help for a full list."
         )
 
+    def notify_text(self, text: str) -> None:
+        """Send a plain text message. Called from background threads (e.g., APScheduler)."""
+        if not self.chat_id:
+            logger.debug("Cannot send text: no chat_id (send /start to the bot)")
+            return
+        if not self._loop or not self.app:
+            logger.debug("Cannot send text: bot not started yet")
+            return
+        asyncio.run_coroutine_threadsafe(
+            self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown"),
+            self._loop,
+        )
+
     def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
         """Send a transaction notification. Called from the Gmail poller thread."""
         if not self.chat_id:

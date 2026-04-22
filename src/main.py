@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import uvicorn
 
+from src.analytics import generate_summary
 from src.config import load_config
 from src.storage import Storage
 from src.categorizer import Categorizer
@@ -38,6 +39,10 @@ logger = logging.getLogger(__name__)
 _db_env = os.environ.get("EXPENSE_DB_PATH", "")
 DB_PATH = _db_env if _db_env else ("/data/expense_tracker.db" if os.path.isdir("/data") else "expense_tracker.db")
 CONFIG_PATH = os.environ.get("EXPENSE_CONFIG_PATH", "config.yaml")
+SUMMARY_CACHE_DIR = os.environ.get(
+    "SUMMARY_CACHE_DIR",
+    os.path.join(os.path.dirname(__file__), "..", "data", "summaries")
+)
 
 
 def init_db(db_path: str) -> sqlite3.Connection:
@@ -233,6 +238,36 @@ def main():
         logger.info("Telegram bot started")
     else:
         logger.warning("No Telegram bot token — skipping bot")
+
+    # Scheduled summary reports
+    if bot_token:
+        def _format_and_send_summary(report_type: str) -> None:
+            try:
+                report = generate_summary(conn, report_type=report_type, cache_dir=SUMMARY_CACHE_DIR)
+                arrow = "\u2191" if report["change"] > 0 else "\u2193"
+                lines = [
+                    f"*{'Weekly' if report_type == 'weekly' else 'Monthly'} Summary*\n",
+                    f"*Total spent:* ${report['total_spent']:.2f} ({report['transaction_count']} transactions)",
+                ]
+                if report["top_category"]:
+                    lines.append(f"*Top category:* {report['top_category']['category']} (${report['top_category']['total']:.2f})")
+                if report["biggest_transaction"]:
+                    bt = report["biggest_transaction"]
+                    lines.append(f"*Biggest:* {bt['merchant']} \u2014 ${bt['amount']:.2f}")
+                if report["previous_total"] > 0 and report["change_percent"] is not None:
+                    lines.append(f"*vs last period:* {arrow} ${abs(report['change']):.2f} ({report['change_percent']:+.1f}%)")
+                if report["new_merchant_count"] > 0:
+                    lines.append(f"*New merchants:* {report['new_merchant_count']}")
+                bot.notify_text("\n".join(lines))
+            except Exception as e:
+                logger.error(f"Failed to generate/send {report_type} summary: {e}")
+
+        from apscheduler.schedulers.background import BackgroundScheduler
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(lambda: _format_and_send_summary("weekly"), 'cron', day_of_week='sun', hour=9)
+        scheduler.add_job(lambda: _format_and_send_summary("monthly"), 'cron', day=1, hour=9)
+        scheduler.start()
+        logger.info("APScheduler started for weekly/monthly summaries")
 
     # Start web server (blocking)
     logger.info(f"Starting web server on {host}:{port}")
