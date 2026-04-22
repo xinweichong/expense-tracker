@@ -645,36 +645,32 @@ class TelegramBotService:
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        help_text = """*Expense Tracker — Quick Commands*
-
-*Quick View:*
-/today — Today's spending
-/week — Weekly summary with trends
-/month — Monthly breakdown
-/balance — Income vs expenses
-/dashboard — Open web dashboard
-
-*Quick Entry:*
-/add <amount> <merchant> [category] [date]
-/cash <amount> <merchant> [category]
-/income <amount> <description> [date]
-  Multi-currency: /add 500 THB street food
-
-*Quick Edit:*
-/recategorize <id> <category>
-
-*Insights:*
-/insights — Spending patterns
-/subscriptions — Recurring transactions
-
-*Analytics:*
-/compare — This month vs last month
-/merchants_report — Top merchants this month
-/velocity — Spending pace and projection
-/summary — Monthly summary report
-
-*Full dashboard:* Open the web app for charts, categories, insights, and more."""
-        await update.message.reply_text(help_text, parse_mode="Markdown")
+        lines = [
+            "*Expense Tracker Commands*\n",
+            "📋 *Viewing*",
+            "  /today — Today's spending",
+            "  /week — This week's spending",
+            "  /month — This month's spending",
+            "  /balance — Income vs expenses",
+            "  /insights — Category breakdown + top merchants",
+            "  /subscriptions — Recurring transactions",
+            "",
+            "📊 *Analytics*",
+            "  /compare — This month vs last month",
+            "  /merchants_report — Top merchants by spend",
+            "  /velocity — Spending pace analysis",
+            "  /summary — Monthly summary report",
+            "",
+            "➕ *Adding*",
+            "  /add <amount> <merchant> — Add expense",
+            "  /cash <amount> <merchant> — Add cash expense",
+            "  /income <amount> <description> — Add income",
+            "",
+            "⚙ *Management*",
+            "  /recategorize — Change transaction category",
+            "  /menu — Quick action buttons",
+        ]
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _dashboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if self.dashboard_url:

@@ -428,3 +428,27 @@ class TestDailyDigest:
         bot_service.notify_daily_digest()
         bot_service._loop.assert_not_called()
 
+
+class TestHelp:
+    @pytest.mark.asyncio
+    async def test_help_contains_all_commands(self, bot_service):
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+
+        await bot_service._help(update, context)
+
+        update.message.reply_text.assert_called_once()
+        text = update.message.reply_text.call_args[0][0]
+        for expected in [
+            "Expense Tracker Commands",
+            "/today",
+            "/balance",
+            "/insights",
+            "/compare",
+            "/add",
+            "/recategorize",
+            "/menu",
+        ]:
+            assert expected in text, f"Expected '{expected}' in help text"
+
