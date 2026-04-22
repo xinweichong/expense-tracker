@@ -29,10 +29,12 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
   const [hovered, setHovered] = useState(false);
   const [merchant, setMerchant] = useState(tx.merchant ?? '');
   const [category, setCategory] = useState(tx.category ?? '');
+  const [source, setSource] = useState(tx.source ?? 'manual');
   useEffect(() => {
     setMerchant(tx.merchant ?? '');
     setCategory(tx.category ?? '');
-  }, [tx.id, tx.merchant, tx.category]);
+    setSource(tx.source ?? 'manual');
+  }, [tx.id, tx.merchant, tx.category, tx.source]);
 
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
@@ -47,7 +49,7 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
 
   const handleSave = () => {
     updateTx.mutate(
-      { id: tx.id, data: { merchant, category } },
+      { id: tx.id, data: { merchant, category, source } },
       { onSuccess: () => setEditing(false) }
     );
   };
@@ -69,15 +71,27 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
             value={merchant}
             onChange={(e) => setMerchant(e.target.value)}
             placeholder="Merchant"
-            className="bg-background border-border text-sm"
+            className="flex-1 bg-background border-border text-sm"
           />
+        </div>
+        <div className="flex gap-2">
           <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-40 bg-background border-border text-sm">
-              <SelectValue />
+            <SelectTrigger className="flex-1 bg-background border-border text-sm">
+              <SelectValue placeholder="Category" />
             </SelectTrigger>
             <SelectContent>
               {categories?.map((cat) => (
                 <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={source} onValueChange={setSource}>
+            <SelectTrigger className="flex-1 bg-background border-border text-sm">
+              <SelectValue placeholder="Card / Source" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(SOURCE_LABELS).map(([val, label]) => (
+                <SelectItem key={val} value={val}>{label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
