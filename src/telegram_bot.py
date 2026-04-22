@@ -773,7 +773,7 @@ class TelegramBotService:
             self._loop,
         )
 
-    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
+    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
         """Send a transaction notification. Called from the Gmail poller thread."""
         if not self.chat_id:
             logger.debug("Cannot notify: no chat_id (send /start to the bot)")
@@ -782,11 +782,11 @@ class TelegramBotService:
             logger.debug("Cannot notify: bot not started yet")
             return
         asyncio.run_coroutine_threadsafe(
-            self._async_notify(tx_id, amount, merchant, category, source),
+            self._async_notify(tx_id, amount, merchant, category, match_source, source),
             self._loop,
         )
 
-    async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], source: str) -> None:
+    async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
         icon_map = self.storage.get_category_icon_map()
         # For Apple Wallet, show the card name stored in description
         if source == "apple_wallet":
@@ -795,10 +795,9 @@ class TelegramBotService:
             source_label = _desc if _desc.startswith("Apple Wallet") else SOURCE_LABELS.get(source, source)
         else:
             source_label = SOURCE_LABELS.get(source, source)
-        if category and category != "Other":
-            icon = icon_map.get(category, "")
-            cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
-            text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{cat_display} · {self._escape_md(source_label)}"
+        if category and match_source != "default":
+            tx = self.storage.get_transaction(tx_id)
+            text = self._format_tx_block(tx, icon_map)
             await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
         else:
             categories = self.storage.get_categories()
@@ -844,7 +843,12 @@ class TelegramBotService:
             if self.categorizer:
                 self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
 
-        await query.edit_message_text(f"{merchant} → {category}")
+        icon_map = self.storage.get_category_icon_map()
+        updated_tx = self.storage.get_transaction(tx_id)
+        await query.edit_message_text(
+            self._format_tx_block(updated_tx, icon_map),
+            parse_mode="Markdown",
+        )
 
     async def _recat_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -868,8 +872,11 @@ class TelegramBotService:
             if self.categorizer:
                 self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
 
+        icon_map = self.storage.get_category_icon_map()
+        updated_tx = self.storage.get_transaction(tx_id)
         await query.edit_message_text(
-            f"#{tx_id} {merchant}: {old_category} → {category}"
+            self._format_tx_block(updated_tx, icon_map),
+            parse_mode="Markdown",
         )
 
     async def _cmd_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

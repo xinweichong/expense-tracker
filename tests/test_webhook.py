@@ -106,7 +106,7 @@ class TestAppleWalletWebhook:
             })
         assert response.status_code == 200
         tx_id = response.json()["transaction_id"]
-        callback.assert_called_once_with(tx_id, pytest.approx(12.50), "Toast Box", None, "apple_wallet")
+        callback.assert_called_once_with(tx_id, pytest.approx(12.50), "Toast Box", None, "default", "apple_wallet")
 
     @pytest.mark.asyncio
     async def test_card_name_stored_in_description(self, client, in_memory_db):
