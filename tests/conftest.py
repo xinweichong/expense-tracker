@@ -31,7 +31,8 @@ def in_memory_db():
     CREATE TABLE categories (
         name TEXT PRIMARY KEY,
         keywords TEXT,
-        icon TEXT
+        icon TEXT,
+        color TEXT
     );
 
     CREATE TABLE ingestion_state (

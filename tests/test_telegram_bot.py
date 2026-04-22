@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from src.telegram_bot import TelegramBotService, estimate_next_date, get_category_keyboard
 from src.storage import Storage
@@ -215,7 +216,11 @@ class TestCmdCallback:
         await bot_service._cmd_callback(update, context)
 
         query.answer.assert_called_once()
-        bot_service._week.assert_called_once_with(update, context)
+        bot_service._week.assert_called_once()
+        proxy_update, called_context = bot_service._week.call_args[0]
+        assert isinstance(proxy_update, SimpleNamespace)
+        assert hasattr(proxy_update, "message")
+        assert called_context is context
 
     @pytest.mark.asyncio
     async def test_cmd_callback_ignores_unknown(self, bot_service):
