@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { LoginScreen } from '@/components/auth/LoginScreen';
 import { AppShell } from '@/components/layout/AppShell';
@@ -7,6 +7,8 @@ import { OverviewPage } from '@/pages/OverviewPage';
 import { TransactionsPage } from '@/pages/TransactionsPage';
 import { AnalyticsPage } from '@/pages/AnalyticsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { api } from '@/api/client';
+import { setCategoryColors } from '@/lib/utils';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,6 +18,15 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function CategoryColorLoader() {
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.getCategories(),
+  });
+  if (categories) setCategoryColors(categories);
+  return null;
+}
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
@@ -31,14 +42,17 @@ function AppContent() {
   if (!isAuthenticated) return <LoginScreen />;
 
   return (
-    <Routes>
-      <Route element={<AppShell />}>
-        <Route index element={<OverviewPage />} />
-        <Route path="transactions" element={<TransactionsPage />} />
-        <Route path="analytics" element={<AnalyticsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-      </Route>
-    </Routes>
+    <>
+      <CategoryColorLoader />
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route index element={<OverviewPage />} />
+          <Route path="transactions" element={<TransactionsPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
+      </Routes>
+    </>
   );
 }
 

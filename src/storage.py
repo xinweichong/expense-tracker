@@ -115,9 +115,9 @@ class Storage:
     def load_categories(self, categories: list[dict]) -> None:
         for cat in categories:
             self.conn.execute(
-                """INSERT OR REPLACE INTO categories (name, keywords, icon)
-                   VALUES (?, ?, ?)""",
-                (cat["name"], cat["keywords"], cat["icon"]),
+                """INSERT OR REPLACE INTO categories (name, keywords, icon, color)
+                   VALUES (?, ?, ?, ?)""",
+                (cat["name"], cat["keywords"], cat["icon"], cat.get("color")),
             )
         self.conn.commit()
 
@@ -234,18 +234,40 @@ class Storage:
         ).fetchone()
         return row is not None
 
-    def add_category(self, name: str, keywords: str, icon: str = "📌") -> None:
+    def add_category(self, name: str, keywords: str, icon: str = "📌", color: Optional[str] = None) -> None:
         existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if existing:
             raise ValueError(f"category '{name}' already exists")
-        self.conn.execute("INSERT INTO categories (name, keywords, icon) VALUES (?, ?, ?)", (name, keywords, icon))
+        if color:
+            clash = self.conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
+            if clash:
+                raise ValueError(f"color '{color}' is already used by category '{clash['name']}'")
+        self.conn.execute("INSERT INTO categories (name, keywords, icon, color) VALUES (?, ?, ?, ?)", (name, keywords, icon, color))
         self.conn.commit()
 
-    def update_category(self, name: str, keywords: str) -> None:
+    def update_category(self, name: str, keywords: Optional[str] = None, icon: Optional[str] = None, color: Optional[str] = None) -> None:
         existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if not existing:
             raise ValueError(f"category '{name}' not found")
-        self.conn.execute("UPDATE categories SET keywords = ? WHERE name = ?", (keywords, name))
+        if color:
+            clash = self.conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
+            if clash:
+                raise ValueError(f"color '{color}' is already used by category '{clash['name']}'")
+        updates = []
+        params: list = []
+        if keywords is not None:
+            updates.append("keywords = ?")
+            params.append(keywords)
+        if icon is not None:
+            updates.append("icon = ?")
+            params.append(icon)
+        if color is not None:
+            updates.append("color = ?")
+            params.append(color)
+        if not updates:
+            return
+        params.append(name)
+        self.conn.execute(f"UPDATE categories SET {', '.join(updates)} WHERE name = ?", params)
         self.conn.commit()
 
     def delete_category(self, name: str) -> int:

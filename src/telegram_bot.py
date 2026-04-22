@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Optional
 
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonCommands, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from src.analytics import (
@@ -36,6 +36,18 @@ def get_category_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMa
     if row:
         buttons.append(row)
     return InlineKeyboardMarkup(buttons)
+
+
+class _ReplyProxy:
+    """Mimics a telegram.Message so handlers can call reply_text when the
+    original callback message is inaccessible."""
+
+    def __init__(self, bot, chat_id: int):
+        self.bot = bot
+        self.chat_id = chat_id
+
+    async def reply_text(self, text: str, **kwargs):
+        await self.bot.send_message(chat_id=self.chat_id, text=text, **kwargs)
 
 
 def estimate_next_date(frequency: str, last_seen: str) -> str:
@@ -149,8 +161,15 @@ class TelegramBotService:
 
     async def _send_long_message(self, update: Update, text: str, parse_mode: str = "Markdown", reply_markup=None) -> None:
         limit = 3800
+
+        async def _send(part: str, markup=None):
+            try:
+                await update.message.reply_text(part, parse_mode=parse_mode, reply_markup=markup)
+            except Exception:
+                await update.message.reply_text(part, reply_markup=markup)
+
         if len(text) <= limit:
-            await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+            await _send(text, reply_markup)
             return
         parts = []
         while text:
@@ -164,7 +183,7 @@ class TelegramBotService:
             text = text[split_at:].lstrip("\n")
         for i, part in enumerate(parts):
             markup = reply_markup if i == len(parts) - 1 else None
-            await update.message.reply_text(part, parse_mode=parse_mode, reply_markup=markup)
+            await _send(part, markup)
 
     def _build_summary_with_transactions(self, header: str, summary: dict, start_date: str, end_date: str) -> str:
         lines = [header, f"Total: ${summary['total']:.2f}", ""]
@@ -222,6 +241,7 @@ class TelegramBotService:
                 BotCommand("menu",             "Quick action buttons"),
                 BotCommand("help",             "Show all commands"),
             ])
+            await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
         self.app = Application.builder().token(self.bot_token).post_init(_post_init).build()
 
@@ -678,15 +698,19 @@ class TelegramBotService:
             "  /summary — Monthly summary report",
             "",
             "➕ *Adding*",
-            "  /add <amount> <merchant> — Add expense",
-            "  /cash <amount> <merchant> — Add cash expense",
-            "  /income <amount> <description> — Add income",
+            "  /add \\[amount] \\[merchant] — Add expense",
+            "  /cash \\[amount] \\[merchant] — Add cash expense",
+            "  /income \\[amount] \\[desc] — Add income",
             "",
             "⚙ *Management*",
             "  /recategorize — Change transaction category",
             "  /menu — Quick action buttons",
         ]
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        text = "\n".join(lines)
+        try:
+            await update.message.reply_text(text, parse_mode="Markdown")
+        except Exception:
+            await update.message.reply_text(text)
 
     async def _dashboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if self.dashboard_url:
@@ -825,7 +849,7 @@ class TelegramBotService:
         await query.answer()
         data = query.data
 
-        if not data.startswith("cmd_"):
+        if not data or not data.startswith("cmd_"):
             return
 
         handler_map = {
@@ -846,9 +870,27 @@ class TelegramBotService:
         }
 
         handler = handler_map.get(data)
-        if handler:
-            update.message = query.message
+        if not handler:
+            return
+
+        # Build a synthetic message so handlers can use update.message.reply_text
+        chat_id = query.message.chat_id if query.message else (self.chat_id or query.from_user.id)
+        try:
+            if query.message and hasattr(query.message, "reply_text"):
+                update.message = query.message
+            else:
+                # Message inaccessible — use a wrapper that sends via bot API
+                update.message = _ReplyProxy(context.bot, chat_id)
             await handler(update, context)
+        except Exception as e:
+            logger.error("Error handling callback %s: %s", data, e, exc_info=True)
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="Something went wrong processing that action. Try the command directly instead.",
+                )
+            except Exception:
+                pass
 
     async def _menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         keyboard = InlineKeyboardMarkup([

@@ -60,9 +60,14 @@ export function OverviewPage() {
   const { data: summary } = useSummary(start, end);
   const { data: trend } = useTrend(start, end);
   const { data: balance } = useBalance(start, end);
-  const { data: recentTransactions } = useTransactions({ limit: 5 });
+  const { data: recentTransactions } = useTransactions({ start_date: start, end_date: end, limit: 50 });
 
-  const categories = summary?.categories ?? [];
+  // API returns { by_category: { "Food": 50, ... } } — transform to array
+  const categories = useMemo(() => {
+    const byCat = summary?.by_category;
+    if (!byCat || typeof byCat !== 'object') return [];
+    return Object.entries(byCat).map(([category, total]) => ({ category, total: total as number }));
+  }, [summary]);
   const trendData = trend ?? [];
   const income = balance?.income ?? 0;
   const expenses = balance?.expenses ?? 0;
@@ -166,14 +171,14 @@ export function OverviewPage() {
         </Card>
       </div>
 
-      {/* Recent Transactions */}
+      {/* Transactions */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recent Transactions</CardTitle>
+          <CardTitle className="text-base">Transactions</CardTitle>
         </CardHeader>
         <CardContent>
           {!recentTransactions || recentTransactions.length === 0 ? (
-            <p className="text-muted text-sm py-4 text-center">No transactions yet</p>
+            <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
           ) : (
             <ul className="divide-y divide-border">
               {recentTransactions.map((tx: Transaction) => (
