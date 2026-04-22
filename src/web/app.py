@@ -1,25 +1,20 @@
 import logging
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from src.storage import Storage
 from src.web.auth import verify_password, create_session, verify_session
 
 logger = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).parent / "static"
-
 
 def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
-
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.post("/api/login")
     async def login(request: Request):
@@ -41,10 +36,6 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         session = request.cookies.get("session")
         if not session or not verify_session(session):
             raise HTTPException(status_code=401, detail="Not authenticated")
-
-    @app.get("/", response_class=HTMLResponse)
-    async def index():
-        return (STATIC_DIR / "index.html").read_text()
 
     @app.get("/api/summary")
     async def summary(
@@ -255,10 +246,6 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
         ).fetchall()
         return [dict(r) for r in rows]
-
-    @app.get("/settings", response_class=HTMLResponse)
-    async def settings_page():
-        return (STATIC_DIR / "settings.html").read_text()
 
     # Serve React SPA
     import os
