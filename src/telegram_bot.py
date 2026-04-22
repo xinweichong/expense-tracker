@@ -30,10 +30,10 @@ def estimate_next_date(frequency: str, last_seen: str) -> str:
     elif frequency == "biweekly":
         next_d = last + timedelta(weeks=2)
     else:  # monthly
-        if last.month == 12:
-            next_d = last.replace(year=last.year + 1, month=1)
-        else:
-            next_d = last.replace(month=last.month + 1)
+        next_month = last.month + 1 if last.month < 12 else 1
+        next_year = last.year + 1 if last.month == 12 else last.year
+        max_day = calendar.monthrange(next_year, next_month)[1]
+        next_d = last.replace(year=next_year, month=next_month, day=min(last.day, max_day))
     return next_d.strftime("%d %b")
 
 
@@ -464,6 +464,10 @@ class TelegramBotService:
         ranking = self.storage.get_merchant_ranking(start, end, limit=5)
         avg = self.storage.get_average_daily(start, end)
 
+        if not summary["by_category"]:
+            await update.message.reply_text("No spending data this month.")
+            return
+
         lines = ["*Insights This Month*", ""]
         for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
             lines.append(f"  {cat}: *${total:.2f}*")
@@ -504,6 +508,7 @@ class TelegramBotService:
                 monthly_eq = amount * 2.17
             else:
                 monthly_eq = amount
+                logger.warning("Unknown recurring frequency %r for merchant %r", freq, merchant)
             next_date = estimate_next_date(freq, last_seen)
             lines.append(
                 f"🔄 *{merchant}*\n"

@@ -65,6 +65,10 @@ class TestEstimateNextDate:
         result = estimate_next_date("monthly", "2026-12-10")
         assert result == "10 Jan"
 
+    def test_monthly_end_of_month(self):
+        result = estimate_next_date("monthly", "2026-01-31")
+        assert result == "28 Feb"
+
 
 class TestInsightsCommand:
     @pytest.mark.asyncio
@@ -86,8 +90,10 @@ class TestInsightsCommand:
         await bot_service._insights(update, context)
 
         update.message.reply_text.assert_called_once()
-        call_kwargs = update.message.reply_text.call_args
-        text = call_kwargs[0][0] if call_kwargs[0] else call_kwargs[1].get("text", "")
+        call_kwargs = update.message.reply_text.call_args.kwargs
+        assert call_kwargs.get("parse_mode") == "Markdown"
+        assert call_kwargs.get("reply_markup") is not None
+        text = update.message.reply_text.call_args[0][0] if update.message.reply_text.call_args[0] else call_kwargs.get("text", "")
         assert "Food" in text
         assert "80.00" in text
         assert "5.00" in text
