@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.telegram_bot import TelegramBotService, estimate_next_date
+from src.telegram_bot import TelegramBotService, estimate_next_date, get_category_keyboard
 from src.storage import Storage
 
 
@@ -271,4 +271,93 @@ class TestCategoryCallback:
         await bot_service._category_callback(update, context)
 
         query.edit_message_text.assert_not_called()
+
+
+class TestGetCategoryKeyboard:
+    def test_creates_2_column_grid(self):
+        categories = ["Food", "Transport", "Entertainment", "Shopping"]
+        keyboard = get_category_keyboard(42, categories)
+        buttons = keyboard.inline_keyboard
+        assert len(buttons) == 2  # 4 cats → 2 rows
+        assert len(buttons[0]) == 2
+        assert len(buttons[1]) == 2
+        assert buttons[0][0].callback_data == "recat:42:Food"
+        assert buttons[0][1].callback_data == "recat:42:Transport"
+
+    def test_odd_number_of_categories(self):
+        categories = ["Food", "Transport", "Entertainment"]
+        keyboard = get_category_keyboard(1, categories)
+        buttons = keyboard.inline_keyboard
+        assert len(buttons) == 2
+        assert len(buttons[0]) == 2
+        assert len(buttons[1]) == 1
+        assert buttons[1][0].callback_data == "recat:1:Entertainment"
+
+
+class TestRecategorizeCommand:
+    @pytest.mark.asyncio
+    async def test_recategorize_with_only_tx_id_shows_grid(self, bot_service, in_memory_db):
+        in_memory_db.execute(
+            """INSERT INTO transactions (source, source_id, amount, merchant, category, transaction_date)
+               VALUES ('manual', 'm1', 10.0, 'Toast Box', 'Other', '2026-04-16T12:00:00')"""
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute("SELECT id FROM transactions WHERE source_id='m1'").fetchone()["id"]
+
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+        context.args = [str(tx_id)]
+
+        await bot_service._recategorize(update, context)
+
+        update.message.reply_text.assert_called_once()
+        call_kwargs = update.message.reply_text.call_args
+        text = call_kwargs[0][0] if call_kwargs[0] else call_kwargs.kwargs.get("text", "")
+        assert "Toast Box" in text
+        assert str(tx_id) in text
+        assert call_kwargs.kwargs.get("reply_markup") is not None
+
+    @pytest.mark.asyncio
+    async def test_recategorize_no_args_shows_usage(self, bot_service):
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+        context.args = []
+
+        await bot_service._recategorize(update, context)
+
+        update.message.reply_text.assert_called_once()
+        text = update.message.reply_text.call_args[0][0]
+        assert "Usage" in text
+
+
+class TestRecatCallback:
+    @pytest.mark.asyncio
+    async def test_recat_callback_applies_category(self, bot_service, in_memory_db):
+        in_memory_db.execute(
+            """INSERT INTO transactions (source, source_id, amount, merchant, category, transaction_date)
+               VALUES ('manual', 'm2', 20.0, 'Grab', 'Other', '2026-04-16T12:00:00')"""
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute("SELECT id FROM transactions WHERE source_id='m2'").fetchone()["id"]
+
+        query = MagicMock()
+        query.answer = AsyncMock()
+        query.data = f"recat:{tx_id}:Transport"
+        query.edit_message_text = AsyncMock()
+
+        update = MagicMock()
+        update.callback_query = query
+        context = MagicMock()
+
+        await bot_service._recat_callback(update, context)
+
+        query.edit_message_text.assert_called_once()
+        text = query.edit_message_text.call_args[0][0]
+        assert "Transport" in text
+        assert "Grab" in text
+
+        updated = bot_service.storage.get_transaction(tx_id)
+        assert updated["category"] == "Transport"
 

@@ -22,6 +22,20 @@ from src.storage import Storage
 logger = logging.getLogger(__name__)
 
 
+def get_category_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMarkup:
+    """Create a 2-column grid of category buttons for recategorization."""
+    buttons = []
+    row = []
+    for cat in categories:
+        row.append(InlineKeyboardButton(cat, callback_data=f"recat:{tx_id}:{cat}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    return InlineKeyboardMarkup(buttons)
+
+
 def estimate_next_date(frequency: str, last_seen: str) -> str:
     """Estimate next occurrence date based on frequency."""
     last = datetime.strptime(last_seen[:10], "%Y-%m-%d")
@@ -215,6 +229,7 @@ class TelegramBotService:
 
         self.app.add_handler(CallbackQueryHandler(self._cmd_callback, pattern="^cmd_"))
         self.app.add_handler(CallbackQueryHandler(self._category_callback, pattern="^cat:"))
+        self.app.add_handler(CallbackQueryHandler(self._recat_callback, pattern="^recat:"))
 
         # Catch-all must be last
         self.app.add_handler(MessageHandler(filters.COMMAND, self._unknown))
@@ -362,41 +377,53 @@ class TelegramBotService:
         )
 
     async def _recategorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not context.args or len(context.args) < 2:
-            await update.message.reply_text("Usage: /recategorize <transaction_id> <new_category>")
+        if not context.args:
+            await update.message.reply_text("Usage: /recategorize <transaction_id>")
             return
         try:
             tx_id = int(context.args[0])
         except ValueError:
             await update.message.reply_text("Transaction ID must be a number")
             return
-        new_category = context.args[1]
 
         tx = self.storage.get_transaction(tx_id)
         if not tx:
             await update.message.reply_text(f"Transaction #{tx_id} not found")
             return
 
-        valid_categories = [c["name"] for c in self.storage.get_categories()]
-        if new_category not in valid_categories:
+        # If a category was provided, apply it directly
+        if len(context.args) >= 2:
+            new_category = context.args[1]
+            valid_categories = [c["name"] for c in self.storage.get_categories()]
+            if new_category not in valid_categories:
+                await update.message.reply_text(
+                    f"Invalid category '{new_category}'. Valid: {', '.join(valid_categories)}"
+                )
+                return
+
+            old_category = tx["category"]
+            self.storage.update_transaction(tx_id, category=new_category)
+
+            merchant = tx["merchant"]
+            if merchant:
+                self.storage.set_merchant_override(merchant, new_category)
+                if self.categorizer:
+                    self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
+
             await update.message.reply_text(
-                f"Invalid category '{new_category}'. Valid: {', '.join(valid_categories)}"
+                f"Updated #{tx_id}: {old_category} -> {new_category}"
+                + (f" (learned: {merchant} = {new_category})" if merchant else "")
             )
             return
 
-        old_category = tx["category"]
-        self.storage.update_transaction(tx_id, category=new_category)
-
-        # Save as merchant override so future transactions auto-categorize
-        merchant = tx["merchant"]
-        if merchant:
-            self.storage.set_merchant_override(merchant, new_category)
-            if self.categorizer:
-                self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
-
+        # No category provided — show a grid of category buttons
+        categories = self.storage.get_categories()
+        keyboard = get_category_keyboard(tx_id, [c["name"] for c in categories])
+        merchant = tx["merchant"] or "Unknown"
+        current_category = tx["category"] or "Other"
         await update.message.reply_text(
-            f"Updated #{tx_id}: {old_category} -> {new_category}"
-            + (f" (learned: {merchant} = {new_category})" if merchant else "")
+            f"Recategorize #{tx_id}: {merchant} (currently {current_category})",
+            reply_markup=keyboard,
         )
 
     async def _income(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -710,18 +737,24 @@ class TelegramBotService:
             await self.app.bot.send_message(chat_id=self.chat_id, text=text)
         else:
             categories = self.storage.get_categories()
-            keyboard = [
-                [InlineKeyboardButton(
+            buttons = []
+            row = []
+            for cat in categories:
+                row.append(InlineKeyboardButton(
                     f"{cat['icon']} {cat['name']}",
                     callback_data=f"cat:{tx_id}:{cat['name']}",
-                )]
-                for cat in categories
-            ]
+                ))
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
+            keyboard = InlineKeyboardMarkup(buttons)
             text += "\nPick a category:"
             await self.app.bot.send_message(
                 chat_id=self.chat_id,
                 text=text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
+                reply_markup=keyboard,
             )
 
     async def _category_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -746,6 +779,32 @@ class TelegramBotService:
                 self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
 
         await query.edit_message_text(f"{merchant} → {category}")
+
+    async def _recat_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        await query.answer()
+
+        if not query.data.startswith("recat:"):
+            return
+
+        _, tx_id_str, category = query.data.split(":", 2)
+        tx_id = int(tx_id_str)
+        tx = self.storage.get_transaction(tx_id)
+        if not tx:
+            await query.edit_message_text("Transaction not found.")
+            return
+
+        old_category = tx["category"]
+        self.storage.update_transaction(tx_id, category=category)
+        merchant = tx["merchant"]
+        if merchant:
+            self.storage.set_merchant_override(merchant, category)
+            if self.categorizer:
+                self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
+
+        await query.edit_message_text(
+            f"#{tx_id} {merchant}: {old_category} → {category}"
+        )
 
     async def _cmd_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
