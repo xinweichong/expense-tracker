@@ -49,3 +49,6 @@ coverage.xml
 #Superpowers
 .superpowers/
 docs/superpowers/
+
+# Git worktrees
+.worktrees/
