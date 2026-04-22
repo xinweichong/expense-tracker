@@ -35,6 +35,7 @@ export interface Category {
   name: string;
   keywords: string | null;
   icon: string | null;
+  color: string | null;
 }
 
 export const api = {
@@ -96,13 +97,13 @@ export const api = {
   getCategories: () =>
     request<Category[]>('/api/categories'),
 
-  createCategory: (data: { name: string; keywords?: string; icon?: string }) =>
+  createCategory: (data: { name: string; keywords?: string; icon?: string; color?: string }) =>
     request<{ status: string; name: string }>('/api/categories', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateCategory: (name: string, data: { keywords?: string }) =>
+  updateCategory: (name: string, data: { keywords?: string; icon?: string; color?: string }) =>
     request<{ status: string; name: string }>(`/api/categories/${encodeURIComponent(name)}`, {
       method: 'PUT',
       body: JSON.stringify(data),

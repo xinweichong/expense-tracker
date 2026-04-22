@@ -170,10 +170,11 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         name = body.get("name", "").strip()
         keywords = body.get("keywords", "")
         icon = body.get("icon", "📌")
+        color = body.get("color")
         if not name:
             raise HTTPException(status_code=400, detail="Category name is required")
         try:
-            storage.add_category(name, keywords, icon)
+            storage.add_category(name, keywords, icon, color)
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
         return {"status": "ok", "name": name}
@@ -181,11 +182,16 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
     @app.put("/api/categories/{name}")
     async def update_category(name: str, request: Request, _auth=Depends(require_auth)):
         body = await request.json()
-        keywords = body.get("keywords", "")
         try:
-            storage.update_category(name, keywords)
+            storage.update_category(
+                name,
+                keywords=body.get("keywords"),
+                icon=body.get("icon"),
+                color=body.get("color"),
+            )
         except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            status_code = 409 if "already used" in str(e) else 404
+            raise HTTPException(status_code=status_code, detail=str(e))
         return {"status": "ok", "name": name}
 
     @app.delete("/api/categories/{name}")

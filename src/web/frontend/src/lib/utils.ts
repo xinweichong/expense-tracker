@@ -30,22 +30,36 @@ export function formatShortDate(date: string): string {
   });
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
+const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
   'Food': '#FF6B6B',
-  'Food \ud83c\udf5c': '#FF6B6B',
   'Transport': '#64D2FF',
-  'Transport \ud83d\ude97': '#64D2FF',
   'Shopping': '#BF5AF2',
-  'Shopping \ud83d\uded2': '#BF5AF2',
   'Bills': '#FFD60A',
-  'Bills \ud83d\udcc4': '#FFD60A',
   'Entertainment': '#30D158',
-  'Entertainment \ud83c\udfac': '#30D158',
   'Other': '#72727E',
-  'Other \ud83d\udccc': '#72727E',
   'Income': '#34C759',
 };
 
-export function getCategoryColor(category: string): string {
-  return CATEGORY_COLORS[category] ?? '#72727E';
+// Runtime color overrides — populated when categories load from DB
+const _categoryColorOverrides: Record<string, string> = {};
+
+export function setCategoryColors(categories: { name: string; color: string | null }[]) {
+  Object.keys(_categoryColorOverrides).forEach(k => delete _categoryColorOverrides[k]);
+  for (const cat of categories) {
+    if (cat.color) {
+      _categoryColorOverrides[cat.name] = cat.color;
+    }
+  }
 }
+
+export function getCategoryColor(category: string): string {
+  if (_categoryColorOverrides[category]) return _categoryColorOverrides[category];
+  return DEFAULT_CATEGORY_COLORS[category] ?? '#72727E';
+}
+
+export const PALETTE = [
+  '#FF6B6B', '#64D2FF', '#BF5AF2', '#FFD60A', '#30D158',
+  '#FF9F0A', '#FF375F', '#7D7AFF', '#5AC8FA', '#FF6482',
+  '#63E6BE', '#DAEFBD', '#B4A7FF', '#FFA07A', '#98D8C8',
+  '#F7DC6F', '#BB8FCE', '#85C1E9', '#F0B27A', '#AED6F1',
+];

@@ -11,7 +11,7 @@ export function useCategories() {
 export function useCreateCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; keywords?: string }) => api.createCategory(data),
+    mutationFn: (data: { name: string; keywords?: string; icon?: string; color?: string }) => api.createCategory(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
   });
 }
@@ -19,7 +19,7 @@ export function useCreateCategory() {
 export function useUpdateCategory() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, data }: { name: string; data: { keywords?: string } }) =>
+    mutationFn: ({ name, data }: { name: string; data: { keywords?: string; icon?: string; color?: string } }) =>
       api.updateCategory(name, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
   });

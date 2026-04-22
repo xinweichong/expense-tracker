@@ -109,6 +109,11 @@ def init_db(db_path: str) -> sqlite3.Connection:
         conn.execute("ALTER TABLE transactions ADD COLUMN type TEXT DEFAULT 'expense'")
     except Exception:
         pass
+    # Migrate: add color column to categories if missing
+    try:
+        conn.execute("ALTER TABLE categories ADD COLUMN color TEXT DEFAULT NULL")
+    except Exception:
+        pass
     conn.commit()
     tx_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
     cat_count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
