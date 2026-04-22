@@ -7,6 +7,7 @@ import { TransactionFilters } from '@/components/transactions/TransactionFilters
 import { useCategories } from '@/hooks/useCategories';
 import { api, type Transaction } from '@/api/client';
 import { Plus } from 'lucide-react';
+import { TransactionForm } from '@/components/transactions/TransactionForm';
 
 const PAGE_SIZE = 20;
 
@@ -75,9 +76,10 @@ export function TransactionsPage() {
       />
 
       {showForm && (
-        <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted">
-          Transaction form coming soon (Task 9)
-        </div>
+        <TransactionForm
+          categories={categories ?? []}
+          onClose={() => setShowForm(false)}
+        />
       )}
 
       <Card className="bg-card border-border overflow-hidden">
