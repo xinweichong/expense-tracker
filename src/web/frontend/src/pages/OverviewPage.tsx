@@ -1,3 +1,210 @@
+import { useMemo } from 'react';
+import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { usePeriod } from '@/hooks/usePeriod';
+import { useSummary, useTrend, useBalance } from '@/hooks/useCategories';
+import { useTransactions } from '@/hooks/useTransactions';
+import type { Transaction } from '@/api/client';
+import { formatCurrency, formatDate, getCategoryColor, cn } from '@/lib/utils';
+import { CategoryDonut } from '@/components/charts/CategoryDonut';
+import { TrendLine } from '@/components/charts/TrendLine';
+
+type Period = 'day' | 'week' | 'month';
+
+function toDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function getDateRange(date: string, period: Period): { start: string; end: string } {
+  const d = new Date(date);
+  if (period === 'day') {
+    return { start: date, end: date };
+  }
+  if (period === 'week') {
+    const dayOfWeek = d.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + mondayOffset);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return { start: toDateStr(monday), end: toDateStr(sunday) };
+  }
+  // month
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return { start: toDateStr(first), end: toDateStr(last) };
+}
+
+function getRangeLabel(date: string, period: Period): string {
+  const d = new Date(date);
+  if (period === 'day') {
+    return d.toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  if (period === 'week') {
+    const { start, end } = getDateRange(date, period);
+    return `${formatDate(start)} - ${formatDate(end)}`;
+  }
+  return d.toLocaleDateString('en-SG', { month: 'long', year: 'numeric' });
+}
+
+const PERIOD_OPTIONS: Period[] = ['day', 'week', 'month'];
+
 export function OverviewPage() {
-  return <div className="p-4 md:p-8"><h1 className="text-2xl font-bold">Overview</h1><p className="text-muted mt-2">Coming soon</p></div>;
+  const { period, setPeriod, date, goBack, goForward, goToToday } = usePeriod();
+  const { start, end } = useMemo(() => getDateRange(date, period), [date, period]);
+
+  const { data: summary } = useSummary(start, end);
+  const { data: trend } = useTrend(start, end);
+  const { data: balance } = useBalance(start, end);
+  const { data: recentTransactions } = useTransactions({ limit: 5 });
+
+  const categories = summary?.categories ?? [];
+  const trendData = trend ?? [];
+  const income = balance?.income ?? 0;
+  const expenses = balance?.expenses ?? 0;
+
+  return (
+    <div className="p-4 md:p-8 space-y-6 max-w-4xl mx-auto">
+      {/* Period Selector */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Overview</h1>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={goBack}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={goToToday} className="gap-1.5 text-sm">
+            <CalendarDays className="h-3.5 w-3.5" />
+            Today
+          </Button>
+          <Button variant="ghost" size="icon" onClick={goForward}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted min-w-[140px] text-center">{getRangeLabel(date, period)}</span>
+        </div>
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          {PERIOD_OPTIONS.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={cn(
+                'px-3 py-1.5 text-sm capitalize transition-colors',
+                period === p
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted hover:text-foreground hover:bg-accent',
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Balance Cards */}
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted">Spent</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-destructive">{formatCurrency(expenses)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted">Income</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-success">{formatCurrency(income)}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Category Donut */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Spending by Category</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {categories.length > 0 ? (
+              <>
+                <CategoryDonut data={categories} />
+                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  {categories.map((c: { category: string; total: number }) => (
+                    <div key={c.category} className="flex items-center gap-2 text-sm">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: getCategoryColor(c.category) }}
+                      />
+                      <span className="truncate text-muted">{c.category}</span>
+                      <span className="ml-auto font-medium">{formatCurrency(c.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="h-48 flex items-center justify-center text-muted text-sm">
+                No spending data for this period
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Trend Line */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Daily Spending Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TrendLine data={trendData} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Transactions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Recent Transactions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!recentTransactions || recentTransactions.length === 0 ? (
+            <p className="text-muted text-sm py-4 text-center">No transactions yet</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {recentTransactions.map((tx: Transaction) => (
+                <li key={tx.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: getCategoryColor(tx.category ?? 'Other') }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {tx.merchant || tx.description || 'Transaction'}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {tx.category ?? 'Uncategorized'} &middot; {formatDate(tx.transaction_date)}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      'text-sm font-semibold whitespace-nowrap',
+                      tx.type === 'income' ? 'text-success' : 'text-foreground',
+                    )}
+                  >
+                    {tx.type === 'income' ? '+' : '-'}
+                    {formatCurrency(tx.amount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
