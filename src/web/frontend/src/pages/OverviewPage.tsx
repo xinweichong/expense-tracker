@@ -1,14 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
-import { useSummary, useTrend, useBalance, useCategories } from '@/hooks/useCategories';
+import { useSummary, useTrend, useTrendByCategory, useBalance, useCategories } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
 import type { Transaction } from '@/api/client';
 import { formatCurrency, formatDate, getCategoryColor, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
+import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -56,9 +57,11 @@ const PERIOD_OPTIONS: Period[] = ['day', 'week', 'month'];
 export function OverviewPage() {
   const { period, setPeriod, date, goBack, goForward, goToToday } = usePeriod();
   const { start, end } = useMemo(() => getDateRange(date, period), [date, period]);
+  const [trendMode, setTrendMode] = useState<'total' | 'category'>('total');
 
   const { data: summary } = useSummary(start, end);
   const { data: trend } = useTrend(start, end);
+  const { data: trendByCategory } = useTrendByCategory(start, end);
   const { data: balance } = useBalance(start, end);
   const { data: recentTransactions } = useTransactions({ start_date: start, end_date: end, limit: 50 });
   const { data: categoryList } = useCategories();
@@ -75,6 +78,7 @@ export function OverviewPage() {
     return Object.entries(byCat).map(([category, total]) => ({ category, total: total as number }));
   }, [summary]);
   const trendData = trend ?? [];
+  const trendByCategoryData = trendByCategory ?? [];
   const income = balance?.income ?? 0;
   const expenses = balance?.expenses ?? 0;
 
@@ -168,11 +172,38 @@ export function OverviewPage() {
 
         {/* Trend Line */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-base">Daily Spending Trend</CardTitle>
+            <div className="flex rounded-md border border-border overflow-hidden">
+              <button
+                onClick={() => setTrendMode('total')}
+                className={cn(
+                  'px-2.5 py-1 text-xs transition-colors',
+                  trendMode === 'total'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted hover:text-foreground',
+                )}
+              >
+                Total
+              </button>
+              <button
+                onClick={() => setTrendMode('category')}
+                className={cn(
+                  'px-2.5 py-1 text-xs transition-colors border-l border-border',
+                  trendMode === 'category'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted hover:text-foreground',
+                )}
+              >
+                By Category
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
-            <TrendLine data={trendData} />
+            {trendMode === 'total'
+              ? <TrendLine data={trendData} />
+              : <CategoryTrendLine data={trendByCategoryData} />
+            }
           </CardContent>
         </Card>
       </div>

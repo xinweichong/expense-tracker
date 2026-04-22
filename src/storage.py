@@ -174,6 +174,26 @@ class Storage:
         ).fetchall()
         return [{"date": r["date"], "amount": r["amount"]} for r in rows]
 
+    def get_trend_by_category(self, start_date: str, end_date: str) -> list[dict]:
+        rows = self.conn.execute(
+            """SELECT DATE(transaction_date) as date,
+                      COALESCE(category, 'Other') as category,
+                      SUM(amount * exchange_rate) as amount
+               FROM transactions
+               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND (type IS NULL OR type = 'expense')
+               GROUP BY DATE(transaction_date), COALESCE(category, 'Other')
+               ORDER BY date""",
+            (start_date, end_date),
+        ).fetchall()
+        by_date: dict[str, dict] = {}
+        for r in rows:
+            d = r["date"]
+            if d not in by_date:
+                by_date[d] = {"date": d}
+            by_date[d][r["category"]] = round(r["amount"], 2)
+        return list(by_date.values())
+
     def get_period_comparison(self, current_start: str, current_end: str, prev_start: str, prev_end: str) -> dict:
         curr_rows = self.conn.execute(
             """SELECT category, SUM(amount * exchange_rate) as total FROM transactions

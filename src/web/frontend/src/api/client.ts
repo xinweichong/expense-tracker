@@ -84,6 +84,9 @@ export const api = {
   getTrend: (start_date: string, end_date: string) =>
     request<any>(`/api/trend?start_date=${start_date}&end_date=${end_date}`),
 
+  getTrendByCategory: (start_date: string, end_date: string) =>
+    request<any>(`/api/trend/by-category?start_date=${start_date}&end_date=${end_date}`),
+
   getBalance: (start_date: string, end_date: string) =>
     request<any>(`/api/balance?start_date=${start_date}&end_date=${end_date}`),
 

@@ -28,6 +28,7 @@ export function ComparisonBarChart({ data }: { data: ComparisonData[] }) {
             tickFormatter={(v: number) => `$${v}`}
           />
           <Tooltip
+            cursor={{ fill: '#1C1C22' }}
             contentStyle={{
               background: '#16161A',
               border: '1px solid #2A2A32',

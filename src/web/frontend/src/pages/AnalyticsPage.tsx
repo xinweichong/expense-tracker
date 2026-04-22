@@ -37,9 +37,9 @@ export function AnalyticsPage() {
 
       {/* Alerts */}
       {hasAlerts && (
-        <Card className="p-4 bg-card border-accent/30">
+        <Card className="p-4 bg-card border-warning/30">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-accent shrink-0 mt-0.5" />
+            <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p className="text-xs text-muted mb-2">
                 Unusual = transaction is over 2× the category average (last 30 days, min 3 transactions).
