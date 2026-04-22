@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Optional
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from src.analytics import (
@@ -200,7 +200,30 @@ class TelegramBotService:
         )
 
     def setup_handlers(self) -> None:
-        self.app = Application.builder().token(self.bot_token).build()
+        async def _post_init(application: Application) -> None:
+            await application.bot.set_my_commands([
+                BotCommand("start",            "Initialize the bot"),
+                BotCommand("today",            "Today's spending"),
+                BotCommand("yesterday",        "Yesterday's spending"),
+                BotCommand("week",             "This week's spending"),
+                BotCommand("month",            "This month's breakdown"),
+                BotCommand("add",              "Add an expense (supports multi-currency)"),
+                BotCommand("cash",             "Quick cash expense entry"),
+                BotCommand("income",           "Record income"),
+                BotCommand("balance",          "Income vs expenses this month"),
+                BotCommand("insights",         "Top merchants & daily average spend"),
+                BotCommand("subscriptions",    "Detected recurring transactions"),
+                BotCommand("recategorize",     "Reassign a transaction's category"),
+                BotCommand("compare",          "This month vs last month"),
+                BotCommand("merchants_report", "Top merchants this month"),
+                BotCommand("velocity",         "Spending pace and projection"),
+                BotCommand("summary",          "Monthly summary report"),
+                BotCommand("dashboard",        "Open the web dashboard"),
+                BotCommand("menu",             "Quick action buttons"),
+                BotCommand("help",             "Show all commands"),
+            ])
+
+        self.app = Application.builder().token(self.bot_token).post_init(_post_init).build()
 
         self.app.add_handler(CommandHandler("start", self._start))
         self.app.add_handler(CommandHandler("today", self._today))
@@ -222,13 +245,6 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("yesterday", self._yesterday))
         self.app.add_handler(CommandHandler("menu", self._menu))
 
-        # Redirect removed commands to web
-        self.app.add_handler(CommandHandler("categories", self._redirect_to_web))
-        self.app.add_handler(CommandHandler("addcategory", self._redirect_to_web))
-        self.app.add_handler(CommandHandler("editcategory", self._redirect_to_web))
-        self.app.add_handler(CommandHandler("deletecategory", self._redirect_to_web))
-        self.app.add_handler(CommandHandler("uncategorized", self._redirect_to_web))
-
         self.app.add_handler(CallbackQueryHandler(self._cmd_callback, pattern="^cmd_"))
         self.app.add_handler(CallbackQueryHandler(self._category_callback, pattern="^cat:"))
         self.app.add_handler(CallbackQueryHandler(self._recat_callback, pattern="^recat:"))
@@ -241,7 +257,7 @@ class TelegramBotService:
         self.chat_id = update.effective_chat.id
         self._save_chat_id(self.chat_id)
         await update.message.reply_text(
-            "Expense Tracker bot ready! Commands: /today /week /month /add /help"
+            "Expense Tracker bot ready! Use the menu button or /help to see all commands."
         )
 
     async def _today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -857,12 +873,6 @@ class TelegramBotService:
             "*Quick Actions*",
             parse_mode="Markdown",
             reply_markup=keyboard,
-        )
-
-    async def _redirect_to_web(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.reply_text(
-            "Category and subscription management is available on the web dashboard. "
-            "Open your browser to manage these."
         )
 
     async def _send_daily_digest(self) -> None:
