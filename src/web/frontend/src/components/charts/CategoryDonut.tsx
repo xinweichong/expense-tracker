@@ -7,6 +7,14 @@ interface CategoryData {
 }
 
 export function CategoryDonut({ data }: { data: CategoryData[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-[220px] flex items-center justify-center text-muted text-sm">
+        No spending data
+      </div>
+    );
+  }
+
   const total = data.reduce((sum, d) => sum + d.total, 0);
 
   return (
@@ -36,7 +44,7 @@ export function CategoryDonut({ data }: { data: CategoryData[] }) {
                 borderRadius: '8px',
                 fontSize: '13px',
               }}
-              formatter={(value) => formatCurrency(Number(value ?? 0))}
+              formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
             />
           </PieChart>
         </ResponsiveContainer>

@@ -2,15 +2,13 @@ import { useMemo } from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { usePeriod } from '@/hooks/usePeriod';
+import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummary, useTrend, useBalance } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
 import type { Transaction } from '@/api/client';
 import { formatCurrency, formatDate, getCategoryColor, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
-
-type Period = 'day' | 'week' | 'month';
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -20,7 +18,8 @@ function toDateStr(d: Date): string {
 }
 
 function getDateRange(date: string, period: Period): { start: string; end: string } {
-  const d = new Date(date);
+  const [y, m, dd] = date.split('-').map(Number);
+  const d = new Date(y, m - 1, dd);
   if (period === 'day') {
     return { start: date, end: date };
   }
@@ -40,7 +39,8 @@ function getDateRange(date: string, period: Period): { start: string; end: strin
 }
 
 function getRangeLabel(date: string, period: Period): string {
-  const d = new Date(date);
+  const [y, m, dd] = date.split('-').map(Number);
+  const d = new Date(y, m - 1, dd);
   if (period === 'day') {
     return d.toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   }

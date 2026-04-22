@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -9,6 +10,8 @@ interface TrendPoint {
 }
 
 export function TrendLine({ data }: { data: TrendPoint[] }) {
+  const gradientId = useId().replace(/:/g, '');
+
   if (!data || data.length === 0) {
     return <div className="h-48 flex items-center justify-center text-muted text-sm">No trend data</div>;
   }
@@ -18,7 +21,7 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
-            <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#FF6B6B" stopOpacity={0.3} />
               <stop offset="95%" stopColor="#FF6B6B" stopOpacity={0} />
             </linearGradient>
@@ -53,7 +56,7 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
             dataKey="amount"
             stroke="#FF6B6B"
             strokeWidth={2}
-            fill="url(#trendGradient)"
+            fill={`url(#${gradientId})`}
           />
         </AreaChart>
       </ResponsiveContainer>

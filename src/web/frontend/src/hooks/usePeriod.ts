@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-type Period = 'day' | 'week' | 'month';
+export type Period = 'day' | 'week' | 'month';
 
 export function usePeriod() {
   const [period, setPeriod] = useState<Period>('month');
