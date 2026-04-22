@@ -120,3 +120,63 @@ def get_category_comparison(
         })
 
     return sorted(results, key=lambda x: x["current"], reverse=True)
+
+
+def get_top_merchants(
+    conn: sqlite3.Connection, limit: int = 10, period: str = "month", date: str | None = None
+) -> list[dict]:
+    """Get top merchants by total spending in the current period."""
+    if period == "week":
+        start, end = _get_week_range(date)
+    else:
+        start, end = _get_month_range(date)
+
+    rows = conn.execute(
+        """
+        SELECT merchant,
+               COUNT(*) as count,
+               ROUND(SUM(amount * exchange_rate), 2) as total,
+               ROUND(AVG(amount * exchange_rate), 2) as avg_amount
+        FROM transactions
+        WHERE type = 'expense'
+          AND merchant IS NOT NULL
+          AND transaction_date >= ? AND transaction_date <= ?
+        GROUP BY merchant
+        ORDER BY total DESC
+        LIMIT ?
+        """,
+        [start, end, limit],
+    ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def get_merchant_trend(
+    conn: sqlite3.Connection, merchant: str
+) -> dict:
+    """Get spending trend for a specific merchant across months."""
+    rows = conn.execute(
+        """
+        SELECT strftime('%Y-%m', transaction_date) as month,
+               ROUND(SUM(amount * exchange_rate), 2) as total,
+               COUNT(*) as count
+        FROM transactions
+        WHERE type = 'expense' AND merchant = ?
+        GROUP BY strftime('%Y-%m', transaction_date)
+        ORDER BY month DESC
+        LIMIT 6
+        """,
+        [merchant],
+    ).fetchall()
+
+    months = [dict(r) for r in rows]
+    current_month = months[0]["total"] if months else 0
+    previous_month = months[1]["total"] if len(months) > 1 else 0
+
+    return {
+        "merchant": merchant,
+        "months": months,
+        "current_month": current_month,
+        "previous_month": previous_month,
+        "trend": "up" if current_month > previous_month else ("down" if current_month < previous_month else "stable"),
+    }

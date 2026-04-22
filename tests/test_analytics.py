@@ -5,6 +5,8 @@ from src.storage import Storage
 from src.analytics import (
     get_period_comparison,
     get_category_comparison,
+    get_top_merchants,
+    get_merchant_trend,
 )
 
 
@@ -88,4 +90,34 @@ class TestPeriodComparison:
         conn = make_db()
         result = get_period_comparison(conn, period="month")
         assert result["previous_total"] == 0
+        conn.close()
+
+
+class TestMerchantAnalysis:
+    def test_top_merchants_by_spend(self, db_with_transactions):
+        result = get_top_merchants(db_with_transactions, limit=5)
+        assert len(result) > 0
+        # First result should be highest spending merchant
+        assert result[0]["total"] >= result[-1]["total"]
+        assert "merchant" in result[0]
+        assert "count" in result[0]
+        assert "total" in result[0]
+
+    def test_merchant_trend(self, db_with_transactions):
+        result = get_merchant_trend(db_with_transactions, merchant="Food place 0")
+        assert "current_month" in result
+        assert "previous_month" in result
+
+    def test_top_merchants_limit(self):
+        conn = make_db()
+        storage = Storage(conn)
+        for i in range(10):
+            storage.insert_transaction(
+                source="manual", source_id=f"shop-{i}",
+                amount=float(i + 1),
+                merchant=f"Shop {i}", category="Shopping",
+                transaction_date=datetime.now().strftime("%Y-%m-%d"),
+            )
+        result = get_top_merchants(conn, limit=3)
+        assert len(result) == 3
         conn.close()
