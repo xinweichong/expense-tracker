@@ -10,25 +10,21 @@ export function usePeriod() {
   });
 
   const goBack = useCallback(() => {
-    const d = new Date(date);
+    const [y, mo, dy] = date.split('-').map(Number);
+    const d = new Date(y, mo - 1, dy); // local time, not UTC
     if (period === 'day') d.setDate(d.getDate() - 1);
     else if (period === 'week') d.setDate(d.getDate() - 7);
     else d.setMonth(d.getMonth() - 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    setDate(`${y}-${m}-${day}`);
+    setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
   }, [date, period]);
 
   const goForward = useCallback(() => {
-    const d = new Date(date);
+    const [y, mo, dy] = date.split('-').map(Number);
+    const d = new Date(y, mo - 1, dy); // local time, not UTC
     if (period === 'day') d.setDate(d.getDate() + 1);
     else if (period === 'week') d.setDate(d.getDate() + 7);
     else d.setMonth(d.getMonth() + 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    setDate(`${y}-${m}-${day}`);
+    setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
   }, [date, period]);
 
   const goToToday = useCallback(() => {
