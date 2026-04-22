@@ -187,11 +187,21 @@ class Storage:
             (start_date, end_date),
         ).fetchall()
         by_date: dict[str, dict] = {}
+        all_categories: set[str] = set()
         for r in rows:
             d = r["date"]
+            cat = r["category"]
+            all_categories.add(cat)
             if d not in by_date:
                 by_date[d] = {"date": d}
-            by_date[d][r["category"]] = round(r["amount"], 2)
+            by_date[d][cat] = round(r["amount"], 2)
+        # Gap-fill: every date must have an explicit None for every category that
+        # has no spend that day.  Recharts connectNulls only skips null values —
+        # missing keys are treated as undefined/0 and break line continuity.
+        for row in by_date.values():
+            for cat in all_categories:
+                if cat not in row:
+                    row[cat] = None
         return list(by_date.values())
 
     def get_period_comparison(self, current_start: str, current_end: str, prev_start: str, prev_end: str) -> dict:
