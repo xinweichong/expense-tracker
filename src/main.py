@@ -269,6 +269,7 @@ def main():
         scheduler = BackgroundScheduler()
         scheduler.add_job(lambda: _format_and_send_summary("weekly"), 'cron', day_of_week='sun', hour=9)
         scheduler.add_job(lambda: _format_and_send_summary("monthly"), 'cron', day=1, hour=9)
+        scheduler.add_job(bot.notify_daily_digest, 'cron', hour=9, minute=0)
         scheduler.start()
         atexit.register(lambda: scheduler.shutdown(wait=False))
         logger.info("APScheduler started for weekly/monthly summaries")

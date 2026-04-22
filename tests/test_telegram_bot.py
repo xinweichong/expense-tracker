@@ -361,3 +361,70 @@ class TestRecatCallback:
         updated = bot_service.storage.get_transaction(tx_id)
         assert updated["category"] == "Transport"
 
+
+class TestDailyDigest:
+    @pytest.mark.asyncio
+    async def test_send_daily_digest_with_data(self, bot_service):
+        bot_service.chat_id = 12345
+        bot_service.app = MagicMock()
+        bot_service.app.bot.send_message = AsyncMock()
+
+        yesterday_txs = [
+            {"amount": 10.0, "exchange_rate": 1.0, "type": "expense"},
+            {"amount": 5.0, "exchange_rate": 1.0, "type": "expense"},
+        ]
+        month_txs = [
+            {"amount": 10.0, "exchange_rate": 1.0, "type": "expense"},
+            {"amount": 5.0, "exchange_rate": 1.0, "type": "expense"},
+            {"amount": 20.0, "exchange_rate": 1.0, "type": "expense"},
+        ]
+
+        def mock_query_transactions(start_date=None, end_date=None, limit=200):
+            from datetime import datetime, timedelta
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            if start_date == yesterday and end_date == yesterday:
+                return yesterday_txs
+            return month_txs
+
+        bot_service.storage.query_transactions = MagicMock(side_effect=mock_query_transactions)
+
+        with patch("src.telegram_bot.get_spending_velocity", return_value={"status": "ok", "pace_percent": 80}), \
+             patch("src.telegram_bot.check_new_merchants", return_value=[]), \
+             patch("src.telegram_bot.get_anomalies", return_value=[]):
+            await bot_service._send_daily_digest()
+
+        bot_service.app.bot.send_message.assert_called_once()
+        call_kwargs = bot_service.app.bot.send_message.call_args[1]
+        assert call_kwargs["chat_id"] == 12345
+        assert call_kwargs["parse_mode"] == "Markdown"
+        assert "Morning Digest" in call_kwargs["text"]
+        assert "15.00" in call_kwargs["text"]  # yesterday total
+        assert "35.00" in call_kwargs["text"]  # month total
+
+    @pytest.mark.asyncio
+    async def test_send_daily_digest_alerts(self, bot_service):
+        bot_service.chat_id = 12345
+        bot_service.app = MagicMock()
+        bot_service.app.bot.send_message = AsyncMock()
+
+        bot_service.storage.query_transactions = MagicMock(return_value=[
+            {"amount": 10.0, "exchange_rate": 1.0, "type": "expense"},
+        ])
+
+        with patch("src.telegram_bot.get_spending_velocity", return_value={"status": "ahead", "pace_percent": 130}), \
+             patch("src.telegram_bot.check_new_merchants", return_value=[{"merchant": "NewShop"}]), \
+             patch("src.telegram_bot.get_anomalies", return_value=[{"id": 1}]):
+            await bot_service._send_daily_digest()
+
+        text = bot_service.app.bot.send_message.call_args[1]["text"]
+        assert "⚠" in text
+        assert "🛍" in text
+
+    def test_notify_daily_digest_no_chat_id(self, bot_service):
+        bot_service.chat_id = None
+        bot_service._loop = MagicMock()
+        bot_service.app = MagicMock()
+        # Should not raise and should not submit any coroutine
+        bot_service.notify_daily_digest()
+        bot_service._loop.assert_not_called()
+

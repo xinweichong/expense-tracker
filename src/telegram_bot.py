@@ -14,6 +14,8 @@ from src.analytics import (
     get_top_merchants,
     get_spending_velocity,
     generate_summary,
+    get_anomalies,
+    check_new_merchants,
 )
 from src.categorizer import Categorizer
 from src.exchange import ExchangeRateService
@@ -866,6 +868,75 @@ class TelegramBotService:
             "Category and subscription management is available on the web dashboard. "
             "Open your browser to manage these."
         )
+
+    async def _send_daily_digest(self) -> None:
+        """Send morning digest: yesterday's total, month-to-date, any alerts."""
+        if not self.chat_id:
+            logger.debug("Cannot send daily digest: no chat_id")
+            return
+
+        conn = self.storage.conn
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # Yesterday's total
+        yesterday_txs = self.storage.query_transactions(start_date=yesterday, end_date=yesterday)
+        yesterday_total = sum(
+            tx["amount"] * (tx.get("exchange_rate") or 1)
+            for tx in yesterday_txs if tx["type"] == "expense"
+        )
+
+        # Month to date
+        month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+        month_txs = self.storage.query_transactions(start_date=month_start, end_date=today)
+        month_total = sum(
+            tx["amount"] * (tx.get("exchange_rate") or 1)
+            for tx in month_txs if tx["type"] == "expense"
+        )
+
+        # Velocity, new merchants, anomalies
+        velocity = get_spending_velocity(conn)
+        new_merchants = check_new_merchants(conn)
+        anomalies = get_anomalies(conn)
+
+        lines = [
+            "*Morning Digest*\n",
+            f"Yesterday: *${yesterday_total:.2f}* ({len([t for t in yesterday_txs if t['type'] == 'expense'])} transactions)",
+            f"Month to date: *${month_total:.2f}*\n",
+        ]
+
+        if velocity["status"] == "ahead":
+            lines.append(f"⚠ Spending {velocity['pace_percent']:.0f}% of last month's pace")
+
+        if new_merchants:
+            lines.append(f"🛍 {len(new_merchants)} new merchant(s)")
+
+        if anomalies:
+            lines.append(f"⚠ {len(anomalies)} unusual transaction(s)")
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📊 Insights", callback_data="cmd_insights"),
+                InlineKeyboardButton("📋 Balance", callback_data="cmd_balance"),
+            ],
+        ])
+
+        await self.app.bot.send_message(
+            chat_id=self.chat_id,
+            text="\n".join(lines),
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )
+
+    def notify_daily_digest(self) -> None:
+        """Schedule daily digest send. Called from APScheduler background thread."""
+        if not self.chat_id:
+            logger.debug("Cannot send daily digest: no chat_id")
+            return
+        if not self._loop or not self.app:
+            logger.debug("Cannot send daily digest: bot not started")
+            return
+        asyncio.run_coroutine_threadsafe(self._send_daily_digest(), self._loop)
 
     def run(self) -> None:
         self.setup_handlers()
