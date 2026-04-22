@@ -7,6 +7,13 @@ from typing import Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
+from src.analytics import (
+    get_period_comparison,
+    get_category_comparison,
+    get_top_merchants,
+    get_spending_velocity,
+    generate_summary,
+)
 from src.categorizer import Categorizer
 from src.exchange import ExchangeRateService
 from src.storage import Storage
@@ -175,6 +182,10 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("subscriptions", self._subscriptions))
         self.app.add_handler(CommandHandler("help", self._help))
         self.app.add_handler(CommandHandler("dashboard", self._dashboard))
+        self.app.add_handler(CommandHandler("compare", self._compare))
+        self.app.add_handler(CommandHandler("merchants_report", self._merchants))
+        self.app.add_handler(CommandHandler("velocity", self._velocity))
+        self.app.add_handler(CommandHandler("summary", self._summary))
 
         # Redirect removed commands to web
         self.app.add_handler(CommandHandler("categories", self._redirect_to_web))
@@ -465,6 +476,86 @@ class TelegramBotService:
         lines.insert(1, f"Monthly total: ~${monthly_total:.2f}")
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
+    async def _compare(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Compare this month vs last month."""
+        overall = get_period_comparison(self.storage.conn, period="month")
+        categories = get_category_comparison(self.storage.conn, period="month")
+
+        lines = ["*This Month vs Last Month*\n"]
+        if overall["previous_total"] > 0:
+            arrow = "\u2191" if overall["change"] > 0 else "\u2193"
+            lines.append(
+                f"*Overall:* ${overall['current_total']:.2f} {arrow} ${abs(overall['change']):.2f} "
+                f"({overall['change_percent']:+.1f}%)\n"
+            )
+        else:
+            lines.append(f"*Overall:* ${overall['current_total']:.2f} (no prior data)\n")
+
+        for cat in categories[:5]:
+            arrow = "\u2191" if cat["change"] > 0 else "\u2193"
+            lines.append(
+                f"{cat['category']}: ${cat['current']:.2f} {arrow} ${abs(cat['change']):.2f}"
+            )
+
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+    async def _merchants(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Show top 5 merchants this month."""
+        merchants = get_top_merchants(self.storage.conn, limit=5)
+
+        if not merchants:
+            await update.message.reply_text("No merchant data this month.")
+            return
+
+        lines = ["*Top Merchants This Month*\n"]
+        for i, m in enumerate(merchants, 1):
+            lines.append(
+                f"{i}. *{m['merchant']}* \u2014 ${m['total']:.2f} ({m['count']}x)"
+            )
+
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+    async def _velocity(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Show spending velocity vs last month."""
+        v = get_spending_velocity(self.storage.conn)
+
+        emoji = "\u26a0" if v["status"] == "ahead" else "\u2705"
+        lines = [
+            f"{emoji} *Spending Velocity*\n",
+            f"Spent MTD: *${v['current_mtd']:.2f}*",
+            f"Last month: ${v['last_month_total']:.2f}",
+            f"Projected: ${v['projected_total']:.2f}",
+            f"Pace: {v['pace_percent']:.0f}% of last month",
+        ]
+
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+    async def _summary(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Generate on-demand monthly summary report."""
+        report = generate_summary(self.storage.conn, report_type="monthly")
+
+        arrow = "\u2191" if report["change"] > 0 else "\u2193"
+
+        lines = [
+            "*Monthly Summary*\n",
+            f"*Total spent:* ${report['total_spent']:.2f} ({report['transaction_count']} transactions)",
+        ]
+
+        if report["top_category"]:
+            lines.append(f"*Top category:* {report['top_category']['category']} (${report['top_category']['total']:.2f})")
+
+        if report["biggest_transaction"]:
+            bt = report["biggest_transaction"]
+            lines.append(f"*Biggest:* {bt['merchant']} \u2014 ${bt['amount']:.2f}")
+
+        if report["previous_total"] > 0 and report["change_percent"] is not None:
+            lines.append(f"*vs last month:* {arrow} ${abs(report['change']):.2f} ({report['change_percent']:+.1f}%)")
+
+        if report["new_merchant_count"] > 0:
+            lines.append(f"*New merchants:* {report['new_merchant_count']}")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         help_text = """*Expense Tracker — Quick Commands*
 
@@ -487,6 +578,12 @@ class TelegramBotService:
 *Insights:*
 /insights — Spending patterns
 /subscriptions — Recurring transactions
+
+*Analytics:*
+/compare — This month vs last month
+/merchants_report — Top merchants this month
+/velocity — Spending pace and projection
+/summary — Monthly summary report
 
 *Full dashboard:* Open the web app for charts, categories, insights, and more."""
         await update.message.reply_text(help_text, parse_mode="Markdown")
