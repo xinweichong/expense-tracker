@@ -482,7 +482,7 @@ class TelegramBotService:
         categories = get_category_comparison(self.storage.conn, period="month")
 
         lines = ["*This Month vs Last Month*\n"]
-        if overall["previous_total"] > 0:
+        if overall["previous_total"] > 0 and overall["change_percent"] is not None:
             arrow = "\u2191" if overall["change"] > 0 else "\u2193"
             lines.append(
                 f"*Overall:* ${overall['current_total']:.2f} {arrow} ${abs(overall['change']):.2f} "
