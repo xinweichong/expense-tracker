@@ -1,24 +1,20 @@
 import logging
+import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from src.storage import Storage
 from src.web.auth import verify_password, create_session, verify_session
 
 logger = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).parent / "static"
-
 
 def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
-
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.post("/api/login")
     async def login(request: Request):
@@ -41,10 +37,6 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         if not session or not verify_session(session):
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-    @app.get("/", response_class=HTMLResponse)
-    async def index():
-        return (STATIC_DIR / "index.html").read_text()
-
     @app.get("/api/summary")
     async def summary(
         start_date: Optional[str] = None,
@@ -62,15 +54,18 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         end_date: Optional[str] = None,
         category: Optional[str] = None,
         merchant_search: Optional[str] = None,
+        merchant: Optional[str] = None,  # alias used by frontend
         limit: int = 50,
+        offset: int = 0,
         _auth=Depends(require_auth),
     ):
         return storage.query_transactions(
             start_date=start_date,
             end_date=end_date,
             category=category,
-            merchant_search=merchant_search,
+            merchant_search=merchant_search or merchant,
             limit=limit,
+            offset=offset,
         )
 
     @app.get("/api/transactions/{tx_id}")
@@ -79,6 +74,48 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
         return tx
+
+    @app.post("/api/transactions")
+    async def create_transaction(request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        amount = body.get("amount")
+        if amount is None:
+            raise HTTPException(status_code=400, detail="amount is required")
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="amount must be a number")
+
+        tx_type = body.get("type", "expense")
+        if tx_type not in ("expense", "income"):
+            raise HTTPException(status_code=400, detail="type must be 'expense' or 'income'")
+
+        source = body.get("source", "manual")
+        source_id = f"manual_{uuid.uuid4().hex[:12]}"
+        merchant = body.get("merchant")
+        description = body.get("description")
+        category = body.get("category")
+        currency = body.get("currency", "SGD")
+        exchange_rate = body.get("exchange_rate", 1.0)
+        transaction_date = body.get("transaction_date") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            tx_id = storage.insert_transaction(
+                source=source,
+                source_id=source_id,
+                amount=amount,
+                merchant=merchant,
+                description=description,
+                category=category,
+                currency=currency,
+                exchange_rate=exchange_rate,
+                transaction_date=transaction_date,
+                tx_type=tx_type,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+        return storage.get_transaction(tx_id)
 
     @app.put("/api/transactions/{tx_id}")
     async def update_transaction(tx_id: int, request: Request, _auth=Depends(require_auth)):
@@ -96,7 +133,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             merchant = fields.get("merchant") or tx.get("merchant")
             if merchant:
                 storage.set_merchant_override(merchant, fields["category"])
-        return {"status": "ok"}
+        return storage.get_transaction(tx_id)
 
     @app.delete("/api/transactions/{tx_id}")
     async def delete_transaction(tx_id: int, _auth=Depends(require_auth)):
@@ -213,8 +250,22 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    @app.get("/settings", response_class=HTMLResponse)
-    async def settings_page():
-        return (STATIC_DIR / "settings.html").read_text()
+    # Serve React SPA
+    import os
+
+    static_dist = os.path.join(os.path.dirname(__file__), "dist")
+    if os.path.isdir(static_dist):
+        app.mount(
+            "/assets",
+            StaticFiles(directory=os.path.join(static_dist, "assets")),
+            name="spa_assets",
+        )
+
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str):
+            file_path = os.path.join(static_dist, full_path)
+            if os.path.isfile(file_path) and not full_path.startswith("api"):
+                return FileResponse(file_path)
+            return FileResponse(os.path.join(static_dist, "index.html"))
 
     return app

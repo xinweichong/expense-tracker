@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(git log:*)",
+      "Bash(python3 -m pytest tests/test_storage.py -v)",
+      "Bash(python3:*)",
+      "Bash(pytest:*)",
+      "Bash(git:*)",
+      "Bash(python -m pytest tests/test_config.py -v)",
+      "Bash(python -m pytest tests/test_parsers.py -v)",
+      "Bash(python -m pytest tests/test_categorizer.py -v)",
+      "Bash(python -m pytest tests/test_telegram_bot.py -v)",
+      "Bash(python -m pytest tests/test_webhook.py -v)",
+      "Bash(pip3 install:*)",
+      "mcp__plugin_claude-mem_mcp-search__smart_outline",
+      "Bash(python:*)",
+      "Bash(/Users/xinweichong/personal/expense-tracker/venv/bin/python:*)",
+      "WebSearch",
+      "Bash(sqlite3:*)",
+      "Bash(wc -l src/**/*.py src/*.py tests/*.py)",
+      "Bash(/Users/xinweichong/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/start-server.sh:*)",
+      "Bash(/Users/xinweichong/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/stop-server.sh /Users/xinweichong/personal/expense-tracker/.superpowers/brainstorm/44180-1776751510)",
+      "Bash(wc:*)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest init --yes)",
+      "Bash(kill %1)",
+      "Bash(npx shadcn@latest add button card dialog input select sheet tabs badge dropdown-menu separator --yes --overwrite)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "mcp__plugin_claude-mem_mcp-search__smart_unfold"
+    ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
+  }
+}
