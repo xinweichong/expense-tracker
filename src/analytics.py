@@ -223,7 +223,7 @@ def get_spending_velocity(conn: sqlite3.Connection) -> dict:
     daily_rate = current_mtd / days_elapsed if days_elapsed > 0 else 0
     projected_total = daily_rate * total_days
 
-    pace_percent = (current_mtd / last_month_total * 100) if last_month_total > 0 else 0
+    pace_percent = (projected_total / last_month_total * 100) if last_month_total > 0 else 0
 
     return {
         "current_mtd": round(current_mtd, 2),
@@ -232,7 +232,7 @@ def get_spending_velocity(conn: sqlite3.Connection) -> dict:
         "days_elapsed": days_elapsed,
         "total_days": total_days,
         "pace_percent": round(pace_percent, 1),
-        "status": "ahead" if pace_percent > 100 else ("on_track" if pace_percent > 80 else "behind"),
+        "status": "ahead" if pace_percent > 110 else ("on_track" if pace_percent >= 80 else "behind"),
     }
 
 
@@ -271,12 +271,19 @@ def check_new_merchants(conn: sqlite3.Connection) -> list[dict]:
             FROM transactions
             WHERE type = 'expense' AND merchant IS NOT NULL
             GROUP BY merchant
+        ),
+        first_tx AS (
+            SELECT t.merchant, t.category, t.amount, t.transaction_date as first_date,
+                   ROW_NUMBER() OVER (PARTITION BY t.merchant ORDER BY t.id) as rn
+            FROM transactions t
+            INNER JOIN first_seen fs ON t.merchant = fs.merchant AND t.transaction_date = fs.first_date
+            WHERE t.type = 'expense'
         )
-        SELECT DISTINCT f.merchant, f.first_date, t.category, t.amount
-        FROM first_seen f
-        JOIN transactions t ON t.merchant = f.merchant AND t.transaction_date = f.first_date
-        WHERE f.first_date >= date('now', 'start of month')
-        ORDER BY f.first_date DESC
+        SELECT merchant, first_date, category, amount
+        FROM first_tx
+        WHERE rn = 1
+          AND first_date >= date('now', 'start of month')
+        ORDER BY first_date DESC
         """,
     ).fetchall()
 

@@ -207,3 +207,21 @@ class TestNewMerchants:
         result = check_new_merchants(conn)
         assert any(r["merchant"] == "New shop" for r in result)
         conn.close()
+
+    def test_new_merchant_no_duplicates(self):
+        conn = make_db()
+        storage = Storage(conn)
+        today = datetime.now().strftime("%Y-%m-%d")
+        # Two transactions from same new merchant on same day
+        storage.insert_transaction(
+            source="manual", source_id="dup-1", amount=10.0, merchant="New shop",
+            category="Food", transaction_date=today,
+        )
+        storage.insert_transaction(
+            source="manual", source_id="dup-2", amount=20.0, merchant="New shop",
+            category="Food", transaction_date=today,
+        )
+        result = check_new_merchants(conn)
+        merchants = [r["merchant"] for r in result]
+        assert merchants.count("New shop") == 1  # no duplicate
+        conn.close()
