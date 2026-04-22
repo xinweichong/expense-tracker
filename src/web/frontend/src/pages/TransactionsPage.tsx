@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TransactionList } from '@/components/transactions/TransactionList';
 import { TransactionFilters } from '@/components/transactions/TransactionFilters';
-import { useTransactions } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
+import { api, type Transaction } from '@/api/client';
 import { Plus } from 'lucide-react';
 
 const PAGE_SIZE = 20;
@@ -12,34 +13,48 @@ const PAGE_SIZE = 20;
 export function TransactionsPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
-  const [offset, setOffset] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const { data: categories } = useCategories();
 
-  const params: Record<string, string | number> = {
-    limit: PAGE_SIZE,
-    offset,
-  };
-  if (search) params.merchant = search;
-  if (category && category !== 'all') params.category = category;
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  } = useInfiniteQuery({
+    queryKey: ['transactions', search, category],
+    queryFn: ({ pageParam = 0 }) => {
+      const params: Record<string, string | number> = {
+        limit: PAGE_SIZE,
+        offset: pageParam as number,
+      };
+      if (search) params.merchant = search;
+      if (category && category !== 'all') params.category = category;
+      return api.getTransactions(params);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage: Transaction[], allPages: Transaction[][]) => {
+      if (lastPage.length < PAGE_SIZE) return undefined;
+      return allPages.length * PAGE_SIZE;
+    },
+  });
 
-  const { data: transactions, isLoading } = useTransactions(params);
-  const txs = transactions ?? [];
-  const hasMore = txs.length === PAGE_SIZE;
+  const txs = data?.pages.flat() ?? [];
 
-  const handleCategoryChange = (v: string) => {
+  const handleCategoryChange = useCallback((v: string) => {
     setCategory(v);
-    setOffset(0);
-  };
+  }, []);
 
-  const handleSearchChange = (v: string) => {
+  const handleSearchChange = useCallback((v: string) => {
     setSearch(v);
-    setOffset(0);
-  };
+  }, []);
 
   const loadMore = useCallback(() => {
-    setOffset((prev) => prev + PAGE_SIZE);
-  }, []);
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
@@ -69,8 +84,8 @@ export function TransactionsPage() {
         <TransactionList
           transactions={txs}
           onLoadMore={loadMore}
-          hasMore={hasMore}
-          isLoading={isLoading}
+          hasMore={!!hasNextPage}
+          isLoading={isLoading || isFetchingNextPage}
         />
       </Card>
     </div>

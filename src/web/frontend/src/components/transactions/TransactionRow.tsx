@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { type Transaction } from '@/api/client';
 import { formatCurrency, formatDate, getCategoryColor } from '@/lib/utils';
 import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/useTransactions';
@@ -19,6 +19,11 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
   const [editing, setEditing] = useState(false);
   const [merchant, setMerchant] = useState(tx.merchant ?? '');
   const [category, setCategory] = useState(tx.category ?? '');
+  useEffect(() => {
+    setMerchant(tx.merchant ?? '');
+    setCategory(tx.category ?? '');
+  }, [tx.id, tx.merchant, tx.category]);
+
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
   const { data: categories } = useCategories();
