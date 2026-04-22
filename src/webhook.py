@@ -28,7 +28,7 @@ def create_webhook_app(
     storage: Storage,
     exchange_service=None,
     categorizer=None,
-    on_transaction: Optional[Callable[[int, float, str, Optional[str], str], None]] = None,
+    on_transaction: Optional[Callable[[int, float, str, Optional[str], str, str], None]] = None,
 ) -> FastAPI:
     app = FastAPI()
     parser = AppleWalletParser()
@@ -46,8 +46,9 @@ def create_webhook_app(
             logger.error(f"Webhook parse error: {e}")
             raise HTTPException(status_code=400, detail=str(e))
 
-        # Same-source dedup check
-        if storage.recent_transaction_exists(result.merchant, result.amount, minutes=5):
+        # Same-source dedup: source_id is a content hash of merchant+amount+date,
+        # so identical re-fires from the iOS Shortcut produce the same source_id.
+        if storage.source_id_exists(result.source_id):
             return {"status": "duplicate", "transaction_id": None}
 
         # Cross-source dedup (10-minute window)
@@ -66,10 +67,12 @@ def create_webhook_app(
         if exchange_service and result.currency != "SGD":
             exchange_rate = exchange_service.get_rate(result.currency)
 
-        # Categorize merchant
-        category = None
+        # Categorize merchant — reload overrides fresh from DB so any changes
+        # made via the web dashboard are always reflected on the next transaction.
+        category, match_source = None, "default"
         if categorizer:
-            category, _ = categorizer.categorize(result.merchant)
+            categorizer.reload_overrides(storage.get_merchant_overrides())
+            category, match_source = categorizer.categorize(result.merchant)
 
         tx_id = storage.insert_transaction(
             source=result.source,
@@ -85,7 +88,7 @@ def create_webhook_app(
         )
 
         if on_transaction:
-            on_transaction(tx_id, result.amount, result.merchant, category, result.source)
+            on_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
 
         return {"status": "ok", "transaction_id": tx_id}
 

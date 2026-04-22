@@ -192,9 +192,10 @@ def main():
 
     # Set up Gmail poller
     def on_transaction(result, tx_id):
-        category, _ = categorizer.categorize(result.merchant)
+        categorizer.reload_overrides(storage.get_merchant_overrides())
+        category, match_source = categorizer.categorize(result.merchant)
         storage.update_transaction(tx_id, category=category)
-        bot.notify_transaction(tx_id, result.amount, result.merchant, category, result.source)
+        bot.notify_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
 
     poller = GmailPoller(
         credentials_path=gmail_config.get("credentials_file", "credentials.json"),

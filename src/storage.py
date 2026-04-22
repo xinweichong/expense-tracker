@@ -259,6 +259,12 @@ class Storage:
         ).fetchone()
         return row is not None
 
+    def source_id_exists(self, source_id: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM transactions WHERE source_id = ?", (source_id,)
+        ).fetchone()
+        return row is not None
+
     def recent_transaction_exists(
         self, merchant: str, amount: float, minutes: int = 5
     ) -> bool:
