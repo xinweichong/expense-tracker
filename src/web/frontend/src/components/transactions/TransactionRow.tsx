@@ -25,12 +25,13 @@ const SOURCE_LABELS: Record<string, string> = {
   cash:         'Cash',
 };
 
-export function TransactionRow({ tx }: { tx: Transaction }) {
+export function TransactionRow({ tx, readOnly = false }: { tx: Transaction; readOnly?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [merchant, setMerchant] = useState(tx.merchant ?? '');
   const [category, setCategory] = useState(tx.category ?? '');
   const [description, setDescription] = useState(tx.description ?? '');
+  const [exchangeRate, setExchangeRate] = useState(tx.exchange_rate ?? 1.0);
 
   const isAppleWallet = tx.source === 'apple_wallet';
 
@@ -38,7 +39,8 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
     setMerchant(tx.merchant ?? '');
     setCategory(tx.category ?? '');
     setDescription(tx.description ?? '');
-  }, [tx.id, tx.merchant, tx.category, tx.description]);
+    setExchangeRate(tx.exchange_rate ?? 1.0);
+  }, [tx.id, tx.merchant, tx.category, tx.description, tx.exchange_rate]);
 
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
@@ -62,6 +64,7 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
   const handleSave = () => {
     const data: Partial<Transaction> = { merchant, category };
     if (isAppleWallet) data.description = description;
+    if (tx.currency !== 'SGD') data.exchange_rate = exchangeRate;
     updateTx.mutate(
       { id: tx.id, data },
       { onSuccess: () => setEditing(false) }
@@ -73,6 +76,11 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
       deleteTx.mutate(tx.id);
     }
   };
+
+  // Source label: for apple_wallet show the card description when available
+  const sourceLabel = isAppleWallet && tx.description
+    ? tx.description
+    : (SOURCE_LABELS[tx.source ?? ''] ?? tx.source ?? '');
 
   if (editing) {
     return (
@@ -110,6 +118,20 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
             </SelectContent>
           </Select>
         )}
+        {tx.currency !== 'SGD' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted whitespace-nowrap">1 {tx.currency} =</span>
+            <Input
+              type="number"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(parseFloat(e.target.value) || 1)}
+              className="flex-1 bg-background border-border text-sm"
+              step="0.0001"
+              min="0"
+            />
+            <span className="text-xs text-muted">SGD</span>
+          </div>
+        )}
         <div className="flex gap-2 justify-end">
           <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
             <XIcon className="w-4 h-4" />
@@ -124,7 +146,7 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
 
   return (
     <div
-      className="group px-4 py-3 flex items-center gap-3 border-b border-border transition-colors last:border-b-0"
+      className="px-4 py-3 flex items-center gap-3 border-b border-border transition-colors last:border-b-0"
       style={{ backgroundColor: `${categoryColor}${hovered ? '1A' : '0D'}` }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -146,7 +168,7 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
           )}
           {tx.source && (
             <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 border-border text-muted">
-              {SOURCE_LABELS[tx.source] ?? tx.source}
+              {sourceLabel}
             </Badge>
           )}
           {tx.currency !== 'SGD' && (
@@ -156,17 +178,26 @@ export function TransactionRow({ tx }: { tx: Transaction }) {
           )}
         </div>
       </div>
-      <span className={`text-sm font-semibold whitespace-nowrap ${tx.type === 'income' ? 'text-success' : ''}`}>
-        {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, tx.currency)}
-      </span>
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(true)}>
-          <Pencil className="w-3.5 h-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={handleDelete}>
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
+      <div className="text-right">
+        <p className={`text-sm font-semibold whitespace-nowrap ${tx.type === 'income' ? 'text-success' : ''}`}>
+          {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, tx.currency)}
+        </p>
+        {tx.currency !== 'SGD' && tx.exchange_rate != null && (
+          <p className="text-xs text-muted whitespace-nowrap">
+            {formatCurrency(tx.amount * tx.exchange_rate)}
+          </p>
+        )}
       </div>
+      {!readOnly && (
+        <div className="flex gap-1">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(true)}>
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={handleDelete}>
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
