@@ -54,7 +54,6 @@ function AppContent() {
       </Routes>
     </>
   );
-  );
 }
 
 export default function App() {
