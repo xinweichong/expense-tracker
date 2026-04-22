@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -80,6 +81,48 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="Transaction not found")
         return tx
 
+    @app.post("/api/transactions")
+    async def create_transaction(request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        amount = body.get("amount")
+        if amount is None:
+            raise HTTPException(status_code=400, detail="amount is required")
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="amount must be a number")
+
+        tx_type = body.get("type", "expense")
+        if tx_type not in ("expense", "income"):
+            raise HTTPException(status_code=400, detail="type must be 'expense' or 'income'")
+
+        source = body.get("source", "manual")
+        source_id = f"manual_{uuid.uuid4().hex[:12]}"
+        merchant = body.get("merchant")
+        description = body.get("description")
+        category = body.get("category")
+        currency = body.get("currency", "SGD")
+        exchange_rate = body.get("exchange_rate", 1.0)
+        transaction_date = body.get("transaction_date") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            tx_id = storage.insert_transaction(
+                source=source,
+                source_id=source_id,
+                amount=amount,
+                merchant=merchant,
+                description=description,
+                category=category,
+                currency=currency,
+                exchange_rate=exchange_rate,
+                transaction_date=transaction_date,
+                tx_type=tx_type,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+
+        return storage.get_transaction(tx_id)
+
     @app.put("/api/transactions/{tx_id}")
     async def update_transaction(tx_id: int, request: Request, _auth=Depends(require_auth)):
         tx = storage.get_transaction(tx_id)
@@ -96,7 +139,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             merchant = fields.get("merchant") or tx.get("merchant")
             if merchant:
                 storage.set_merchant_override(merchant, fields["category"])
-        return {"status": "ok"}
+        return storage.get_transaction(tx_id)
 
     @app.delete("/api/transactions/{tx_id}")
     async def delete_transaction(tx_id: int, _auth=Depends(require_auth)):
