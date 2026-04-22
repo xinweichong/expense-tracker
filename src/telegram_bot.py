@@ -380,7 +380,7 @@ class TelegramBotService:
 
         sgd_equivalent = parsed["amount"] * exchange_rate
         icon = self.storage.get_category_icon_map().get(category, "")
-        cat_display = f"{icon} {category}" if icon else category
+        cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
         msg = f"✅ *Added* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} {currency}`"
         if currency != "SGD":
             msg += f"\n~ SGD `${sgd_equivalent:.2f}`"
@@ -424,7 +424,7 @@ class TelegramBotService:
             transaction_date=tx_date,
         )
         icon = self.storage.get_category_icon_map().get(category, "")
-        cat_display = f"{icon} {category}" if icon else category
+        cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
         msg = f"✅ *Cash* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} SGD`"
         await update.message.reply_text(msg, parse_mode="Markdown")
 
@@ -787,7 +787,7 @@ class TelegramBotService:
         icon_map = self.storage.get_category_icon_map()
         if category and category != "Other":
             icon = icon_map.get(category, "")
-            cat_display = f"{icon} {category}" if icon else category
+            cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
             source_label = SOURCE_LABELS.get(source, source)
             text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{cat_display} · {self._escape_md(source_label)}"
             await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
