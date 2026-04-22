@@ -131,10 +131,10 @@ class TelegramBotService:
         lines.append(f"Source: {source}")
         return "\n".join(lines)
 
-    async def _send_long_message(self, update: Update, text: str, parse_mode: str = "Markdown") -> None:
+    async def _send_long_message(self, update: Update, text: str, parse_mode: str = "Markdown", reply_markup=None) -> None:
         limit = 3800
         if len(text) <= limit:
-            await update.message.reply_text(text, parse_mode=parse_mode)
+            await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
             return
         parts = []
         while text:
@@ -146,8 +146,9 @@ class TelegramBotService:
                 split_at = limit
             parts.append(text[:split_at])
             text = text[split_at:].lstrip("\n")
-        for part in parts:
-            await update.message.reply_text(part, parse_mode=parse_mode)
+        for i, part in enumerate(parts):
+            markup = reply_markup if i == len(parts) - 1 else None
+            await update.message.reply_text(part, parse_mode=parse_mode, reply_markup=markup)
 
     def _build_summary_with_transactions(self, header: str, summary: dict, start_date: str, end_date: str) -> str:
         lines = [header, f"Total: ${summary['total']:.2f}", ""]
@@ -202,6 +203,8 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("merchants_report", self._merchants))
         self.app.add_handler(CommandHandler("velocity", self._velocity))
         self.app.add_handler(CommandHandler("summary", self._summary))
+        self.app.add_handler(CommandHandler("yesterday", self._yesterday))
+        self.app.add_handler(CommandHandler("menu", self._menu))
 
         # Redirect removed commands to web
         self.app.add_handler(CommandHandler("categories", self._redirect_to_web))
@@ -210,7 +213,8 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("deletecategory", self._redirect_to_web))
         self.app.add_handler(CommandHandler("uncategorized", self._redirect_to_web))
 
-        self.app.add_handler(CallbackQueryHandler(self._category_callback))
+        self.app.add_handler(CallbackQueryHandler(self._cmd_callback, pattern="^cmd_"))
+        self.app.add_handler(CallbackQueryHandler(self._category_callback, pattern="^cat:"))
 
         # Catch-all must be last
         self.app.add_handler(MessageHandler(filters.COMMAND, self._unknown))
@@ -226,6 +230,20 @@ class TelegramBotService:
     async def _today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         today = datetime.now().strftime("%Y-%m-%d")
         text = self.format_daily_summary(today)
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📅 Yesterday", callback_data="cmd_yesterday"),
+                InlineKeyboardButton("📊 Week", callback_data="cmd_week"),
+            ],
+            [
+                InlineKeyboardButton("➕ Add Cash", callback_data="cmd_cash"),
+            ],
+        ])
+        await self._send_long_message(update, text, reply_markup=keyboard)
+
+    async def _yesterday(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        text = self.format_daily_summary(yesterday)
         await self._send_long_message(update, text)
 
     async def _week(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -710,6 +728,9 @@ class TelegramBotService:
         query = update.callback_query
         await query.answer()
 
+        if not query.data.startswith("cat:"):
+            return
+
         _, tx_id_str, category = query.data.split(":", 2)
         tx_id = int(tx_id_str)
         tx = self.storage.get_transaction(tx_id)
@@ -725,6 +746,61 @@ class TelegramBotService:
                 self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
 
         await query.edit_message_text(f"{merchant} → {category}")
+
+    async def _cmd_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+
+        if not data.startswith("cmd_"):
+            return
+
+        handler_map = {
+            "cmd_today": self._today,
+            "cmd_yesterday": self._yesterday,
+            "cmd_week": self._week,
+            "cmd_insights": self._insights,
+            "cmd_balance": self._balance,
+            "cmd_compare": self._compare,
+            "cmd_merchants": self._merchants,
+            "cmd_velocity": self._velocity,
+            "cmd_summary": self._summary,
+            "cmd_menu": self._menu,
+            "cmd_cash": self._cash,
+            "cmd_subscriptions": self._subscriptions,
+            "cmd_add": self._add,
+            "cmd_income": self._income,
+        }
+
+        handler = handler_map.get(data)
+        if handler:
+            update.message = query.message
+            await handler(update, context)
+
+    async def _menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📅 Today", callback_data="cmd_today"),
+                InlineKeyboardButton("📆 Week", callback_data="cmd_week"),
+            ],
+            [
+                InlineKeyboardButton("📊 Insights", callback_data="cmd_insights"),
+                InlineKeyboardButton("📋 Balance", callback_data="cmd_balance"),
+            ],
+            [
+                InlineKeyboardButton("🔄 Subscriptions", callback_data="cmd_subscriptions"),
+                InlineKeyboardButton("📈 Compare", callback_data="cmd_compare"),
+            ],
+            [
+                InlineKeyboardButton("➕ Add", callback_data="cmd_add"),
+                InlineKeyboardButton("💰 Income", callback_data="cmd_income"),
+            ],
+        ])
+        await update.message.reply_text(
+            "*Quick Actions*",
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+        )
 
     async def _redirect_to_web(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(

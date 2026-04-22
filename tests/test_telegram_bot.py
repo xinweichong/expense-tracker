@@ -164,3 +164,111 @@ class TestBalanceCommand:
 
         update.message.reply_text.assert_called_once_with("No transactions this month")
 
+
+class TestYesterdayCommand:
+    @pytest.mark.asyncio
+    async def test_yesterday_sends_message_for_yesterday(self, bot_service):
+        from datetime import datetime, timedelta
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        bot_service.format_daily_summary = MagicMock(return_value=f"No transactions on {yesterday}")
+
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+
+        await bot_service._yesterday(update, context)
+
+        bot_service.format_daily_summary.assert_called_once_with(yesterday)
+        update.message.reply_text.assert_called_once()
+
+
+class TestMenuCommand:
+    @pytest.mark.asyncio
+    async def test_menu_sends_quick_actions(self, bot_service):
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+
+        await bot_service._menu(update, context)
+
+        update.message.reply_text.assert_called_once()
+        call_kwargs = update.message.reply_text.call_args
+        text = call_kwargs[0][0] if call_kwargs[0] else call_kwargs.kwargs.get("text", "")
+        assert "*Quick Actions*" in text
+        assert call_kwargs.kwargs.get("reply_markup") is not None
+
+
+class TestCmdCallback:
+    @pytest.mark.asyncio
+    async def test_cmd_callback_dispatches_to_week(self, bot_service):
+        bot_service._week = AsyncMock()
+
+        query = MagicMock()
+        query.answer = AsyncMock()
+        query.data = "cmd_week"
+        query.message = MagicMock()
+
+        update = MagicMock()
+        update.callback_query = query
+        context = MagicMock()
+
+        await bot_service._cmd_callback(update, context)
+
+        query.answer.assert_called_once()
+        bot_service._week.assert_called_once_with(update, context)
+
+    @pytest.mark.asyncio
+    async def test_cmd_callback_ignores_unknown(self, bot_service):
+        query = MagicMock()
+        query.answer = AsyncMock()
+        query.data = "unknown_cmd"
+
+        update = MagicMock()
+        update.callback_query = query
+        context = MagicMock()
+
+        await bot_service._cmd_callback(update, context)
+
+        query.answer.assert_called_once()
+        # No handler should be called — we just verify no errors raised
+
+
+class TestCategoryCallback:
+    @pytest.mark.asyncio
+    async def test_category_callback_handles_cat_data(self, bot_service, in_memory_db):
+        in_memory_db.execute(
+            """INSERT INTO transactions (source, source_id, amount, merchant, category, transaction_date)
+               VALUES ('manual', 'm1', 10.0, 'Toast Box', 'Other', '2026-04-16T12:00:00')"""
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute("SELECT id FROM transactions WHERE source_id='m1'").fetchone()["id"]
+
+        query = MagicMock()
+        query.answer = AsyncMock()
+        query.data = f"cat:{tx_id}:Food"
+        query.edit_message_text = AsyncMock()
+
+        update = MagicMock()
+        update.callback_query = query
+        context = MagicMock()
+
+        await bot_service._category_callback(update, context)
+
+        query.edit_message_text.assert_called_once()
+        assert "Food" in query.edit_message_text.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_category_callback_ignores_non_cat_data(self, bot_service):
+        query = MagicMock()
+        query.answer = AsyncMock()
+        query.data = "cmd_menu"
+        query.edit_message_text = AsyncMock()
+
+        update = MagicMock()
+        update.callback_query = query
+        context = MagicMock()
+
+        await bot_service._category_callback(update, context)
+
+        query.edit_message_text.assert_not_called()
+
