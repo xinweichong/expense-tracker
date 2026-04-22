@@ -1,3 +1,5 @@
+import json
+import os
 import pytest
 from datetime import datetime, timedelta
 import sqlite3
@@ -10,6 +12,8 @@ from src.analytics import (
     get_spending_velocity,
     get_anomalies,
     check_new_merchants,
+    generate_summary,
+    load_summary,
 )
 
 
@@ -225,3 +229,35 @@ class TestNewMerchants:
         merchants = [r["merchant"] for r in result]
         assert merchants.count("New shop") == 1  # no duplicate
         conn.close()
+
+
+class TestSummaryReport:
+    def test_generate_monthly_summary(self, db_with_transactions, tmp_path):
+        result = generate_summary(
+            db_with_transactions,
+            report_type="monthly",
+            cache_dir=str(tmp_path),
+        )
+        assert result["total_spent"] == 400.0
+        assert result["transaction_count"] == 4
+        assert "top_category" in result
+        assert "biggest_transaction" in result
+
+    def test_summary_cached_to_file(self, db_with_transactions, tmp_path):
+        generate_summary(
+            db_with_transactions,
+            report_type="monthly",
+            cache_dir=str(tmp_path),
+        )
+        # Check that a JSON file was created
+        files = os.listdir(tmp_path)
+        assert any(f.endswith(".json") for f in files)
+
+    def test_load_cached_summary(self, db_with_transactions, tmp_path):
+        original = generate_summary(
+            db_with_transactions,
+            report_type="monthly",
+            cache_dir=str(tmp_path),
+        )
+        loaded = load_summary(str(tmp_path), report_type="monthly")
+        assert loaded["total_spent"] == original["total_spent"]

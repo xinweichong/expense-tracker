@@ -1,5 +1,7 @@
 """Analytics computation module — pure functions that query the transactions table."""
 
+import json
+import os
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
@@ -288,3 +290,92 @@ def check_new_merchants(conn: sqlite3.Connection) -> list[dict]:
     ).fetchall()
 
     return [dict(r) for r in rows]
+
+
+def generate_summary(
+    conn: sqlite3.Connection,
+    report_type: str = "monthly",
+    cache_dir: str | None = None,
+) -> dict:
+    """Generate a summary report for the current period."""
+    if report_type == "weekly":
+        start, end = _get_week_range()
+    else:
+        start, end = _get_month_range()
+
+    total_spent = _query_total(conn, start, end)
+
+    count_row = conn.execute(
+        "SELECT COUNT(*) as cnt FROM transactions WHERE type='expense' AND transaction_date >= ? AND transaction_date <= ?",
+        [start, end],
+    ).fetchone()
+
+    top_cat = conn.execute(
+        """
+        SELECT category, ROUND(SUM(amount * exchange_rate), 2) as total
+        FROM transactions
+        WHERE type='expense' AND category IS NOT NULL
+          AND transaction_date >= ? AND transaction_date <= ?
+        GROUP BY category
+        ORDER BY total DESC LIMIT 1
+        """,
+        [start, end],
+    ).fetchone()
+
+    biggest = conn.execute(
+        """
+        SELECT merchant, amount, currency, category, transaction_date
+        FROM transactions
+        WHERE type='expense' AND transaction_date >= ? AND transaction_date <= ?
+        ORDER BY amount * exchange_rate DESC LIMIT 1
+        """,
+        [start, end],
+    ).fetchone()
+
+    prev_start, prev_end = _get_previous_period(start, end)
+    prev_total = _query_total(conn, prev_start, prev_end)
+    change = total_spent - prev_total
+    change_pct = (change / prev_total * 100) if prev_total > 0 else (None if total_spent > 0 else 0)
+
+    new_merchants = check_new_merchants(conn)
+
+    report = {
+        "type": report_type,
+        "start_date": start,
+        "end_date": end,
+        "total_spent": round(total_spent, 2),
+        "transaction_count": count_row["cnt"],
+        "top_category": dict(top_cat) if top_cat else None,
+        "biggest_transaction": dict(biggest) if biggest else None,
+        "previous_total": round(prev_total, 2),
+        "change": round(change, 2),
+        "change_percent": round(change_pct, 1) if change_pct is not None else None,
+        "new_merchant_count": len(new_merchants),
+        "generated_at": datetime.now().isoformat(),
+    }
+
+    if cache_dir:
+        os.makedirs(cache_dir, exist_ok=True)
+        filename = f"{report_type}_{start}_{end}.json"
+        filepath = os.path.join(cache_dir, filename)
+        with open(filepath, "w") as f:
+            json.dump(report, f, indent=2)
+
+    return report
+
+
+def load_summary(cache_dir: str, report_type: str = "monthly") -> dict | None:
+    """Load the most recent cached summary report."""
+    if not os.path.isdir(cache_dir):
+        return None
+
+    files = sorted(
+        [f for f in os.listdir(cache_dir) if f.startswith(report_type) and f.endswith(".json")],
+        reverse=True,
+    )
+    if not files:
+        return None
+
+    filepath = os.path.join(cache_dir, files[0])
+    with open(filepath) as f:
+        return json.load(f)
