@@ -108,12 +108,13 @@ export function SettingsPage() {
                     size="icon"
                     className="h-7 w-7 text-accent"
                     onClick={() => handleDeleteCategory(cat.name)}
+                    disabled={deleteCat.isPending}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </div>
               </div>
-              {cat.keywords && (
+              {cat.keywords?.trim() && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {cat.keywords.split(',').map((kw) => (
                     <Badge key={kw.trim()} variant="outline" className="text-xs border-border">
@@ -148,7 +149,16 @@ export function SettingsPage() {
       </Card>
 
       {/* Add Category Dialog */}
-      <Dialog open={showAddCategory} onOpenChange={setShowAddCategory}>
+      <Dialog
+        open={showAddCategory}
+        onOpenChange={(open) => {
+          setShowAddCategory(open);
+          if (!open) {
+            setNewCatName('');
+            setNewCatKeywords('');
+          }
+        }}
+      >
         <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle>Add Category</DialogTitle>
