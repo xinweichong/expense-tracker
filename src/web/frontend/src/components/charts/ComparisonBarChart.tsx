@@ -37,8 +37,8 @@ export function ComparisonBarChart({ data }: { data: ComparisonData[] }) {
             formatter={(value) => value != null ? formatCurrency(Number(value)) : ''}
           />
           <Legend wrapperStyle={{ fontSize: '12px' }} />
-          <Bar dataKey="current" name="This period" fill="#FF6B6B" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="previous" name="Last period" fill="#2A2A32" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="current" name="This period" fill="#00D4AA" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="previous" name="Last period" fill="#3A3A46" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -34,7 +34,7 @@ export function LoginScreen() {
             autoFocus
           />
           {error && (
-            <p className="text-accent text-sm">Incorrect password</p>
+            <p className="text-destructive text-sm">Incorrect password</p>
           )}
           <Button
             type="submit"

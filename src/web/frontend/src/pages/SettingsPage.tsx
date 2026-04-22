@@ -221,7 +221,7 @@ export function SettingsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-accent"
+                        className="h-7 w-7 text-destructive"
                         onClick={() => handleDeleteCategory(cat.name)}
                         disabled={deleteCat.isPending}
                       >
@@ -350,7 +350,7 @@ export function SettingsPage() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-accent"
+                className="h-7 w-7 text-destructive"
                 onClick={() => handleDeleteOverride(ov.merchant)}
                 disabled={deleteOverride.isPending}
               >

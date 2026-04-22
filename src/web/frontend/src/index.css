@@ -8,6 +8,10 @@
   --color-foreground: #E8E8ED;
   --color-muted: #72727E;
   --color-accent: #00D4AA;
+  --color-primary: #00D4AA;
+  --color-primary-foreground: #0D0D0F;
+  --color-destructive: #FF453A;
+  --color-destructive-foreground: #FFFFFF;
   --color-success: #30D158;
   --color-warning: #FFD60A;
   --color-info: #64D2FF;

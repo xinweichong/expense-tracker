@@ -18,7 +18,7 @@ export function VelocityRing({ data }: { data: VelocityData }) {
   const strokeDashoffset = circumference - progress * circumference;
 
   const color =
-    status === 'ahead' ? '#FF6B6B' :
+    status === 'ahead' ? '#FF453A' :
     status === 'on_track' ? '#30D158' :
     '#64D2FF';
 
@@ -42,7 +42,7 @@ export function VelocityRing({ data }: { data: VelocityData }) {
         <p>Spent MTD: <span className="font-medium">{formatCurrency(current_mtd)}</span></p>
         <p>Projected: <span className="font-medium">{formatCurrency(projected_total)}</span></p>
         <p>Last month: <span className="font-medium">{formatCurrency(last_month_total)}</span></p>
-        <p className={`font-medium ${status === 'ahead' ? 'text-accent' : status === 'on_track' ? 'text-success' : 'text-info'}`}>
+        <p className={`font-medium ${status === 'ahead' ? 'text-destructive' : status === 'on_track' ? 'text-success' : 'text-info'}`}>
           {status === 'ahead' ? 'Spending ahead of pace' : status === 'on_track' ? 'On track' : 'Under pace'}
         </p>
       </div>
