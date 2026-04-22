@@ -198,6 +198,13 @@ class Storage:
         rows = self.conn.execute("SELECT * FROM categories ORDER BY ROWID").fetchall()
         return [dict(r) for r in rows]
 
+    def get_category_icon_map(self) -> dict[str, str]:
+        """Returns {category_name: icon} for all categories that have an icon."""
+        rows = self.conn.execute(
+            "SELECT name, icon FROM categories WHERE icon IS NOT NULL"
+        ).fetchall()
+        return {row["name"]: row["icon"] for row in rows}
+
     def get_ingestion_state(self, source: str) -> Optional[dict]:
         row = self.conn.execute(
             "SELECT * FROM ingestion_state WHERE source = ?", (source,)
