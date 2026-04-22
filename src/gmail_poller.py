@@ -54,7 +54,7 @@ class GmailPoller:
             with open(self.token_path, "w") as f:
                 f.write(creds.to_json())
 
-        self.service = build("gmail", "v1", credentials=creds)
+        self.service = build("gmail", "v1", credentials=creds, cache_discovery=False)
         logger.info("Gmail authenticated successfully")
 
     def _build_query(self) -> str:
