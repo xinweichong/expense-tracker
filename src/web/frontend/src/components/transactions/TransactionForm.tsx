@@ -41,10 +41,12 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const parsed = parseFloat(amount);
+    if (isNaN(parsed) || parsed <= 0) return;
     createTx.mutate(
       {
-        type,
-        amount: parseFloat(amount),
+        type: type === 'cash' ? 'expense' : type,
+        amount: parsed,
         merchant: merchant || undefined,
         category: category || undefined,
         description: description || undefined,
