@@ -245,6 +245,13 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_trend(start, end)
 
+    @app.get("/api/trend/by-category")
+    async def trend_by_category(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+        today = datetime.now()
+        start = start_date or f"{today.year}-{today.month:02d}-01"
+        end = end_date or today.strftime("%Y-%m-%d")
+        return storage.get_trend_by_category(start, end)
+
     @app.get("/api/merchants")
     async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
         today = datetime.now()

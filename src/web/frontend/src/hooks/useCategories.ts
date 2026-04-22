@@ -47,6 +47,13 @@ export function useTrend(start_date: string, end_date: string) {
   });
 }
 
+export function useTrendByCategory(start_date: string, end_date: string) {
+  return useQuery({
+    queryKey: ['trend-by-category', start_date, end_date],
+    queryFn: () => api.getTrendByCategory(start_date, end_date),
+  });
+}
+
 export function useBalance(start_date: string, end_date: string) {
   return useQuery({
     queryKey: ['balance', start_date, end_date],

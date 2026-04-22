@@ -583,3 +583,42 @@ class TestInsights:
         assert comparison["previous"]["total"] == 200.0
         assert comparison["previous"]["by_category"]["Food"] == 80.0
         assert comparison["previous"]["by_category"]["Shopping"] == 120.0
+
+
+class TestTrendByCategory:
+    def test_trend_by_category_groups_correctly(self, storage):
+        # Two Food transactions and one Transport on the same date
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=20.0,
+            merchant="A", category="Food", transaction_date="2026-04-10T09:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=30.0,
+            merchant="B", category="Food", transaction_date="2026-04-10T12:00:00",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m3", amount=12.0,
+            merchant="C", category="Transport", transaction_date="2026-04-10T15:00:00",
+        )
+        result = storage.get_trend_by_category("2026-04-01", "2026-04-30")
+        assert len(result) == 1
+        row = result[0]
+        assert row["date"] == "2026-04-10"
+        assert row["Food"] == pytest.approx(50.0)
+        assert row["Transport"] == pytest.approx(12.0)
+
+    def test_trend_by_category_excludes_income(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=50.0,
+            merchant="Salary", category="Income",
+            transaction_date="2026-04-01T10:00:00", tx_type="income",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=15.0,
+            merchant="Lunch", category="Food",
+            transaction_date="2026-04-01T12:00:00",
+        )
+        result = storage.get_trend_by_category("2026-04-01", "2026-04-30")
+        assert len(result) == 1
+        assert "Income" not in result[0]
+        assert result[0]["Food"] == pytest.approx(15.0)
