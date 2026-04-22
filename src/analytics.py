@@ -189,3 +189,95 @@ def get_merchant_trend(
         "previous_month": previous_month,
         "trend": "up" if current_month > previous_month else ("down" if current_month < previous_month else "stable"),
     }
+
+
+def get_spending_velocity(conn: sqlite3.Connection) -> dict:
+    """Calculate spending velocity: current MTD vs projected based on last month's pace."""
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+
+    # Current month range
+    mtd_start = now.replace(day=1).strftime("%Y-%m-%d")
+
+    # Last month range
+    if now.month == 1:
+        last_start = now.replace(year=now.year - 1, month=12, day=1)
+    else:
+        last_start = now.replace(month=now.month - 1, day=1)
+    if last_start.month == 12:
+        last_end = last_start.replace(year=last_start.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        last_end = last_start.replace(month=last_start.month + 1, day=1) - timedelta(days=1)
+
+    current_mtd = _query_total(conn, mtd_start, today)
+    last_month_total = _query_total(conn, last_start.strftime("%Y-%m-%d"), last_end.strftime("%Y-%m-%d"))
+
+    # Project: if we're on day X of N days in the month, project based on daily rate
+    if now.month < 12:
+        days_in_month_end = now.replace(month=now.month + 1, day=1) - timedelta(days=1)
+    else:
+        days_in_month_end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(days=1)
+    days_elapsed = now.day
+    total_days = days_in_month_end.day
+
+    daily_rate = current_mtd / days_elapsed if days_elapsed > 0 else 0
+    projected_total = daily_rate * total_days
+
+    pace_percent = (current_mtd / last_month_total * 100) if last_month_total > 0 else 0
+
+    return {
+        "current_mtd": round(current_mtd, 2),
+        "last_month_total": round(last_month_total, 2),
+        "projected_total": round(projected_total, 2),
+        "days_elapsed": days_elapsed,
+        "total_days": total_days,
+        "pace_percent": round(pace_percent, 1),
+        "status": "ahead" if pace_percent > 100 else ("on_track" if pace_percent > 80 else "behind"),
+    }
+
+
+def get_anomalies(conn: sqlite3.Connection, multiplier: float = 2.0) -> list[dict]:
+    """Find transactions that are > multiplier * category average."""
+    rows = conn.execute(
+        """
+        WITH cat_avg AS (
+            SELECT category, AVG(amount * exchange_rate) as avg_amount
+            FROM transactions
+            WHERE type = 'expense' AND category IS NOT NULL
+            GROUP BY category
+            HAVING COUNT(*) >= 3
+        )
+        SELECT t.id, t.merchant, t.amount, t.currency, t.category,
+               t.transaction_date, ca.avg_amount
+        FROM transactions t
+        JOIN cat_avg ca ON t.category = ca.category
+        WHERE t.type = 'expense'
+          AND t.amount * t.exchange_rate > ca.avg_amount * ?
+          AND t.transaction_date >= date('now', '-30 days')
+        ORDER BY t.amount DESC
+        """,
+        [multiplier],
+    ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def check_new_merchants(conn: sqlite3.Connection) -> list[dict]:
+    """Find merchants that appeared for the first time this month."""
+    rows = conn.execute(
+        """
+        WITH first_seen AS (
+            SELECT merchant, MIN(transaction_date) as first_date
+            FROM transactions
+            WHERE type = 'expense' AND merchant IS NOT NULL
+            GROUP BY merchant
+        )
+        SELECT DISTINCT f.merchant, f.first_date, t.category, t.amount
+        FROM first_seen f
+        JOIN transactions t ON t.merchant = f.merchant AND t.transaction_date = f.first_date
+        WHERE f.first_date >= date('now', 'start of month')
+        ORDER BY f.first_date DESC
+        """,
+    ).fetchall()
+
+    return [dict(r) for r in rows]

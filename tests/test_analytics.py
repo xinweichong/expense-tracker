@@ -7,6 +7,9 @@ from src.analytics import (
     get_category_comparison,
     get_top_merchants,
     get_merchant_trend,
+    get_spending_velocity,
+    get_anomalies,
+    check_new_merchants,
 )
 
 
@@ -133,4 +136,74 @@ class TestMerchantAnalysis:
             )
         result = get_top_merchants(conn, limit=3)
         assert len(result) == 3
+        conn.close()
+
+
+class TestSpendingVelocity:
+    def test_velocity_calculation(self, db_with_transactions):
+        result = get_spending_velocity(db_with_transactions)
+        assert "current_mtd" in result
+        assert "projected_total" in result
+        assert "last_month_total" in result
+        assert "pace_percent" in result
+        assert result["current_mtd"] > 0
+
+    def test_velocity_start_of_month(self):
+        conn = make_db()
+        storage = Storage(conn)
+        today = datetime.now()
+        first_day = today.replace(day=1).strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="vel-test-1", amount=50.0, merchant="Test",
+            category="Food", transaction_date=first_day,
+        )
+        result = get_spending_velocity(conn)
+        assert result["current_mtd"] == 50.0
+        conn.close()
+
+
+class TestAnomalies:
+    def test_no_anomalies(self, db_with_transactions):
+        result = get_anomalies(db_with_transactions)
+        assert isinstance(result, list)
+
+    def test_anomaly_detection(self):
+        conn = make_db()
+        storage = Storage(conn)
+        # Normal transactions: $15 each in Food (5 of them, so avg = 15)
+        for i in range(5):
+            storage.insert_transaction(
+                source="manual", source_id=f"normal-{i}",
+                amount=15.0, merchant="Normal shop",
+                category="Food", transaction_date=datetime.now().strftime("%Y-%m-%d"),
+            )
+        # Anomalous transaction: $500 in Food (> 2x average)
+        storage.insert_transaction(
+            source="manual", source_id="anomaly-1",
+            amount=500.0, merchant="Fancy restaurant",
+            category="Food", transaction_date=datetime.now().strftime("%Y-%m-%d"),
+        )
+        result = get_anomalies(conn)
+        assert len(result) > 0
+        assert result[0]["amount"] == 500.0
+        conn.close()
+
+
+class TestNewMerchants:
+    def test_detect_new_merchant(self):
+        conn = make_db()
+        storage = Storage(conn)
+        # Old merchant (last month)
+        last_month = (datetime.now() - timedelta(days=35)).strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="old-shop", amount=10.0, merchant="Old shop",
+            category="Food", transaction_date=last_month,
+        )
+        # New merchant (this month, first time)
+        storage.insert_transaction(
+            source="manual", source_id="new-shop", amount=20.0, merchant="New shop",
+            category="Food", transaction_date=datetime.now().strftime("%Y-%m-%d"),
+        )
+        result = check_new_merchants(conn)
+        assert any(r["merchant"] == "New shop" for r in result)
         conn.close()
