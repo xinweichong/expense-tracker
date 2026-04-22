@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -9,8 +10,24 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from src.storage import Storage
 from src.web.auth import verify_password, create_session, verify_session
+from src.analytics import (
+    get_period_comparison,
+    get_category_comparison,
+    get_top_merchants as get_top_merchants_analytics,
+    get_merchant_trend,
+    get_spending_velocity,
+    get_anomalies,
+    check_new_merchants,
+    generate_summary,
+    load_summary,
+)
 
 logger = logging.getLogger(__name__)
+
+SUMMARY_CACHE_DIR = os.environ.get(
+    "SUMMARY_CACHE_DIR",
+    os.path.join(os.path.dirname(__file__), "..", "data", "summaries")
+)
 
 
 def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
@@ -250,8 +267,49 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @app.get("/api/analytics/comparison")
+    async def analytics_comparison(
+        period: str = "month",
+        date: Optional[str] = None,
+        _auth=Depends(require_auth),
+    ):
+        overall = get_period_comparison(storage.conn, period, date)
+        categories = get_category_comparison(storage.conn, period, date)
+        return {"overall": overall, "categories": categories}
+
+
+    @app.get("/api/analytics/merchants")
+    async def analytics_merchants(
+        limit: int = 10,
+        merchant: Optional[str] = None,
+        _auth=Depends(require_auth),
+    ):
+        top = get_top_merchants_analytics(storage.conn, limit)
+        trend = get_merchant_trend(storage.conn, merchant) if merchant else None
+        return {"top": top, "trend": trend}
+
+
+    @app.get("/api/analytics/velocity")
+    async def analytics_velocity(_auth=Depends(require_auth)):
+        return get_spending_velocity(storage.conn)
+
+
+    @app.get("/api/analytics/alerts")
+    async def analytics_alerts(_auth=Depends(require_auth)):
+        return {
+            "anomalies": get_anomalies(storage.conn),
+            "new_merchants": check_new_merchants(storage.conn),
+        }
+
+
+    @app.get("/api/analytics/summaries")
+    async def analytics_summaries(_auth=Depends(require_auth)):
+        monthly = load_summary(SUMMARY_CACHE_DIR, "monthly")
+        weekly = load_summary(SUMMARY_CACHE_DIR, "weekly")
+        return {"monthly": monthly, "weekly": weekly}
+
+
     # Serve React SPA
-    import os
 
     static_dist = os.path.join(os.path.dirname(__file__), "dist")
     if os.path.isdir(static_dist):

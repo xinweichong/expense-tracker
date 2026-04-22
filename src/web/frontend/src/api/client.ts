@@ -121,4 +121,26 @@ export const api = {
     request<{ status: string }>(`/api/merchant-overrides/${encodeURIComponent(merchant)}`, {
       method: 'DELETE',
     }),
+
+  // Analytics endpoints
+  getAnalyticsComparison: (period: string, date?: string) => {
+    const params = new URLSearchParams({ period });
+    if (date) params.set('date', date);
+    return request<any>(`/api/analytics/comparison?${params}`);
+  },
+
+  getAnalyticsMerchants: (limit = 10, merchant?: string) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (merchant) params.set('merchant', merchant);
+    return request<any>(`/api/analytics/merchants?${params}`);
+  },
+
+  getAnalyticsVelocity: () =>
+    request<any>('/api/analytics/velocity'),
+
+  getAnalyticsAlerts: () =>
+    request<any>('/api/analytics/alerts'),
+
+  getAnalyticsSummaries: () =>
+    request<any>('/api/analytics/summaries'),
 };
