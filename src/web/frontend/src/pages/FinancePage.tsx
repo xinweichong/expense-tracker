@@ -313,7 +313,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                 <div
                   key={c.id}
                   title={`${c.month}: $${c.amount}`}
-                  className="flex-1 rounded-sm bg-foreground/20 hover:bg-foreground/40 transition-colors"
+                  className="flex-1 rounded-sm bg-primary/60 hover:bg-primary/80 transition-colors"
                   style={{ height: `${h}px` }}
                 />
               );
