@@ -121,7 +121,7 @@ export function TransactionFilters({
           aria-label="Start date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          className="px-2 py-1.5 text-sm bg-background border border-border rounded-md text-foreground"
+          className="input-field"
         />
         <span className="text-muted text-sm">–</span>
         <input
@@ -129,7 +129,7 @@ export function TransactionFilters({
           aria-label="End date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
-          className="px-2 py-1.5 text-sm bg-background border border-border rounded-md text-foreground"
+          className="input-field"
         />
       </div>
 

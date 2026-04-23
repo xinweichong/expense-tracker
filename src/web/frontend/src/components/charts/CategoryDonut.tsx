@@ -1,5 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { getCategoryColor, formatCurrency } from '@/lib/utils';
+import { CHART_TOOLTIP_STYLE } from '@/lib/chartTheme';
 
 interface CategoryData {
   category: string;
@@ -38,12 +39,7 @@ export function CategoryDonut({ data }: { data: CategoryData[] }) {
               ))}
             </Pie>
             <Tooltip
-              contentStyle={{
-                background: '#16161A',
-                border: '1px solid #2A2A32',
-                borderRadius: '8px',
-                fontSize: '13px',
-              }}
+              contentStyle={CHART_TOOLTIP_STYLE}
               formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
             />
           </PieChart>

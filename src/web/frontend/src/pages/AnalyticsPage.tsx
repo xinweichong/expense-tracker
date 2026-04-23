@@ -1,4 +1,5 @@
 import { Card } from '@/components/ui/card';
+import { PageCard, ChartCard } from '@/components/ui/cards';
 import { ComparisonBarChart } from '@/components/charts/ComparisonBarChart';
 import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { MerchantTable } from '@/components/charts/MerchantTable';
@@ -32,13 +33,22 @@ export function AnalyticsPage() {
 
   const hasAlerts = (alerts?.anomalies?.length ?? 0) > 0 || (alerts?.new_merchants?.length ?? 0) > 0;
 
+  const comparisonBadge = comparison?.overall && (
+    <Badge variant="outline" className="border-border text-xs">
+      <TrendingUp className="w-3 h-3 mr-1" />
+      {comparison.overall.change_percent != null
+        ? `${comparison.overall.change_percent > 0 ? '+' : ''}${comparison.overall.change_percent}%`
+        : 'New'}
+    </Badge>
+  );
+
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 md:space-y-6">
       <h1 className="text-xl font-bold">Analytics</h1>
 
-      {/* Alerts */}
+      {/* Alerts — bespoke, intentionally not abstracted */}
       {hasAlerts && (
-        <Card className="p-4 bg-card border-warning/30">
+        <Card className="p-4 border-warning/30">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
             <div className="space-y-1">
@@ -64,35 +74,24 @@ export function AnalyticsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Period Comparison */}
-        <Card className="p-4 bg-card border-border">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium">Period Comparison</h3>
-            {comparison?.overall && (
-              <Badge variant="outline" className="border-border text-xs">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                {comparison.overall.change_percent != null
-                  ? `${comparison.overall.change_percent > 0 ? '+' : ''}${comparison.overall.change_percent}%`
-                  : 'New'}
-              </Badge>
+        <ChartCard title="Period Comparison" action={comparisonBadge}>
+          <div className="p-4">
+            {comparison?.categories && (
+              <ComparisonBarChart data={comparison.categories} />
             )}
           </div>
-          {comparison?.categories && (
-            <ComparisonBarChart data={comparison.categories} />
-          )}
-        </Card>
+        </ChartCard>
 
         {/* Spending Velocity */}
-        <Card className="p-4 bg-card border-border">
-          <h3 className="text-sm font-medium mb-4">Spending Velocity</h3>
+        <PageCard title="Spending Velocity">
           {velocity && <VelocityRing data={velocity} />}
-        </Card>
+        </PageCard>
       </div>
 
       {/* Top Merchants */}
-      <Card className="p-4 bg-card border-border">
-        <h3 className="text-sm font-medium mb-4">Top Merchants This Month</h3>
+      <PageCard title="Top Merchants This Month">
         <MerchantTable data={merchants?.top ?? []} />
-      </Card>
+      </PageCard>
 
       {/* Income vs Expenses */}
       <IncomeExpenseBar />

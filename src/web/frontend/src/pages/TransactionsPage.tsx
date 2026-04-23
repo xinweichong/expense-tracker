@@ -90,7 +90,7 @@ export function TransactionsPage() {
         />
       )}
 
-      <Card className="bg-card border-border overflow-hidden">
+      <Card className="overflow-hidden">
         <TransactionList
           transactions={txs}
           onLoadMore={loadMore}

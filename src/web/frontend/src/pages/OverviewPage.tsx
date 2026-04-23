@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummary, useTrend, useTrendByCategory, useBalance } from '@/hooks/useCategories';
@@ -11,6 +10,7 @@ import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
+import { StatCard, PageCard } from '@/components/ui/cards';
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -77,6 +77,33 @@ export function OverviewPage() {
   const income = balance?.income ?? 0;
   const expenses = balance?.expenses ?? 0;
 
+  const trendToggle = (
+    <div className="flex rounded-md border border-border overflow-hidden">
+      <button
+        onClick={() => setTrendMode('total')}
+        className={cn(
+          'px-2.5 py-1 text-xs transition-colors',
+          trendMode === 'total'
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted hover:text-foreground',
+        )}
+      >
+        Total
+      </button>
+      <button
+        onClick={() => setTrendMode('category')}
+        className={cn(
+          'px-2.5 py-1 text-xs transition-colors border-l border-border',
+          trendMode === 'category'
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted hover:text-foreground',
+        )}
+      >
+        By Category
+      </button>
+    </div>
+  );
+
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-4xl mx-auto">
       {/* Period Selector */}
@@ -115,111 +142,58 @@ export function OverviewPage() {
 
       {/* Balance Cards */}
       <div className="grid grid-cols-2 gap-4">
-        <Card className="border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted">Spent</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-destructive">{formatCurrency(expenses)}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted">Income</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-success">{formatCurrency(income)}</p>
-          </CardContent>
-        </Card>
+        <StatCard label="Spent" value={formatCurrency(expenses)} variant="expense" />
+        <StatCard label="Income" value={formatCurrency(income)} variant="income" />
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Category Donut */}
-        <Card className="border-border">
-          <CardHeader>
-            <CardTitle className="text-base">Spending by Category</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {categories.length > 0 ? (
-              <>
-                <CategoryDonut data={categories} />
-                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5">
-                  {categories.map((c: { category: string; total: number }) => (
-                    <div key={c.category} className="flex items-center gap-2 text-sm">
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: getCategoryColor(c.category) }}
-                      />
-                      <span className="truncate text-muted">{c.category}</span>
-                      <span className="ml-auto font-medium">{formatCurrency(c.total)}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="h-48 flex items-center justify-center text-muted text-sm">
-                No spending data for this period
+        <PageCard title="Spending by Category">
+          {categories.length > 0 ? (
+            <>
+              <CategoryDonut data={categories} />
+              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                {categories.map((c: { category: string; total: number }) => (
+                  <div key={c.category} className="flex items-center gap-2 text-sm">
+                    <span
+                      className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: getCategoryColor(c.category) }}
+                    />
+                    <span className="truncate text-muted">{c.category}</span>
+                    <span className="ml-auto font-medium">{formatCurrency(c.total)}</span>
+                  </div>
+                ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-muted text-sm">
+              No spending data for this period
+            </div>
+          )}
+        </PageCard>
 
         {/* Trend Line */}
-        <Card className="border-border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-base">Daily Spending Trend</CardTitle>
-            <div className="flex rounded-md border border-border overflow-hidden">
-              <button
-                onClick={() => setTrendMode('total')}
-                className={cn(
-                  'px-2.5 py-1 text-xs transition-colors',
-                  trendMode === 'total'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted hover:text-foreground',
-                )}
-              >
-                Total
-              </button>
-              <button
-                onClick={() => setTrendMode('category')}
-                className={cn(
-                  'px-2.5 py-1 text-xs transition-colors border-l border-border',
-                  trendMode === 'category'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted hover:text-foreground',
-                )}
-              >
-                By Category
-              </button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {trendMode === 'total'
-              ? <TrendLine data={trendData} />
-              : <CategoryTrendLine data={trendByCategoryData} />
-            }
-          </CardContent>
-        </Card>
+        <PageCard title="Daily Spending Trend" action={trendToggle}>
+          {trendMode === 'total'
+            ? <TrendLine data={trendData} />
+            : <CategoryTrendLine data={trendByCategoryData} />
+          }
+        </PageCard>
       </div>
 
       {/* Transactions */}
-      <Card className="border-border">
-        <CardHeader>
-          <CardTitle className="text-base">Transactions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!recentTransactions || recentTransactions.length === 0 ? (
-            <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
-          ) : (
-            <div className="flex flex-col -mx-6">
-              {recentTransactions.map((tx: Transaction) => (
-                <TransactionRow key={tx.id} tx={tx} readOnly />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <PageCard title="Transactions">
+        {!recentTransactions || recentTransactions.length === 0 ? (
+          <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
+        ) : (
+          <div className="flex flex-col -mx-4">
+            {recentTransactions.map((tx: Transaction) => (
+              <TransactionRow key={tx.id} tx={tx} readOnly />
+            ))}
+          </div>
+        )}
+      </PageCard>
     </div>
   );
 }
