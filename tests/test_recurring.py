@@ -71,24 +71,20 @@ class TestRecurringDetection:
         assert result is not None
         assert result["frequency"] == "weekly"
 
-
-def test_detects_biweekly_pattern(in_memory_db):
-    """Transactions ~14 days apart should be classified as biweekly."""
-    from src.storage import Storage
-    from src.recurring import RecurringDetector
-
-    storage = Storage(connection=in_memory_db)
-    # Insert 3 transactions 14 days apart
-    dates = ["2026-02-01", "2026-02-15", "2026-03-01"]
-    for i, d in enumerate(dates):
-        in_memory_db.execute(
-            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
-            "VALUES ('manual', ?, 29.99, 'Spotify', ?, 'expense')",
-            (f"sid_{i}", d),
-        )
-    in_memory_db.commit()
-
-    detector = RecurringDetector(storage)
-    result = detector.detect("Spotify", 29.99)
-    assert result is not None
-    assert result["frequency"] == "biweekly"
+    def test_detects_biweekly_pattern(self, detector, in_memory_db):
+        """Transactions ~14 days apart should be classified as biweekly."""
+        now = datetime.now()
+        dates = [
+            (now - timedelta(days=28)).strftime("%Y-%m-%d"),
+            (now - timedelta(days=14)).strftime("%Y-%m-%d"),
+            now.strftime("%Y-%m-%d"),
+        ]
+        for i, d in enumerate(dates):
+            in_memory_db.execute(
+                f"INSERT INTO transactions (source, source_id, amount, merchant, transaction_date) "
+                f"VALUES ('m', 'sp{i}', 29.99, 'Spotify', '{d}')"
+            )
+        in_memory_db.commit()
+        result = detector.detect("Spotify", 29.99)
+        assert result is not None
+        assert result["frequency"] == "biweekly"
