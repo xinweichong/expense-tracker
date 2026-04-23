@@ -75,13 +75,15 @@ export function SettingsPage() {
 
   const saveSettings = async () => {
     try {
+      setError('');
       await api.updateSettings({
         anomaly_multiplier: parseFloat(anomalyMultiplier),
         velocity_alert_threshold: parseInt(velocityThreshold),
       });
       refetchSettings();
-    } catch (e) {
-      console.error('Failed to save settings', e);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to save settings';
+      setError(msg);
     }
   };
 
@@ -392,6 +394,7 @@ export function SettingsPage() {
           >
             Save
           </button>
+          {error && <p className="text-sm text-destructive mt-1">{error}</p>}
         </div>
       </Card>
 

@@ -326,7 +326,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
     @app.get("/api/analytics/alerts")
     async def analytics_alerts(_auth=Depends(require_auth)):
         return {
-            "anomalies": get_anomalies(storage.conn),
+            "anomalies": get_anomalies(storage.conn, multiplier=float(storage.get_setting("anomaly_multiplier", "2.0"))),
             "new_merchants": check_new_merchants(storage.conn),
         }
 
@@ -349,6 +349,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
     async def update_settings(request: Request, _auth=Depends(require_auth)):
         body = await request.json()
         errors = {}
+        validated = {}
 
         if "anomaly_multiplier" in body:
             val = body["anomaly_multiplier"]
@@ -360,7 +361,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
                 if not (1.0 <= val <= 10.0):
                     errors["anomaly_multiplier"] = "must be between 1.0 and 10.0"
                 else:
-                    storage.set_setting("anomaly_multiplier", str(val))
+                    validated["anomaly_multiplier"] = str(val)
 
         if "velocity_alert_threshold" in body:
             val = body["velocity_alert_threshold"]
@@ -372,10 +373,14 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
                 if not (50 <= val <= 300):
                     errors["velocity_alert_threshold"] = "must be between 50 and 300"
                 else:
-                    storage.set_setting("velocity_alert_threshold", str(val))
+                    validated["velocity_alert_threshold"] = str(val)
 
         if errors:
             raise HTTPException(status_code=422, detail=errors)
+
+        # Write all-or-nothing after validation
+        for key, value in validated.items():
+            storage.set_setting(key, value)
 
         return {
             "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),

@@ -212,3 +212,19 @@ async def test_put_settings_rejects_out_of_range(client):
 async def test_put_settings_rejects_velocity_out_of_range(client):
     resp = await client.put("/api/settings", json={"velocity_alert_threshold": 30})
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_put_settings_atomic_on_mixed_valid_invalid(client):
+    """When one field is invalid, no settings should be written."""
+    # Set a known starting state
+    await client.put("/api/settings", json={"velocity_alert_threshold": 150})
+    # Now send a mixed request: one valid, one invalid
+    resp = await client.put("/api/settings", json={
+        "anomaly_multiplier": 0.5,      # invalid
+        "velocity_alert_threshold": 200, # valid
+    })
+    assert resp.status_code == 422
+    # velocity_alert_threshold should remain 150, not 200
+    resp2 = await client.get("/api/settings")
+    assert resp2.json()["velocity_alert_threshold"] == 150
