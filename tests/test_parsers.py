@@ -2,6 +2,7 @@ import pytest
 from src.parsers.base import BankParser, ParseResult
 from src.parsers.dbs_paylah import DbsPaylahParser
 from src.parsers.uob_paynow import UobPaynowParser
+from src.parsers.uob_card import UobCardParser
 from src.parsers.apple_wallet import AppleWalletParser
 
 
@@ -273,3 +274,54 @@ class TestAppleWalletParser:
             f"Toast Box:{amount}::16/04/2026 12:30:00".encode()
         ).hexdigest()[:16]
         assert result.source_id == legacy_id
+
+
+class TestUobPaynowParserSourceId:
+    def setup_method(self):
+        self.parser = UobPaynowParser()
+
+    def test_source_id_is_hex_string(self):
+        body = "You have sent $50.00 via PayNow to Alice Tan. Transaction reference: ..."
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.source_id is not None
+        assert len(result.source_id) == 16
+        assert all(c in "0123456789abcdef" for c in result.source_id)
+
+    def test_same_body_produces_same_source_id(self):
+        body = "You have sent $50.00 via PayNow to Alice Tan."
+        r1 = self.parser.parse(body)
+        r2 = self.parser.parse(body)
+        assert r1.source_id == r2.source_id
+
+    def test_different_body_produces_different_source_id(self):
+        body1 = "You have sent $50.00 via PayNow to Alice Tan."
+        body2 = "You have sent $100.00 via PayNow to Bob Lee."
+        r1 = self.parser.parse(body1)
+        r2 = self.parser.parse(body2)
+        assert r1.source_id != r2.source_id
+
+
+class TestUobCardParserSourceId:
+    def setup_method(self):
+        self.parser = UobCardParser()
+
+    def test_source_id_is_hex_string(self):
+        body = (
+            "A transaction of SGD 45.80 was made with your UOB Card ending 1234 "
+            "on 15/04/26 at FAIRPRICE XTRA. If unauthorised"
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.source_id is not None
+        assert len(result.source_id) == 16
+        assert all(c in "0123456789abcdef" for c in result.source_id)
+
+    def test_same_transaction_produces_same_source_id(self):
+        body = (
+            "A transaction of SGD 45.80 was made with your UOB Card ending 1234 "
+            "on 15/04/26 at FAIRPRICE XTRA. If unauthorised"
+        )
+        r1 = self.parser.parse(body)
+        r2 = self.parser.parse(body)
+        assert r1.source_id == r2.source_id

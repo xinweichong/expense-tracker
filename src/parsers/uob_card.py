@@ -1,3 +1,4 @@
+import hashlib
 import re
 from typing import Optional
 from src.parsers.base import BankParser, ParseResult
@@ -35,9 +36,12 @@ class UobCardParser(BankParser):
             day, month, short_year = date_str.split("/")
             year = 2000 + int(short_year)
             iso_date = f"{year}-{month}-{day}"
+            source_id = hashlib.sha256(
+                f"{iso_date}:{amount_str}:{merchant}:{card_last4}".encode()
+            ).hexdigest()[:16]
             return ParseResult(
                 source="uob_card",
-                source_id=None,
+                source_id=source_id,
                 amount=float(amount_str),
                 merchant=merchant,
                 description=f"UOB Card *{card_last4} - {merchant}",
