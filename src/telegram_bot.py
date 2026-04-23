@@ -383,7 +383,6 @@ class TelegramBotService:
         return ConversationHandler.END
 
     async def _edit_value_entered(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        import re as _re
         tx_id = context.user_data.get("edit_tx_id")
         field = context.user_data.get("edit_field")
         text = update.message.text.strip()
@@ -404,12 +403,22 @@ class TelegramBotService:
             await update.message.reply_text(f"Amount updated to {value:.2f}.")
 
         elif field == "date":
-            if _re.match(r"\d{4}-\d{2}-\d{2}", text):
+            iso = None
+            # Try YYYY-MM-DD
+            try:
+                datetime.strptime(text[:10], "%Y-%m-%d")
                 iso = text[:10]
-            elif _re.match(r"\d{2}/\d{2}/\d{4}", text):
-                d, m, y = text.split("/")
-                iso = f"{y}-{m}-{d}"
-            else:
+            except ValueError:
+                pass
+            # Try DD/MM/YYYY
+            if iso is None and re.match(r"\d{2}/\d{2}/\d{4}", text):
+                try:
+                    d, m, y = text.split("/")
+                    datetime.strptime(f"{y}-{m}-{d}", "%Y-%m-%d")
+                    iso = f"{y}-{m}-{d}"
+                except ValueError:
+                    pass
+            if iso is None:
                 await update.message.reply_text("Invalid date. Use YYYY-MM-DD or DD/MM/YYYY:")
                 return EDIT_ENTER_VALUE
             self.storage.update_transaction(tx_id, transaction_date=f"{iso}T00:00:00")

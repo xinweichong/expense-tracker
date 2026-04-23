@@ -457,3 +457,132 @@ class TestHelp:
         ]:
             assert expected in text, f"Expected '{expected}' in help text"
 
+
+class TestDeleteCommand:
+    @pytest.mark.asyncio
+    async def test_delete_missing_id_shows_usage(self, bot_service):
+        """If no ID given, reply with usage message."""
+        update = SimpleNamespace(
+            message=SimpleNamespace(reply_text=AsyncMock())
+        )
+        context = SimpleNamespace(args=[])
+        await bot_service._delete_command(update, context)
+        update.message.reply_text.assert_called_once_with("Usage: /delete <id>")
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_transaction(self, bot_service, in_memory_db):
+        """If transaction ID not found, reply with not found message."""
+        update = SimpleNamespace(
+            message=SimpleNamespace(reply_text=AsyncMock())
+        )
+        context = SimpleNamespace(args=["9999"])
+        await bot_service._delete_command(update, context)
+        update.message.reply_text.assert_called_once_with("Transaction not found.")
+
+    @pytest.mark.asyncio
+    async def test_delete_shows_confirmation_keyboard(self, bot_service, in_memory_db):
+        """Valid ID should show confirmation keyboard."""
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'del1', 25.0, 'Coffee', '2026-04-01', 'expense')"
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute("SELECT id FROM transactions WHERE source_id='del1'").fetchone()[0]
+
+        update = SimpleNamespace(
+            message=SimpleNamespace(reply_text=AsyncMock())
+        )
+        context = SimpleNamespace(args=[str(tx_id)])
+        await bot_service._delete_command(update, context)
+        call_kwargs = update.message.reply_text.call_args
+        assert call_kwargs is not None
+        # Should have sent a keyboard
+        assert "reply_markup" in call_kwargs.kwargs or len(call_kwargs.args) > 1 or call_kwargs.kwargs.get("reply_markup") is not None
+
+    @pytest.mark.asyncio
+    async def test_delete_callback_cancel(self, bot_service):
+        """cancel_delete callback should send Cancelled."""
+        query = SimpleNamespace(
+            answer=AsyncMock(),
+            edit_message_text=AsyncMock(),
+            data="cancel_delete",
+        )
+        update = SimpleNamespace(callback_query=query)
+        context = SimpleNamespace()
+        await bot_service._delete_callback(update, context)
+        query.edit_message_text.assert_called_once_with("Cancelled.")
+
+    @pytest.mark.asyncio
+    async def test_delete_callback_confirms_deletion(self, bot_service, in_memory_db):
+        """confirm_delete_<id> callback should delete the transaction."""
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'del2', 10.0, 'Grab', '2026-04-01', 'expense')"
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute("SELECT id FROM transactions WHERE source_id='del2'").fetchone()[0]
+
+        query = SimpleNamespace(
+            answer=AsyncMock(),
+            edit_message_text=AsyncMock(),
+            data=f"confirm_delete_{tx_id}",
+        )
+        update = SimpleNamespace(callback_query=query)
+        context = SimpleNamespace()
+        await bot_service._delete_callback(update, context)
+        # Should be deleted
+        row = in_memory_db.execute("SELECT id FROM transactions WHERE id=?", (tx_id,)).fetchone()
+        assert row is None
+        query.edit_message_text.assert_called_once()
+
+
+class TestEditValueEnteredDateValidation:
+    @pytest.mark.asyncio
+    async def test_invalid_date_prompts_retry(self, bot_service, in_memory_db):
+        """An invalid date string should prompt the user to re-enter."""
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'edit1', 50.0, 'Netflix', '2026-04-01', 'expense')"
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute("SELECT id FROM transactions WHERE source_id='edit1'").fetchone()[0]
+
+        update = SimpleNamespace(
+            message=SimpleNamespace(
+                text="2024-99-99",  # invalid date
+                reply_text=AsyncMock(),
+            )
+        )
+        context = SimpleNamespace(
+            user_data={"edit_tx_id": tx_id, "edit_field": "date"}
+        )
+        from src.telegram_bot import EDIT_ENTER_VALUE
+        result = await bot_service._edit_value_entered(update, context)
+        assert result == EDIT_ENTER_VALUE  # should stay in EDIT_ENTER_VALUE state
+
+    @pytest.mark.asyncio
+    async def test_valid_iso_date_accepted(self, bot_service, in_memory_db):
+        """A valid YYYY-MM-DD date should update the transaction."""
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'edit2', 50.0, 'Netflix', '2026-04-01', 'expense')"
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute("SELECT id FROM transactions WHERE source_id='edit2'").fetchone()[0]
+
+        update = SimpleNamespace(
+            message=SimpleNamespace(
+                text="2026-05-15",
+                reply_text=AsyncMock(),
+            )
+        )
+        from src.telegram_bot import ConversationHandler
+        context = SimpleNamespace(
+            user_data={"edit_tx_id": tx_id, "edit_field": "date"}
+        )
+        result = await bot_service._edit_value_entered(update, context)
+        assert result == ConversationHandler.END
+        # Verify the date was stored
+        tx = bot_service.storage.get_transaction(tx_id)
+        assert "2026-05-15" in tx["transaction_date"]
+
