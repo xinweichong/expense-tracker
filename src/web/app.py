@@ -6,7 +6,9 @@ from typing import Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
+import csv
+import io
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.storage import Storage
 from src.web.auth import verify_password, create_session, verify_session
@@ -83,6 +85,49 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             merchant_search=merchant_search or merchant,
             limit=limit,
             offset=offset,
+        )
+
+    @app.get("/api/transactions/export")
+    async def export_transactions(
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        category: Optional[str] = None,
+        merchant_search: Optional[str] = None,
+        merchant: Optional[str] = None,
+        _auth=Depends(require_auth),
+    ):
+        rows = storage.query_transactions(
+            start_date=start_date,
+            end_date=end_date,
+            category=category,
+            merchant_search=merchant_search or merchant,
+            limit=50_000,
+            offset=0,
+        )
+        output = io.StringIO()
+        fieldnames = ["date", "merchant", "amount", "currency", "exchange_rate",
+                      "amount_sgd", "type", "category", "source", "description"]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for tx in rows:
+            writer.writerow({
+                "date": (tx.get("transaction_date") or "")[:10],
+                "merchant": tx.get("merchant") or "",
+                "amount": tx.get("amount") or "",
+                "currency": tx.get("currency") or "SGD",
+                "exchange_rate": tx.get("exchange_rate") or 1.0,
+                "amount_sgd": round((tx.get("amount") or 0) * (tx.get("exchange_rate") or 1.0), 2),
+                "type": tx.get("type") or "expense",
+                "category": tx.get("category") or "",
+                "source": tx.get("source") or "",
+                "description": tx.get("description") or "",
+            })
+        output.seek(0)
+        filename = f"transactions-{datetime.now().strftime('%Y-%m-%d')}.csv"
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
     @app.get("/api/transactions/{tx_id}")

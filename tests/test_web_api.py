@@ -228,3 +228,38 @@ async def test_put_settings_atomic_on_mixed_valid_invalid(client):
     # velocity_alert_threshold should remain 150, not 200
     resp2 = await client.get("/api/settings")
     assert resp2.json()["velocity_alert_threshold"] == 150
+
+
+@pytest.mark.asyncio
+async def test_export_transactions_returns_csv(client, in_memory_db):
+    """GET /api/transactions/export should return a CSV file."""
+    # Seed a transaction
+    in_memory_db.execute(
+        "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, "
+        "category, transaction_date, type) VALUES ('manual', 'exp1', 25.50, 'SGD', 1.0, "
+        "'Coffee Bean', 'Dining', '2026-04-10', 'expense')"
+    )
+    in_memory_db.commit()
+
+    resp = await client.get("/api/transactions/export")
+    assert resp.status_code == 200
+    assert "text/csv" in resp.headers["content-type"]
+    assert "attachment" in resp.headers.get("content-disposition", "")
+    lines = resp.text.strip().split("\n")
+    assert lines[0].startswith("date,merchant,amount")   # header row
+    assert len(lines) >= 2                                # at least one data row
+    assert "Coffee Bean" in resp.text
+
+@pytest.mark.asyncio
+async def test_export_transactions_respects_category_filter(client, in_memory_db):
+    for i, cat in enumerate(["Dining", "Transport", "Dining"]):
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, category, "
+            "transaction_date, type) VALUES ('manual', ?, 10.0, 'Merchant', ?, '2026-04-10', 'expense')",
+            (f"s{i}", cat),
+        )
+    in_memory_db.commit()
+
+    resp = await client.get("/api/transactions/export?category=Dining")
+    lines = resp.text.strip().split("\n")
+    assert len(lines) == 3  # 1 header + 2 Dining rows

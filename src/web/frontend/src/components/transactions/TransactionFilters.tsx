@@ -35,6 +35,15 @@ export function TransactionFilters({
 }: TransactionFiltersProps) {
   const hasFilters = search || category !== 'all' || startDate || endDate;
 
+  const handleExport = () => {
+    const params = new URLSearchParams();
+    if (search) params.set('merchant', search);
+    if (category && category !== 'all') params.set('category', category);
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    window.open(`/api/transactions/export?${params.toString()}`, '_blank');
+  };
+
   const quickSelects = useMemo(() => {
     const today = new Date();
     const todayStr = today.toISOString().slice(0, 10);
@@ -142,6 +151,16 @@ export function TransactionFilters({
             </button>
           );
         })}
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleExport}
+          className="px-3 py-1.5 text-xs border border-border rounded-md text-muted hover:text-foreground hover:border-foreground/40 transition-colors"
+        >
+          Export CSV
+        </button>
       </div>
     </div>
   );
