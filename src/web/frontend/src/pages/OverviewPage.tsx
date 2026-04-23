@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummary, useTrend, useTrendByCategory, useBalance } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -56,6 +57,97 @@ function getRangeLabel(date: string, period: Period): string {
 }
 
 const PERIOD_OPTIONS: Period[] = ['day', 'week', 'month'];
+
+function HealthScoreCard() {
+  const navigate = useNavigate();
+  const { data, isLoading } = useQuery({
+    queryKey: ['health-score'],
+    queryFn: () => api.getHealthScore(1),
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <div className="h-16 animate-pulse bg-foreground/10 rounded-md" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data?.has_income_data) {
+    return (
+      <Card>
+        <CardContent className="p-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Health Score</p>
+            <p className="text-sm text-muted mt-0.5">Add income transactions to calculate your score.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const score = data.score ?? 0;
+  const ringColor =
+    score >= 80 ? '#30D158' :
+    score >= 60 ? '#64D2FF' :
+    score >= 40 ? '#FFD60A' :
+    '#FF453A';
+
+  const r = 22;
+  const circ = 2 * Math.PI * r;
+  const filled = (score / 100) * circ;
+
+  const topWeakness = data.components
+    ? Object.values(data.components).sort((a, b) => (a.score / a.max) - (b.score / b.max))[0]
+    : null;
+
+  return (
+    <Card
+      className="cursor-pointer hover:border-foreground/30 transition-colors"
+      onClick={() => navigate('/analytics')}
+    >
+      <CardContent className="p-4 flex items-center gap-4">
+        {/* Score ring */}
+        <svg width="56" height="56" className="shrink-0">
+          <circle cx="28" cy="28" r={r} fill="none" stroke="#2A2A32" strokeWidth="4" />
+          <circle
+            cx="28" cy="28" r={r} fill="none"
+            stroke={ringColor}
+            strokeWidth="4"
+            strokeDasharray={`${filled} ${circ}`}
+            strokeLinecap="round"
+            transform="rotate(-90 28 28)"
+          />
+          <text x="28" y="32" textAnchor="middle" fontSize="11" fontWeight="700" fill="#E8E8ED">
+            {score}
+          </text>
+        </svg>
+
+        {/* Text */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Health Score</p>
+            <span
+              className="text-xs font-medium"
+              style={{ color: ringColor }}
+            >
+              {data.grade}
+            </span>
+          </div>
+          {topWeakness && topWeakness.score < topWeakness.max && (
+            <p className="text-xs text-muted mt-0.5 truncate">
+              {topWeakness.description.split(' ').slice(0, 8).join(' ')}
+            </p>
+          )}
+          <p className="text-xs text-muted/60 mt-0.5">See breakdown →</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function OverviewPage() {
   const { period, setPeriod, date, goBack, goForward, goToToday } = usePeriod();
@@ -247,6 +339,9 @@ export function OverviewPage() {
           </div>
         </PageCard>
       )}
+
+      {/* Health Score */}
+      <HealthScoreCard />
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

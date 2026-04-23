@@ -30,6 +30,12 @@ const ICON_OPTIONS = [
   '👕', '💊', '🔧', '🎵', '📖', '🌺', '⚡', '🎪', '🌊', '🍀',
 ];
 
+const CAT_TYPES = [
+  { value: 'needs',   label: 'Needs'   },
+  { value: 'wants',   label: 'Wants'   },
+  { value: 'neutral', label: 'Neutral' },
+] as const;
+
 export function SettingsPage() {
   const { data: categories } = useCategories();
   const { data: overrides } = useMerchantOverrides();
@@ -277,6 +283,24 @@ export function SettingsPage() {
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
+                  </div>
+                  {/* Type selector — immediate save */}
+                  <div className="flex items-center gap-2 mt-1.5 ml-7">
+                    <label className="text-xs text-muted">Type</label>
+                    <select
+                      value={cat.type ?? 'neutral'}
+                      onChange={async (e) => {
+                        await api.updateCategory(cat.name, {
+                          type: e.target.value as 'needs' | 'wants' | 'neutral',
+                        });
+                        qc.invalidateQueries({ queryKey: ['categories'] });
+                      }}
+                      className="select-field text-xs py-0.5 h-7"
+                    >
+                      {CAT_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
                   </div>
                   {cat.keywords?.trim() && (
                     <div className="flex flex-wrap gap-1 mt-1.5 ml-7">
