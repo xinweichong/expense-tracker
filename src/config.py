@@ -1,6 +1,8 @@
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -9,6 +11,19 @@ DEFAULTS = {
     "server": {"host": "0.0.0.0", "port": 8080, "webhook_base_url": ""},
     "gmail": {"poll_interval_seconds": 120, "sender_filters": []},
 }
+
+DEFAULT_TIMEZONE = "Asia/Singapore"
+
+
+def local_now(tz_name: str = DEFAULT_TIMEZONE) -> datetime:
+    """Return the current datetime in the configured local timezone.
+
+    Use this instead of datetime.now() everywhere a wall-clock date is needed
+    for user-facing queries (today, this week, this month, etc.).  Avoids the
+    off-by-one-day bug that occurs when the server runs in UTC but the user is
+    in a UTC+ timezone.
+    """
+    return datetime.now(ZoneInfo(tz_name))
 
 DEFAULT_CATEGORIES = [
     {"name": "Food", "keywords": ["restaurant", "cafe", "food", "kopitiam", "toast box", "ya kun"], "icon": "🍜"},
@@ -48,6 +63,7 @@ def _config_from_env() -> dict[str, Any]:
         "web": {},
         "telegram": {},
         "categories": DEFAULT_CATEGORIES,
+        "timezone": DEFAULT_TIMEZONE,
     }
 
     return config
@@ -69,6 +85,9 @@ def load_config(config_path: str) -> dict[str, Any]:
         for key, default_val in defaults.items():
             config[section].setdefault(key, default_val)
 
+    # Top-level defaults
+    config.setdefault("timezone", DEFAULT_TIMEZONE)
+
     # Environment variable overrides (always applied, even when config file exists)
     if token := os.environ.get("TELEGRAM_BOT_TOKEN"):
         config.setdefault("telegram", {})["bot_token"] = token
@@ -76,5 +95,7 @@ def load_config(config_path: str) -> dict[str, Any]:
         config.setdefault("web", {})["password_hash"] = password_hash
     if port_env := os.environ.get("PORT"):
         config.setdefault("server", {})["port"] = int(port_env)
+    if tz_env := os.environ.get("TIMEZONE"):
+        config["timezone"] = tz_env
 
     return config

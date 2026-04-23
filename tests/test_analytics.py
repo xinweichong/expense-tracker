@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 import sqlite3
 from src.storage import Storage
 from src.analytics import (
+    _get_month_range,
+    _get_week_range,
     get_period_comparison,
     get_category_comparison,
     get_top_merchants,
@@ -265,3 +267,33 @@ class TestSummaryReport:
         )
         loaded = load_summary(str(tmp_path), report_type="monthly")
         assert loaded["total_spent"] == original["total_spent"]
+
+
+class TestTimezoneAwareDateRanges:
+    def test_get_month_range_accepts_now_param(self):
+        """_get_month_range(now=...) should use the provided datetime, not system clock."""
+        now = datetime(2026, 4, 23, 1, 0, 0)  # 1am SGT Apr 23
+        start, end = _get_month_range(now=now)
+        assert start == "2026-04-01"
+        assert end == "2026-04-30"
+
+    def test_get_week_range_accepts_now_param(self):
+        """_get_week_range(now=...) should use the provided datetime, not system clock."""
+        # April 23 2026 is a Thursday (weekday=3), week starts Mon Apr 20
+        now = datetime(2026, 4, 23, 1, 0, 0)
+        start, end = _get_week_range(now=now)
+        assert start == "2026-04-20"
+        assert end == "2026-04-26"
+
+    def test_get_spending_velocity_accepts_now_param(self):
+        """get_spending_velocity(conn, now=...) should use the provided datetime."""
+        conn = make_db()
+        storage = Storage(conn)
+        storage.insert_transaction(
+            source="manual", source_id="vel-tz-1", amount=120.0, merchant="Shop",
+            category="Food", transaction_date="2026-04-15",
+        )
+        now = datetime(2026, 4, 15, 0, 0, 0)
+        result = get_spending_velocity(conn, now=now)
+        assert result["current_mtd"] == 120.0
+        conn.close()

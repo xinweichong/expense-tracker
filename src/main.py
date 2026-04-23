@@ -235,6 +235,7 @@ def main():
         storage=storage, bot_token=bot_token,
         categorizer=categorizer, exchange_service=exchange_service,
         dashboard_url=dashboard_url,
+        timezone=config.get("timezone", "Asia/Singapore"),
     )
 
     # Build combined FastAPI app

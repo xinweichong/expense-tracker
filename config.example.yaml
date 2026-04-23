@@ -10,6 +10,10 @@ server:
   port: 8080
   webhook_base_url: "https://your-server.example.com"
 
+# Timezone for date-range queries (today, week, month).
+# Must be a valid IANA tz name. Defaults to Asia/Singapore if omitted.
+timezone: "Asia/Singapore"
+
 web:
   password_hash: "<generate with: python -c 'import bcrypt; print(bcrypt.hashpw(b\"your-password\", bcrypt.gensalt()).decode())'>"
 
