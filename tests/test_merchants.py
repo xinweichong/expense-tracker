@@ -1,11 +1,10 @@
-import json
 import pytest
 import bcrypt
 import sqlite3
-from datetime import datetime
 from fastapi.testclient import TestClient
 from src.storage import Storage
 from src.web.app import create_dashboard_app
+from src.config import local_now
 
 
 class TestMerchantList:
@@ -16,7 +15,7 @@ class TestMerchantList:
 
     def test_basic_stats_computed_from_transactions(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         in_memory_db.executemany(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
             "merchant, category, transaction_date, type) VALUES ('manual', ?, ?, 'SGD', 1.0, 'Grab', "
@@ -44,7 +43,7 @@ class TestMerchantList:
 
     def test_sorted_by_total_spent_by_default(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         in_memory_db.executemany(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
             "merchant, transaction_date, type) VALUES ('manual', ?, ?, 'SGD', 1.0, ?, ?, 'expense')",
@@ -57,7 +56,7 @@ class TestMerchantList:
 
     def test_sorted_by_transaction_count(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         in_memory_db.executemany(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
             "merchant, transaction_date, type) VALUES ('manual', ?, 1.0, 'SGD', 1.0, ?, ?, 'expense')",
@@ -69,7 +68,7 @@ class TestMerchantList:
 
     def test_name_search_filter(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         in_memory_db.executemany(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
             "merchant, transaction_date, type) VALUES ('manual', ?, 10.0, 'SGD', 1.0, ?, ?, 'expense')",
@@ -82,7 +81,7 @@ class TestMerchantList:
 
     def test_income_transactions_excluded(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         in_memory_db.execute(
             "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
             "VALUES ('manual', 'i1', 5000, 'Employer', ?, 'income')",
@@ -94,7 +93,7 @@ class TestMerchantList:
 
     def test_pagination(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         for i in range(5):
             in_memory_db.execute(
                 "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
@@ -147,7 +146,7 @@ class TestMerchantTags:
 class TestMerchantProfile:
     def test_profile_includes_stats_and_tags(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         in_memory_db.executemany(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
             "merchant, category, transaction_date, type) VALUES ('manual', ?, ?, 'SGD', 1.0, "
@@ -249,7 +248,7 @@ class TestMerchantAPI:
 
     def test_get_merchant_list_returns_stats(self, client):
         c, db = client
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         db.execute(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
             "merchant, category, transaction_date, type) VALUES ('manual', 'g1', 25.0, 'SGD', 1.0, "
@@ -267,7 +266,7 @@ class TestMerchantAPI:
 
     def test_get_merchant_profile(self, client):
         c, db = client
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         db.execute(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
             "merchant, transaction_date, type) VALUES ('manual', 'g1', 15.0, 'SGD', 1.0, "
@@ -286,7 +285,7 @@ class TestMerchantAPI:
 
     def test_put_merchant_tags(self, client):
         c, db = client
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         db.execute(
             "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
             "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
@@ -303,7 +302,14 @@ class TestMerchantAPI:
         assert resp2.json()["tags"] == ["online", "local"]
 
     def test_put_merchant_tags_rejects_invalid_tag(self, client):
-        c, _ = client
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
         resp = c.put(
             "/api/merchant-intelligence/Grab/tags",
             json={"tags": ["invalid-tag"]},
@@ -312,7 +318,7 @@ class TestMerchantAPI:
 
     def test_put_merchant_notes(self, client):
         c, db = client
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = local_now().strftime("%Y-%m-%d")
         db.execute(
             "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
             "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
