@@ -233,25 +233,31 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         keywords = body.get("keywords", "")
         icon = body.get("icon", "📌")
         color = body.get("color")
+        cat_type = body.get("type", "neutral")
         if not name:
             raise HTTPException(status_code=400, detail="Category name is required")
         try:
-            storage.add_category(name, keywords, icon, color)
+            storage.add_category(name, keywords, icon, color, cat_type=cat_type)
         except ValueError as e:
-            raise HTTPException(status_code=409, detail=str(e))
+            status_code = 422 if "cat_type" in str(e) else 409
+            raise HTTPException(status_code=status_code, detail=str(e))
         return {"status": "ok", "name": name}
 
     @app.put("/api/categories/{name}")
     async def update_category(name: str, request: Request, _auth=Depends(require_auth)):
         body = await request.json()
+        cat_type = body.get("type")
         try:
             storage.update_category(
                 name,
                 keywords=body.get("keywords"),
                 icon=body.get("icon"),
                 color=body.get("color"),
+                cat_type=cat_type,
             )
         except ValueError as e:
+            if "cat_type" in str(e):
+                raise HTTPException(status_code=422, detail=str(e))
             status_code = 409 if "already used" in str(e) else 404
             raise HTTPException(status_code=status_code, detail=str(e))
         return {"status": "ok", "name": name}
@@ -329,6 +335,12 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_balance(start, end)
+
+    @app.get("/api/health-score")
+    async def health_score(months: int = 1, _auth=Depends(require_auth)):
+        if months < 1 or months > 12:
+            raise HTTPException(status_code=400, detail="months must be between 1 and 12")
+        return storage.get_health_score(months=months)
 
     @app.get("/api/income-vs-expense")
     async def income_vs_expense(months: int = 6, _auth=Depends(require_auth)):

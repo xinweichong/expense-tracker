@@ -234,3 +234,110 @@ class TestCategoryTypeExtension:
         storage.add_category("X", "", icon="📌")
         with pytest.raises(ValueError):
             storage.update_category("X", cat_type="invalid_type")
+
+
+import bcrypt
+import sqlite3
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from src.web.app import create_dashboard_app
+
+
+@pytest.fixture
+def health_app(in_memory_db):
+    storage = Storage(connection=in_memory_db)
+    # Seed app_settings table (Phase 2b prerequisite)
+    in_memory_db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('anomaly_multiplier', '2.0')")
+    in_memory_db.commit()
+    pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
+    return create_dashboard_app(storage, pw_hash), storage
+
+
+@pytest_asyncio.fixture
+async def api(health_app):
+    app, storage = health_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        await ac.post("/api/login", json={"password": "test"})
+        yield ac, storage
+
+
+class TestHealthScoreAPI:
+    @pytest.mark.asyncio
+    async def test_no_income_returns_has_income_false(self, api):
+        ac, storage = api
+        resp = await ac.get("/api/health-score")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["has_income_data"] is False
+        assert data["score"] is None
+
+    @pytest.mark.asyncio
+    async def test_with_income_returns_score(self, api):
+        ac, storage = api
+        in_memory_db = storage.conn
+        in_memory_db.execute("INSERT OR IGNORE INTO categories (name, type) VALUES ('Income', 'neutral')")
+        in_memory_db.execute("INSERT OR IGNORE INTO categories (name, type) VALUES ('Dining', 'wants')")
+        in_memory_db.commit()
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type) "
+            "VALUES ('test', 'inc1', 5000.0, 'SGD', 1.0, 'Salary', 'Income', '2026-04-01', 'income')"
+        )
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type) "
+            "VALUES ('test', 'exp1', 1000.0, 'SGD', 1.0, 'RestaurantX', 'Dining', '2026-04-15', 'expense')"
+        )
+        in_memory_db.commit()
+        resp = await ac.get("/api/health-score")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["has_income_data"] is True
+        assert isinstance(data["score"], int)
+        assert data["grade"] in ("Excellent", "Good", "Fair", "Needs Attention")
+        assert "savings_rate" in data["components"]
+        assert data["components"]["savings_rate"]["max"] == 40
+
+    @pytest.mark.asyncio
+    async def test_months_param_accepted(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/health-score?months=3")
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_requires_auth(self):
+        app = create_dashboard_app(Storage(connection=sqlite3.connect(":memory:")), "hash")
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.get("/api/health-score")
+            assert resp.status_code == 401
+
+
+class TestCategoryTypeAPI:
+    @pytest.mark.asyncio
+    async def test_create_category_with_type(self, api):
+        ac, _ = api
+        resp = await ac.post(
+            "/api/categories",
+            json={"name": "Rent", "keywords": "rent", "icon": "🏠", "type": "needs"},
+        )
+        assert resp.status_code == 200
+        cats = (await ac.get("/api/categories")).json()
+        rent = next(c for c in cats if c["name"] == "Rent")
+        assert rent["type"] == "needs"
+
+    @pytest.mark.asyncio
+    async def test_update_category_type(self, api):
+        ac, _ = api
+        await ac.post("/api/categories", json={"name": "Gaming", "keywords": "steam", "icon": "🎮"})
+        resp = await ac.put("/api/categories/Gaming", json={"type": "wants"})
+        assert resp.status_code == 200
+        cats = (await ac.get("/api/categories")).json()
+        gaming = next(c for c in cats if c["name"] == "Gaming")
+        assert gaming["type"] == "wants"
+
+    @pytest.mark.asyncio
+    async def test_invalid_type_returns_422(self, api):
+        ac, _ = api
+        await ac.post("/api/categories", json={"name": "X", "keywords": "", "icon": "📌"})
+        resp = await ac.put("/api/categories/X", json={"type": "invalid"})
+        assert resp.status_code == 422
