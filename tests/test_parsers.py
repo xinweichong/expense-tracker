@@ -325,3 +325,16 @@ class TestUobCardParserSourceId:
         r1 = self.parser.parse(body)
         r2 = self.parser.parse(body)
         assert r1.source_id == r2.source_id
+
+    def test_different_transaction_produces_different_source_id(self):
+        body1 = (
+            "A transaction of SGD 45.80 was made with your UOB Card ending 1234 "
+            "on 15/04/26 at FAIRPRICE XTRA. If unauthorised"
+        )
+        body2 = (
+            "A transaction of SGD 120.00 was made with your UOB Card ending 1234 "
+            "on 15/04/26 at GRAB. If unauthorised"
+        )
+        r1 = self.parser.parse(body1)
+        r2 = self.parser.parse(body2)
+        assert r1.source_id != r2.source_id
