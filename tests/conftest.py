@@ -82,6 +82,27 @@ def in_memory_db():
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(category, period)
     );
+
+    CREATE TABLE IF NOT EXISTS goals (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        name          TEXT NOT NULL,
+        target_amount REAL NOT NULL,
+        saved_amount  REAL NOT NULL DEFAULT 0,
+        target_date   DATE,
+        status        TEXT NOT NULL DEFAULT 'active',
+        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS goal_contributions (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal_id    INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+        amount     REAL NOT NULL,
+        month      TEXT NOT NULL,
+        source     TEXT DEFAULT 'auto',
+        note       TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
     """
     conn.executescript(schema)
     yield conn
