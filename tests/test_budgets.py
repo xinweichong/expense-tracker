@@ -178,3 +178,110 @@ class TestBudgetProgress:
         )
         in_memory_db.commit()
         assert storage.get_budget_progress()[0]["spent"] == pytest.approx(10.0, 0.01)
+
+
+import bcrypt
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from src.web.app import create_dashboard_app
+
+
+@pytest.fixture
+def budget_app(in_memory_db):
+    storage = Storage(connection=in_memory_db)
+    pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
+    return create_dashboard_app(storage, pw_hash), storage
+
+
+@pytest_asyncio.fixture
+async def api(budget_app):
+    app, storage = budget_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        await ac.post("/api/login", json={"password": "test"})
+        yield ac, storage
+
+
+class TestBudgetAPI:
+    @pytest.mark.asyncio
+    async def test_get_budgets_empty(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/budgets")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    @pytest.mark.asyncio
+    async def test_create_budget(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/budgets", json={"category": None, "amount": 3000, "period": "monthly"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["amount"] == 3000.0
+        assert data["category"] is None
+        assert data["period"] == "monthly"
+        assert "id" in data
+
+    @pytest.mark.asyncio
+    async def test_create_budget_invalid_period(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/budgets", json={"amount": 1000, "period": "yearly"})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_create_duplicate_raises_409(self, api):
+        ac, _ = api
+        await ac.post("/api/budgets", json={"category": None, "amount": 1000, "period": "monthly"})
+        resp = await ac.post("/api/budgets", json={"category": None, "amount": 2000, "period": "monthly"})
+        assert resp.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_get_budget_progress(self, api):
+        ac, _ = api
+        await ac.post("/api/budgets", json={"category": None, "amount": 1000, "period": "monthly"})
+        resp = await ac.get("/api/budgets/progress")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["label"] == "Overall"
+        assert data[0]["spent"] == 0.0
+        assert data[0]["status"] == "on_track"
+
+    @pytest.mark.asyncio
+    async def test_update_budget(self, api):
+        ac, _ = api
+        create = await ac.post("/api/budgets", json={"category": None, "amount": 1000, "period": "monthly"})
+        budget_id = create.json()["id"]
+        resp = await ac.put(f"/api/budgets/{budget_id}", json={"amount": 2000})
+        assert resp.status_code == 200
+        assert resp.json()["amount"] == 2000.0
+
+    @pytest.mark.asyncio
+    async def test_update_nonexistent_returns_404(self, api):
+        ac, _ = api
+        resp = await ac.put("/api/budgets/999", json={"amount": 100})
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_budget(self, api):
+        ac, _ = api
+        create = await ac.post("/api/budgets", json={"category": None, "amount": 1000, "period": "monthly"})
+        budget_id = create.json()["id"]
+        resp = await ac.delete(f"/api/budgets/{budget_id}")
+        assert resp.status_code == 200
+        assert (await ac.get("/api/budgets")).json() == []
+
+    @pytest.mark.asyncio
+    async def test_settings_includes_budgets_enabled(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/settings")
+        assert resp.status_code == 200
+        assert "budgets_enabled" in resp.json()
+        assert resp.json()["budgets_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_toggle_budgets_enabled(self, api):
+        ac, _ = api
+        resp = await ac.put("/api/settings", json={"budgets_enabled": True})
+        assert resp.status_code == 200
+        resp2 = await ac.get("/api/settings")
+        assert resp2.json()["budgets_enabled"] is True

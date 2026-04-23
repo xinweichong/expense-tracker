@@ -565,6 +565,13 @@ class Storage:
     def create_budget(self, category: Optional[str], amount: float, period: str) -> int:
         if period not in ("monthly", "weekly"):
             raise ValueError(f"period must be 'monthly' or 'weekly', got '{period}'")
+        # SQLite UNIQUE constraint doesn't fire for two NULLs, so check manually
+        if category is None:
+            existing = self.conn.execute(
+                "SELECT 1 FROM budgets WHERE category IS NULL AND period = ?", (period,)
+            ).fetchone()
+            if existing:
+                raise ValueError(f"Budget for 'Overall' ({period}) already exists")
         try:
             cursor = self.conn.execute(
                 """INSERT INTO budgets (category, period, amount)
