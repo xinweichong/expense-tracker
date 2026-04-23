@@ -67,7 +67,7 @@ export function IncomeExpenseBar() {
               contentStyle={{ background: '#16161A', border: '1px solid #2A2A32', borderRadius: 8 }}
               labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
             />
-            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8, color: '#72727E' }} />
             <Bar dataKey="Income" fill={COLOR_INCOME} radius={[3, 3, 0, 0]} />
             <Bar dataKey="Expenses" fill={COLOR_EXPENSE} radius={[3, 3, 0, 0]} />
           </BarChart>

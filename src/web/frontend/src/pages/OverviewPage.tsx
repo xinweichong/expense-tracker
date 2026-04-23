@@ -10,7 +10,6 @@ import { formatCurrency, formatDate, getCategoryColor, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
-import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
 
 function toDateStr(d: Date): string {
@@ -203,9 +202,6 @@ export function OverviewPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Income vs Expenses Chart */}
-      <IncomeExpenseBar />
 
       {/* Transactions */}
       <Card>
