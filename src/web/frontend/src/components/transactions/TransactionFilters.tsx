@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -34,33 +35,35 @@ export function TransactionFilters({
 }: TransactionFiltersProps) {
   const hasFilters = search || category !== 'all' || startDate || endDate;
 
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
-  const quickSelects = [
-    {
-      label: 'Last 30 days',
-      start: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30)
-        .toISOString().slice(0, 10),
-      end: todayStr,
-    },
-    {
-      label: 'This month',
-      start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`,
-      end: todayStr,
-    },
-    {
-      label: 'Last month',
-      start: (() => {
-        const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        return d.toISOString().slice(0, 10);
-      })(),
-      end: (() => {
-        const d = new Date(today.getFullYear(), today.getMonth(), 0);
-        return d.toISOString().slice(0, 10);
-      })(),
-    },
-    { label: 'All time', start: '', end: '' },
-  ];
+  const quickSelects = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    return [
+      {
+        label: 'Last 30 days',
+        start: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30)
+          .toISOString().slice(0, 10),
+        end: todayStr,
+      },
+      {
+        label: 'This month',
+        start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`,
+        end: todayStr,
+      },
+      {
+        label: 'Last month',
+        start: (() => {
+          const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+          return d.toISOString().slice(0, 10);
+        })(),
+        end: (() => {
+          const d = new Date(today.getFullYear(), today.getMonth(), 0);
+          return d.toISOString().slice(0, 10);
+        })(),
+      },
+      { label: 'All time', start: '', end: '' },
+    ];
+  }, []); // empty deps: computed once per component mount
 
   return (
     <div className="flex flex-col gap-2">
@@ -106,6 +109,7 @@ export function TransactionFilters({
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="date"
+          aria-label="Start date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
           className="px-2 py-1.5 text-sm bg-background border border-border rounded-md text-foreground"
@@ -113,6 +117,7 @@ export function TransactionFilters({
         <span className="text-muted text-sm">–</span>
         <input
           type="date"
+          aria-label="End date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
           className="px-2 py-1.5 text-sm bg-background border border-border rounded-md text-foreground"
@@ -120,19 +125,23 @@ export function TransactionFilters({
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {quickSelects.map((q) => (
-          <button
-            key={q.label}
-            onClick={() => { setStartDate(q.start); setEndDate(q.end); }}
-            className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-              startDate === q.start && endDate === q.end
-                ? 'border-foreground text-foreground bg-foreground/10'
-                : 'border-border text-muted hover:text-foreground'
-            }`}
-          >
-            {q.label}
-          </button>
-        ))}
+        {quickSelects.map((q) => {
+          const isActive = q.label !== 'All time' && startDate === q.start && endDate === q.end;
+          return (
+            <button
+              key={q.label}
+              type="button"
+              onClick={() => { setStartDate(q.start); setEndDate(q.end); }}
+              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+                isActive
+                  ? 'border-foreground text-foreground bg-foreground/10'
+                  : 'border-border text-muted hover:text-foreground'
+              }`}
+            >
+              {q.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
