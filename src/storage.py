@@ -1000,13 +1000,15 @@ class Storage:
         # ── Anomaly frequency ───────────────────────────────────────────────
         multiplier = float(self.get_setting("anomaly_multiplier", "2.0"))
 
-        # Historical average per merchant (all time)
+        # Historical average per merchant (excluding current scoring period)
         merchant_avgs = {
             row["merchant"]: row["avg_amt"]
             for row in self.conn.execute(
                 """SELECT merchant, AVG(amount * exchange_rate) as avg_amt
                    FROM transactions WHERE type = 'expense' AND merchant IS NOT NULL
-                   GROUP BY merchant"""
+                   AND DATE(transaction_date) < ?
+                   GROUP BY merchant""",
+                (start,),
             ).fetchall()
         }
 
