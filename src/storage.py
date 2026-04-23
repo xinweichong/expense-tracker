@@ -354,7 +354,7 @@ class Storage:
         ).fetchone()
         return dict(row) if row else None
 
-    def get_setting(self, key: str, default: str = None) -> str | None:
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
         row = self.conn.execute(
             "SELECT value FROM app_settings WHERE key = ?", (key,)
         ).fetchone()
