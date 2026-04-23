@@ -719,14 +719,17 @@ class Storage:
         month: str,
         source: str = "auto",
         note: Optional[str] = None,
+        contributed_date: Optional[str] = None,
     ) -> int:
+        if contributed_date is None:
+            contributed_date = local_now().strftime("%Y-%m-%d")
         row = self.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
             raise ValueError(f"Goal {goal_id} not found")
         cursor = self.conn.execute(
-            """INSERT INTO goal_contributions (goal_id, amount, month, source, note)
-               VALUES (?, ?, ?, ?, ?)""",
-            (goal_id, amount, month, source, note),
+            """INSERT INTO goal_contributions (goal_id, amount, month, contributed_date, source, note)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (goal_id, amount, month, contributed_date, source, note),
         )
         # Update saved_amount on the goal
         self.conn.execute(
@@ -747,10 +750,74 @@ class Storage:
 
     def get_contributions(self, goal_id: int) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT * FROM goal_contributions WHERE goal_id = ? ORDER BY month ASC",
+            "SELECT * FROM goal_contributions WHERE goal_id = ? ORDER BY contributed_date ASC, month ASC",
             (goal_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def update_contribution(self, contribution_id: int, **fields) -> None:
+        allowed = {"amount", "note", "contributed_date"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return
+        row = self.conn.execute(
+            "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError("Contribution not found")
+        # If amount is changing, adjust the goal's saved_amount by the delta
+        if "amount" in updates:
+            delta = updates["amount"] - row["amount"]
+            self.conn.execute(
+                "UPDATE goals SET saved_amount = saved_amount + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (delta, row["goal_id"]),
+            )
+            # Re-evaluate completion status
+            goal = self.conn.execute(
+                "SELECT saved_amount, target_amount, status FROM goals WHERE id = ?", (row["goal_id"],)
+            ).fetchone()
+            if goal:
+                if goal["saved_amount"] >= goal["target_amount"] and goal["status"] == "active":
+                    self.conn.execute(
+                        "UPDATE goals SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (row["goal_id"],),
+                    )
+                elif goal["saved_amount"] < goal["target_amount"] and goal["status"] == "completed":
+                    self.conn.execute(
+                        "UPDATE goals SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (row["goal_id"],),
+                    )
+        # Derive month from contributed_date if date is being updated
+        if "contributed_date" in updates and updates["contributed_date"]:
+            updates["month"] = updates["contributed_date"][:7]
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        self.conn.execute(
+            f"UPDATE goal_contributions SET {set_clause} WHERE id = ?",
+            (*updates.values(), contribution_id),
+        )
+        self.conn.commit()
+
+    def delete_contribution(self, contribution_id: int) -> None:
+        row = self.conn.execute(
+            "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError("Contribution not found")
+        self.conn.execute("DELETE FROM goal_contributions WHERE id = ?", (contribution_id,))
+        self.conn.execute(
+            "UPDATE goals SET saved_amount = MAX(0, saved_amount - ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (row["amount"], row["goal_id"]),
+        )
+        # If goal was completed but saved_amount now falls below target, revert to active
+        goal = self.conn.execute(
+            "SELECT saved_amount, target_amount, status FROM goals WHERE id = ?", (row["goal_id"],)
+        ).fetchone()
+        if goal and goal["saved_amount"] < goal["target_amount"] and goal["status"] == "completed":
+            self.conn.execute(
+                "UPDATE goals SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (row["goal_id"],),
+            )
+        self.conn.commit()
 
     def get_goal_progress(self, goal_id: int) -> Optional[dict]:
         row = self.conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
@@ -759,9 +826,8 @@ class Storage:
         goal = dict(row)
         contributions = self.get_contributions(goal_id)
 
-        # Monthly rate: average of last 3 auto contributions
-        auto_contribs = [c["amount"] for c in contributions if c["source"] == "auto"]
-        recent = auto_contribs[-3:]
+        # Monthly rate: average of last 3 contributions
+        recent = [c["amount"] for c in contributions[-3:]]
         monthly_rate = sum(recent) / len(recent) if recent else 0.0
 
         saved = goal["saved_amount"]
@@ -791,47 +857,36 @@ class Storage:
             "contributions": contributions,
         }
 
-    def auto_contribute_monthly_savings(self, month: str) -> list[dict]:
-        """Compute monthly savings (income - expenses) and add auto contribution to all active goals.
-
-        Called on the 1st of each month from the APScheduler monthly job.
-        Returns list of {goal_id, goal_name, amount} for each contribution made.
-        """
+    def get_savings_overview(self, month: str) -> dict:
+        """Return income, expenses, savings, and how much has been manually allocated to goals for the given month."""
         import calendar as _cal
         year, mon = int(month[:4]), int(month[5:7])
-        start = f"{month}-01"
         last_day = _cal.monthrange(year, mon)[1]
+        start = f"{month}-01"
         end = f"{month}-{last_day:02d}"
 
-        income_row = self.conn.execute(
+        income = self.conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                FROM transactions WHERE type = 'income'
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
-        ).fetchone()
-        expense_row = self.conn.execute(
+        ).fetchone()["total"]
+        expenses = self.conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                FROM transactions WHERE (type IS NULL OR type = 'expense')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
-        ).fetchone()
-        savings = income_row["total"] - expense_row["total"]
-
-        if savings <= 0:
-            return []
-
-        active_goals = self.conn.execute(
-            "SELECT id, name FROM goals WHERE status = 'active'"
-        ).fetchall()
-        results = []
-        for g in active_goals:
-            # Idempotency: skip if an auto contribution already exists for this month
-            existing = self.conn.execute(
-                "SELECT 1 FROM goal_contributions WHERE goal_id = ? AND month = ? AND source = 'auto'",
-                (g["id"], month),
-            ).fetchone()
-            if existing:
-                continue
-            self.add_contribution(g["id"], amount=savings, month=month, source="auto")
-            results.append({"goal_id": g["id"], "goal_name": g["name"], "amount": savings})
-        return results
+        ).fetchone()["total"]
+        savings = max(0.0, income - expenses)
+        allocated = self.conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM goal_contributions WHERE month = ?",
+            (month,),
+        ).fetchone()["total"]
+        return {
+            "month": month,
+            "income": income,
+            "expenses": expenses,
+            "savings": savings,
+            "allocated_to_goals": allocated,
+            "unallocated": max(0.0, savings - allocated),
+        }

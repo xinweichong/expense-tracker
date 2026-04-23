@@ -99,7 +99,7 @@ export function BottomTabs() {
               Merchants
             </button>
             {/* Finance — always visible, dimmed with lock icon when disabled */}
-            {settings?.budgets_enabled ? (
+            {(settings?.budgets_enabled || settings?.goals_enabled) ? (
               <button
                 onClick={() => handleMoreItemClick('/finance')}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-foreground/5 transition-colors"
@@ -111,7 +111,7 @@ export function BottomTabs() {
               <button
                 onClick={() => handleMoreItemClick('/settings#feature-toggles')}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm text-muted/40 hover:text-muted/60 hover:bg-foreground/5 transition-colors"
-                title="Enable Budgets in Settings"
+                title="Enable Budgets or Goals in Settings"
               >
                 <Wallet className="w-5 h-5" />
                 Finance

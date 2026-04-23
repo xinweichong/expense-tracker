@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummary, useTrend, useTrendByCategory, useBalance } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
-import { api, type Transaction, type BudgetProgress } from '@/api/client';
+import { api, type Transaction, type BudgetProgress, type GoalProgress } from '@/api/client';
 import { formatCurrency, formatDate, getCategoryColor, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
@@ -78,6 +78,13 @@ export function OverviewPage() {
     queryKey: ['budget-progress'],
     queryFn: () => api.getBudgetProgress(),
     enabled: settings?.budgets_enabled === true,
+    staleTime: 30_000,
+  });
+
+  const { data: goalProgress = [] } = useQuery({
+    queryKey: ['goals'],
+    queryFn: () => api.getGoals(),
+    enabled: settings?.goals_enabled === true,
     staleTime: 30_000,
   });
 
@@ -198,6 +205,46 @@ export function OverviewPage() {
                 ))}
             </div>
           )}
+        </PageCard>
+      )}
+
+      {/* Goals Summary */}
+      {settings?.goals_enabled && goalProgress.length > 0 && (
+        <PageCard
+          title="Goals Summary"
+          action={
+            <Link to="/finance" className="text-xs text-muted hover:text-foreground">
+              Manage Goals →
+            </Link>
+          }
+        >
+          <div className="space-y-3">
+            {(goalProgress as GoalProgress[]).slice(0, 5).map((g) => (
+              <div key={g.id} className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-foreground font-medium">{g.name}</span>
+                  <span className={
+                    g.on_track === 'behind'   ? 'text-destructive' :
+                    g.on_track === 'ahead'    ? 'text-success' :
+                    g.on_track === 'on_track' ? 'text-info' :
+                    'text-muted'
+                  }>
+                    {g.percent.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${g.percent >= 100 ? 'bg-success' : 'bg-primary'}`}
+                    style={{ width: `${Math.min(g.percent, 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-muted">
+                  <span>${g.saved_amount.toFixed(0)} of ${g.target_amount.toFixed(0)}</span>
+                  {g.target_date && <span>by {g.target_date}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
         </PageCard>
       )}
 

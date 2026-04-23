@@ -3,8 +3,43 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api, type BudgetProgress, type Category, type GoalProgress } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, X, Check } from 'lucide-react';
+
+function SavingsOverviewCard() {
+  const { data: overview } = useQuery({
+    queryKey: ['savings-overview'],
+    queryFn: () => api.getSavingsOverview(),
+    staleTime: 30_000,
+  });
+
+  if (!overview) return null;
+
+  const monthLabel = new Date(overview.month + '-01').toLocaleString('en', { month: 'long', year: 'numeric' });
+
+  return (
+    <PageCard title={`Savings — ${monthLabel}`}>
+      <div className="grid grid-cols-3 gap-3 py-1">
+        <div>
+          <p className="text-xs text-muted mb-0.5">Saved</p>
+          <p className="text-lg font-semibold text-success">${overview.savings.toFixed(0)}</p>
+          <p className="text-xs text-muted">income − expenses</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted mb-0.5">Toward Goals</p>
+          <p className="text-lg font-semibold text-accent">${overview.allocated_to_goals.toFixed(0)}</p>
+          <p className="text-xs text-muted">manually added</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted mb-0.5">Unallocated</p>
+          <p className="text-lg font-semibold text-foreground">${overview.unallocated.toFixed(0)}</p>
+          <p className="text-xs text-muted">free to allocate</p>
+        </div>
+      </div>
+    </PageCard>
+  );
+}
 
 function ProgressBar({ percent, status }: { percent: number; status: string }) {
   const color =
@@ -113,7 +148,7 @@ function AddBudgetForm({ categories, onAdd }: { categories: Category[]; onAdd: (
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className={cn('input-field', 'flex-1 min-w-32')}
+          className={cn('select-field', 'flex-1 min-w-32')}
         >
           <option value="__overall__">Overall</option>
           {categories.map((c) => (
@@ -123,7 +158,7 @@ function AddBudgetForm({ categories, onAdd }: { categories: Category[]; onAdd: (
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          className="input-field"
+          className="select-field"
         >
           <option value="monthly">Monthly</option>
           <option value="weekly">Weekly</option>
@@ -183,6 +218,47 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
   const [editName, setEditName] = useState('');
   const [editTarget, setEditTarget] = useState('');
   const [editDate, setEditDate] = useState('');
+  const [editingContribId, setEditingContribId] = useState<number | null>(null);
+  const [editContribAmount, setEditContribAmount] = useState('');
+  const [editContribDate, setEditContribDate] = useState('');
+  const [editContribNote, setEditContribNote] = useState('');
+
+  const qc = useQueryClient();
+
+  const updateContribMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { amount?: number; note?: string | null; contributed_date?: string } }) =>
+      api.updateContribution(g.id, id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['savings-overview'] });
+      setEditingContribId(null);
+    },
+  });
+
+  const deleteContribMutation = useMutation({
+    mutationFn: (id: number) => api.deleteContribution(g.id, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['savings-overview'] });
+    },
+  });
+
+  const startEditContrib = (c: { id: number; amount: number; contributed_date: string | null; month: string; note: string | null }) => {
+    setEditingContribId(c.id);
+    setEditContribAmount(String(c.amount));
+    setEditContribDate(c.contributed_date ?? '');
+    setEditContribNote(c.note ?? '');
+  };
+
+  const handleSaveContrib = () => {
+    if (editingContribId === null) return;
+    const amount = parseFloat(editContribAmount);
+    if (isNaN(amount) || amount <= 0) return;
+    updateContribMutation.mutate({
+      id: editingContribId,
+      data: { amount, contributed_date: editContribDate || undefined, note: editContribNote || null },
+    });
+  };
 
   const startEdit = () => {
     setEditName(g.name);
@@ -239,12 +315,20 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
             placeholder="Target ($)"
             className="input-field w-28"
           />
-          <input
-            type="date"
-            value={editDate}
-            onChange={(e) => setEditDate(e.target.value)}
-            className="input-field"
-          />
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              value={editDate}
+              onChange={(e) => setEditDate(e.target.value)}
+              className="input-field"
+              title="Deadline (optional)"
+            />
+            {editDate && (
+              <button type="button" onClick={() => setEditDate('')} className="text-muted hover:text-foreground transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <button
@@ -293,25 +377,126 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
         </div>
       </div>
 
-      {/* Sparkline: last 6 months contributions */}
+      {/* Sparkline: last 6 months contributions aggregated by month */}
       {g.contributions.length > 0 && (
-        <div className="flex items-end gap-1 h-8">
-          {(() => {
-            const last6 = g.contributions.slice(-6);
-            const maxAmt = Math.max(...last6.map((x) => x.amount), 1);
-            return last6.map((c) => {
-              const h = Math.max(4, (c.amount / maxAmt) * 32);
-              return (
-                <div
-                  key={c.id}
-                  title={`${c.month}: $${c.amount}`}
-                  className="flex-1 rounded-sm bg-foreground/20 hover:bg-foreground/40 transition-colors"
-                  style={{ height: `${h}px` }}
-                />
-              );
-            });
-          })()}
+        <div className="space-y-1">
+          <div className="flex items-end gap-1 h-8">
+            {(() => {
+              const byMonth = new Map<string, number>();
+              for (const c of g.contributions) {
+                byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount);
+              }
+              const last6 = [...byMonth.entries()]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .slice(-6);
+              const maxAmt = Math.max(...last6.map(([, v]) => v), 1);
+              return last6.map(([month, total]) => {
+                const h = Math.max(4, (total / maxAmt) * 32);
+                const label = new Date(month + '-01').toLocaleString('en', { month: 'short' });
+                return (
+                  <div key={month} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div
+                      title={`${label}: $${total.toFixed(0)}`}
+                      className="w-full rounded-sm bg-primary/60 hover:bg-primary/80 transition-colors"
+                      style={{ height: `${h}px` }}
+                    />
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <div className="flex gap-1">
+            {(() => {
+              const byMonth = new Map<string, number>();
+              for (const c of g.contributions) {
+                byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount);
+              }
+              const last6 = [...byMonth.entries()]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .slice(-6);
+              return last6.map(([month]) => {
+                const label = new Date(month + '-01').toLocaleString('en', { month: 'short' });
+                return (
+                  <div key={month} className="flex-1 text-center text-[10px] text-muted leading-none">
+                    {label}
+                  </div>
+                );
+              });
+            })()}
+          </div>
         </div>
+      )}
+
+      {/* Contribution history */}
+      {g.contributions.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted">Contribution History</p>
+          {g.contributions.slice(-6).reverse().map((c) => (
+            <div key={c.id}>
+              {editingContribId === c.id ? (
+                <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+                  <input
+                    type="number"
+                    value={editContribAmount}
+                    onChange={(e) => setEditContribAmount(e.target.value)}
+                    className="input-field w-24 !py-1 !text-xs"
+                  />
+                  <input
+                    type="date"
+                    value={editContribDate}
+                    onChange={(e) => setEditContribDate(e.target.value)}
+                    className="input-field !py-1 !text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={editContribNote}
+                    onChange={(e) => setEditContribNote(e.target.value)}
+                    placeholder="Note"
+                    className="input-field flex-1 min-w-20 !py-1 !text-xs"
+                  />
+                  <button
+                    onClick={handleSaveContrib}
+                    disabled={updateContribMutation.isPending}
+                    className="text-accent hover:text-accent/80 disabled:opacity-40"
+                    title="Save"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setEditingContribId(null)}
+                    className="text-muted hover:text-foreground"
+                    title="Cancel"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted">
+                      {c.contributed_date ?? c.month}
+                    </span>
+                    {c.note && <span className="text-muted italic truncate max-w-28">{c.note}</span>}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-foreground mr-1">${c.amount.toFixed(0)}</span>
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => startEditContrib(c)} title="Edit">
+                      <Pencil className="w-2.5 h-2.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => deleteContribMutation.mutate(c.id)} disabled={deleteContribMutation.isPending} title="Delete">
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {g.contributions.length > 6 && (
+            <p className="text-xs text-muted">+{g.contributions.length - 6} more</p>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-muted italic">No contributions yet.</p>
       )}
 
       <div className="flex gap-2">
@@ -463,12 +648,20 @@ function GoalsSection() {
               placeholder="Target ($)"
               className="input-field w-28"
             />
-            <input
-              type="date"
-              value={newDate}
-              onChange={(e) => setNewDate(e.target.value)}
-              className="input-field"
-            />
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+                className="input-field"
+                title="Deadline (optional)"
+              />
+              {newDate && (
+                <button type="button" onClick={() => setNewDate('')} className="text-muted hover:text-foreground transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
           <button
             onClick={() => createMutation.mutate()}
@@ -580,7 +773,10 @@ export function FinancePage() {
 
       {/* Goals section — only when goals_enabled */}
       {settings.goals_enabled && (
-        <GoalsSection />
+        <>
+          <SavingsOverviewCard />
+          <GoalsSection />
+        </>
       )}
     </div>
   );

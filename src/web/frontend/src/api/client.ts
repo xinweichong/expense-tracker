@@ -70,9 +70,19 @@ export interface GoalContribution {
   goal_id: number;
   amount: number;
   month: string;
+  contributed_date: string | null;
   source: 'auto' | 'manual';
   note: string | null;
   created_at: string;
+}
+
+export interface SavingsOverview {
+  month: string;
+  income: number;
+  expenses: number;
+  savings: number;
+  allocated_to_goals: number;
+  unallocated: number;
 }
 
 export interface GoalProgress {
@@ -348,4 +358,18 @@ export const api = {
 
   getGoalContributions: (id: number) =>
     request<GoalContribution[]>(`/api/goals/${id}/contributions`),
+
+  updateContribution: (goalId: number, contributionId: number, data: { amount?: number; note?: string | null; contributed_date?: string }) =>
+    request<GoalProgress>(`/api/goals/${goalId}/contributions/${contributionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteContribution: (goalId: number, contributionId: number) =>
+    request<GoalProgress>(`/api/goals/${goalId}/contributions/${contributionId}`, {
+      method: 'DELETE',
+    }),
+
+  getSavingsOverview: () =>
+    request<SavingsOverview>('/api/savings/overview'),
 };
