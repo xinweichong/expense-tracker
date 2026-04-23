@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/card';
 import { ComparisonBarChart } from '@/components/charts/ComparisonBarChart';
+import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { MerchantTable } from '@/components/charts/MerchantTable';
 import { VelocityRing } from '@/components/charts/VelocityRing';
 import { api } from '@/api/client';
@@ -92,6 +93,9 @@ export function AnalyticsPage() {
         <h3 className="text-sm font-medium mb-4">Top Merchants This Month</h3>
         <MerchantTable data={merchants?.top ?? []} />
       </Card>
+
+      {/* Income vs Expenses */}
+      <IncomeExpenseBar />
     </div>
   );
 }
