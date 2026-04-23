@@ -113,7 +113,7 @@ function AddBudgetForm({ categories, onAdd }: { categories: Category[]; onAdd: (
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className={cn('input-field', 'flex-1 min-w-32')}
+          className={cn('select-field', 'flex-1 min-w-32')}
         >
           <option value="__overall__">Overall</option>
           {categories.map((c) => (
@@ -123,7 +123,7 @@ function AddBudgetForm({ categories, onAdd }: { categories: Category[]; onAdd: (
         <select
           value={period}
           onChange={(e) => setPeriod(e.target.value)}
-          className="input-field"
+          className="select-field"
         >
           <option value="monthly">Monthly</option>
           <option value="weekly">Weekly</option>
