@@ -75,6 +75,15 @@ export interface GoalContribution {
   created_at: string;
 }
 
+export interface SavingsOverview {
+  month: string;
+  income: number;
+  expenses: number;
+  savings: number;
+  allocated_to_goals: number;
+  unallocated: number;
+}
+
 export interface GoalProgress {
   id: number;
   name: string;
@@ -348,4 +357,7 @@ export const api = {
 
   getGoalContributions: (id: number) =>
     request<GoalContribution[]>(`/api/goals/${id}/contributions`),
+
+  getSavingsOverview: () =>
+    request<SavingsOverview>('/api/savings/overview'),
 };

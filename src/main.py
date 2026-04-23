@@ -341,59 +341,11 @@ def main():
             except Exception as e:
                 logger.error(f"Failed to generate/send {report_type} summary: {e}")
 
-        def _run_goals_monthly(month_str: str) -> None:
-            """Auto-contribute monthly savings to all active goals.
-
-            Sends a Goals Update message and individual completion notifications
-            via Telegram. Only runs when goals_enabled = true. Goals that were
-            active at the start of the run and reach their target are detected
-            by checking for status == 'completed' after contribution (set
-            automatically by add_contribution).
-            """
-            try:
-                if storage.get_setting("goals_enabled", "false") != "true":
-                    return
-                contributions = storage.auto_contribute_monthly_savings(month_str)
-                if not contributions:
-                    return
-
-                goals_progress = [
-                    storage.get_goal_progress(c["goal_id"]) for c in contributions
-                ]
-
-                # Send completion notifications first (goal just crossed target)
-                for g in goals_progress:
-                    if g and g["status"] == "completed":
-                        bot.notify_text(
-                            f"🎯 Goal Achieved!\n"
-                            f"You've reached your \"{g['name']}\" goal of ${g['target_amount']:.0f}!"
-                        )
-
-                # Monthly update for goals still active
-                active_progress = [g for g in goals_progress if g and g["status"] != "completed"]
-                if active_progress:
-                    lines = ["💰 *Goals Update*"]
-                    for g in active_progress:
-                        line = f"{g['name']}: ${g['saved_amount']:.0f} / ${g['target_amount']:.0f} ({g['percent']:.0f}%)"
-                        if g["on_track"] == "on_track" and g["target_date"]:
-                            line += f" — on track for {g['target_date']}"
-                        elif g["on_track"] == "ahead":
-                            line += " — ahead of schedule 🎉"
-                        elif g["on_track"] == "behind":
-                            line += " — behind 🔴"
-                        lines.append(line)
-                    bot.notify_text("\n".join(lines))
-            except Exception as e:
-                logger.error(f"Goals monthly update failed: {e}")
-
         scheduler = BackgroundScheduler()
         scheduler.add_job(lambda: _format_and_send_summary("weekly"), 'cron', day_of_week='sun', hour=9)
 
         def _monthly_jobs() -> None:
-            now = datetime.now()
-            prev_month = (now.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
             _format_and_send_summary("monthly")
-            _run_goals_monthly(prev_month)
 
         scheduler.add_job(_monthly_jobs, 'cron', day=1, hour=9)
         scheduler.add_job(bot.notify_daily_digest, 'cron', hour=9, minute=0)

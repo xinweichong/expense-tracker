@@ -791,47 +791,36 @@ class Storage:
             "contributions": contributions,
         }
 
-    def auto_contribute_monthly_savings(self, month: str) -> list[dict]:
-        """Compute monthly savings (income - expenses) and add auto contribution to all active goals.
-
-        Called on the 1st of each month from the APScheduler monthly job.
-        Returns list of {goal_id, goal_name, amount} for each contribution made.
-        """
+    def get_savings_overview(self, month: str) -> dict:
+        """Return income, expenses, savings, and how much has been manually allocated to goals for the given month."""
         import calendar as _cal
         year, mon = int(month[:4]), int(month[5:7])
-        start = f"{month}-01"
         last_day = _cal.monthrange(year, mon)[1]
+        start = f"{month}-01"
         end = f"{month}-{last_day:02d}"
 
-        income_row = self.conn.execute(
+        income = self.conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                FROM transactions WHERE type = 'income'
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
-        ).fetchone()
-        expense_row = self.conn.execute(
+        ).fetchone()["total"]
+        expenses = self.conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                FROM transactions WHERE (type IS NULL OR type = 'expense')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
-        ).fetchone()
-        savings = income_row["total"] - expense_row["total"]
-
-        if savings <= 0:
-            return []
-
-        active_goals = self.conn.execute(
-            "SELECT id, name FROM goals WHERE status = 'active'"
-        ).fetchall()
-        results = []
-        for g in active_goals:
-            # Idempotency: skip if an auto contribution already exists for this month
-            existing = self.conn.execute(
-                "SELECT 1 FROM goal_contributions WHERE goal_id = ? AND month = ? AND source = 'auto'",
-                (g["id"], month),
-            ).fetchone()
-            if existing:
-                continue
-            self.add_contribution(g["id"], amount=savings, month=month, source="auto")
-            results.append({"goal_id": g["id"], "goal_name": g["name"], "amount": savings})
-        return results
+        ).fetchone()["total"]
+        savings = max(0.0, income - expenses)
+        allocated = self.conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM goal_contributions WHERE month = ?",
+            (month,),
+        ).fetchone()["total"]
+        return {
+            "month": month,
+            "income": income,
+            "expenses": expenses,
+            "savings": savings,
+            "allocated_to_goals": allocated,
+            "unallocated": max(0.0, savings - allocated),
+        }

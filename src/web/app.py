@@ -635,6 +635,11 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="Goal not found")
         return storage.get_contributions(goal_id)
 
+    @app.get("/api/savings/overview")
+    async def savings_overview(_auth=Depends(require_auth)):
+        month = local_now().strftime("%Y-%m")
+        return storage.get_savings_overview(month)
+
     # Serve React SPA
 
     static_dist = os.path.join(os.path.dirname(__file__), "dist")

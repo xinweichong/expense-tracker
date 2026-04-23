@@ -6,6 +6,40 @@ import { PageCard } from '@/components/ui/cards';
 import { cn } from '@/lib/utils';
 import { Pencil, Trash2, X } from 'lucide-react';
 
+function SavingsOverviewCard() {
+  const { data: overview } = useQuery({
+    queryKey: ['savings-overview'],
+    queryFn: () => api.getSavingsOverview(),
+    staleTime: 30_000,
+  });
+
+  if (!overview) return null;
+
+  const monthLabel = new Date(overview.month + '-01').toLocaleString('en', { month: 'long', year: 'numeric' });
+
+  return (
+    <PageCard title={`Savings — ${monthLabel}`}>
+      <div className="grid grid-cols-3 gap-3 py-1">
+        <div>
+          <p className="text-xs text-muted mb-0.5">Saved</p>
+          <p className="text-lg font-semibold text-success">${overview.savings.toFixed(0)}</p>
+          <p className="text-xs text-muted">income − expenses</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted mb-0.5">Toward Goals</p>
+          <p className="text-lg font-semibold text-accent">${overview.allocated_to_goals.toFixed(0)}</p>
+          <p className="text-xs text-muted">manually added</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted mb-0.5">Unallocated</p>
+          <p className="text-lg font-semibold text-foreground">${overview.unallocated.toFixed(0)}</p>
+          <p className="text-xs text-muted">free to allocate</p>
+        </div>
+      </div>
+    </PageCard>
+  );
+}
+
 function ProgressBar({ percent, status }: { percent: number; status: string }) {
   const color =
     status === 'over_budget' ? 'bg-destructive' :
@@ -301,24 +335,53 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
         </div>
       </div>
 
-      {/* Sparkline: last 6 months contributions */}
+      {/* Sparkline: last 6 months contributions aggregated by month */}
       {g.contributions.length > 0 && (
-        <div className="flex items-end gap-1 h-8">
-          {(() => {
-            const last6 = g.contributions.slice(-6);
-            const maxAmt = Math.max(...last6.map((x) => x.amount), 1);
-            return last6.map((c) => {
-              const h = Math.max(4, (c.amount / maxAmt) * 32);
-              return (
-                <div
-                  key={c.id}
-                  title={`${c.month}: $${c.amount}`}
-                  className="flex-1 rounded-sm bg-primary/60 hover:bg-primary/80 transition-colors"
-                  style={{ height: `${h}px` }}
-                />
-              );
-            });
-          })()}
+        <div className="space-y-1">
+          <div className="flex items-end gap-1 h-8">
+            {(() => {
+              const byMonth = new Map<string, number>();
+              for (const c of g.contributions) {
+                byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount);
+              }
+              const last6 = [...byMonth.entries()]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .slice(-6);
+              const maxAmt = Math.max(...last6.map(([, v]) => v), 1);
+              return last6.map(([month, total]) => {
+                const h = Math.max(4, (total / maxAmt) * 32);
+                const label = new Date(month + '-01').toLocaleString('en', { month: 'short' });
+                return (
+                  <div key={month} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div
+                      title={`${label}: $${total.toFixed(0)}`}
+                      className="w-full rounded-sm bg-primary/60 hover:bg-primary/80 transition-colors"
+                      style={{ height: `${h}px` }}
+                    />
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          <div className="flex gap-1">
+            {(() => {
+              const byMonth = new Map<string, number>();
+              for (const c of g.contributions) {
+                byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount);
+              }
+              const last6 = [...byMonth.entries()]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .slice(-6);
+              return last6.map(([month]) => {
+                const label = new Date(month + '-01').toLocaleString('en', { month: 'short' });
+                return (
+                  <div key={month} className="flex-1 text-center text-[10px] text-muted leading-none">
+                    {label}
+                  </div>
+                );
+              });
+            })()}
+          </div>
         </div>
       )}
 
@@ -624,7 +687,10 @@ export function FinancePage() {
 
       {/* Goals section — only when goals_enabled */}
       {settings.goals_enabled && (
-        <GoalsSection />
+        <>
+          <SavingsOverviewCard />
+          <GoalsSection />
+        </>
       )}
     </div>
   );
