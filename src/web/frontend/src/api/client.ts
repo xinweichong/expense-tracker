@@ -99,6 +99,11 @@ export const api = {
   getRecurring: () =>
     request<any[]>('/api/recurring'),
 
+  getIncomeVsExpense: (months = 6) =>
+    request<Array<{ month: string; income: number; expenses: number }>>(
+      `/api/income-vs-expense?months=${months}`
+    ),
+
   // Categories
   getCategories: () =>
     request<Category[]>('/api/categories'),
