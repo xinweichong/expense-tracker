@@ -72,6 +72,16 @@ def in_memory_db():
         value TEXT NOT NULL,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS budgets (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        category   TEXT,
+        period     TEXT NOT NULL DEFAULT 'monthly',
+        amount     REAL NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(category, period)
+    );
     """
     conn.executescript(schema)
     yield conn

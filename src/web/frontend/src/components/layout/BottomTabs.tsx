@@ -1,58 +1,37 @@
 import { useState } from 'react';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, List, BarChart3, Settings, MoreHorizontal, Store, X } from 'lucide-react';
-
-const primaryTabs = [
-  { to: '/', icon: LayoutDashboard, label: 'Overview' },
-  { to: '/transactions', icon: List, label: 'Transactions' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
-];
+import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard, List, BarChart3, Settings,
+  MoreHorizontal, Store, Wallet, X,
+} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/api/client';
 
 export function BottomTabs() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
-  const moreIsActive = drawerOpen || location.pathname.startsWith('/merchants');
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.getSettings(),
+    staleTime: 30_000,
+  });
 
   const handleMoreItemClick = (to: string) => {
     setDrawerOpen(false);
     navigate(to);
   };
 
+  const mainTabs = [
+    { to: '/', icon: LayoutDashboard, label: 'Overview' },
+    { to: '/transactions', icon: List, label: 'Transactions' },
+    { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  ];
+
   return (
     <>
-      {/* More drawer overlay */}
-      {drawerOpen && (
-        <div
-          className="md:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={() => setDrawerOpen(false)}
-        />
-      )}
-
-      {/* More drawer panel */}
-      {drawerOpen && (
-        <div className="md:hidden fixed bottom-16 left-0 right-0 bg-card border-t border-border z-50 rounded-t-xl shadow-lg">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <span className="text-sm font-medium text-foreground">More</span>
-            <button onClick={() => setDrawerOpen(false)}>
-              <X className="w-4 h-4 text-muted" />
-            </button>
-          </div>
-          <div className="py-2">
-            <button
-              onClick={() => handleMoreItemClick('/merchants')}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-foreground/5 transition-colors"
-            >
-              <Store className="w-5 h-5 text-muted" />
-              Merchants
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Bottom tab bar — spec order: Overview | Transactions | Analytics | More(⋯) | Settings */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border flex justify-around items-center h-16 z-50">
-        {primaryTabs.map(({ to, icon: Icon, label }) => (
+        {mainTabs.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
@@ -67,15 +46,17 @@ export function BottomTabs() {
             <span>{label}</span>
           </NavLink>
         ))}
+
+        {/* More button */}
         <button
-          onClick={() => setDrawerOpen(!drawerOpen)}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs transition-colors ${
-            moreIsActive ? 'text-foreground' : 'text-muted'
-          }`}
+          onClick={() => setDrawerOpen(true)}
+          className="flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs text-muted"
         >
           <MoreHorizontal className="w-5 h-5" />
           <span>More</span>
         </button>
+
+        {/* Settings */}
         <NavLink
           to="/settings"
           className={({ isActive }) =>
@@ -88,6 +69,44 @@ export function BottomTabs() {
           <span>Settings</span>
         </NavLink>
       </nav>
+
+      {/* More Drawer */}
+      {drawerOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="md:hidden fixed inset-0 bg-background/60 z-50"
+            onClick={() => setDrawerOpen(false)}
+          />
+          {/* Panel */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border rounded-t-xl z-50">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm font-medium text-foreground">More</span>
+              <button onClick={() => setDrawerOpen(false)}>
+                <X className="w-5 h-5 text-muted" />
+              </button>
+            </div>
+            {/* Merchants — always visible (Phase 2a) */}
+            <button
+              onClick={() => handleMoreItemClick('/merchants')}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-foreground/5 transition-colors"
+            >
+              <Store className="w-5 h-5 text-muted" />
+              Merchants
+            </button>
+            {/* Finance — only shown when budgets_enabled=true */}
+            {settings?.budgets_enabled && (
+              <button
+                onClick={() => handleMoreItemClick('/finance')}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-foreground/5 transition-colors"
+              >
+                <Wallet className="w-5 h-5 text-muted" />
+                Finance
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }

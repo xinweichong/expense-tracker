@@ -1048,6 +1048,82 @@ class TelegramBotService:
                 reply_markup=keyboard,
             )
 
+        # Budget alert check (best-effort — errors must not break the notification)
+        try:
+            _tx_for_budget = self.storage.get_transaction(tx_id)
+            if _tx_for_budget:
+                _sgd = _tx_for_budget["amount"] * (_tx_for_budget.get("exchange_rate") or 1.0)
+                await self._check_and_alert_budgets(category, _sgd)
+        except Exception as _e:
+            logger.warning("Budget alert check failed: %s", _e)
+
+    async def _check_and_alert_budgets(
+        self, category: Optional[str], amount_sgd: float
+    ) -> None:
+        """Check budget thresholds and send alerts if a 80% or 100% boundary was just crossed.
+
+        Called at the end of _async_notify after every ingested transaction.
+        """
+        if self.storage.get_setting("budgets_enabled", "false") != "true":
+            return
+        if not self.chat_id or not self.app:
+            return
+
+        progress = self.storage.get_budget_progress()
+        for b in progress:
+            # Only check the overall budget and the budget matching this transaction's category
+            is_overall = b["category"] is None
+            is_matching = b["category"] == category
+            if not is_overall and not is_matching:
+                continue
+
+            current_pct = b["percent"]
+            prior_spent = b["spent"] - amount_sgd
+            prior_pct = (
+                round(prior_spent / b["budget_amount"] * 100, 1)
+                if b["budget_amount"] > 0
+                else 0.0
+            )
+
+            # Derive current from prior + new amount in case tx not yet in DB
+            current_spent = b["spent"] + amount_sgd
+            current_pct_calc = (
+                round(current_spent / b["budget_amount"] * 100, 1)
+                if b["budget_amount"] > 0
+                else 0.0
+            )
+            # Use whichever current is higher (covers both: tx in DB or not yet)
+            effective_current = max(current_pct, current_pct_calc)
+            effective_prior = min(prior_pct, b["percent"])
+
+            label = b["label"]
+            period_word = "month" if b["period"] == "monthly" else "week"
+
+            if effective_prior < 100 <= effective_current:
+                display_spent = max(b["spent"], current_spent)
+                overage = display_spent - b["budget_amount"]
+                msg = (
+                    f"🚨 *Budget Exceeded — {label}*\n"
+                    f"You've spent ${display_spent:.2f} of your ${b['budget_amount']:.2f} "
+                    f"{b['period']} budget.\n"
+                    f"${overage:.2f} over budget this {period_word}."
+                )
+                await self.app.bot.send_message(
+                    chat_id=self.chat_id, text=msg, parse_mode="Markdown"
+                )
+            elif effective_prior < 80 <= effective_current < 100:
+                display_spent = max(b["spent"], current_spent)
+                display_remaining = b["budget_amount"] - display_spent
+                msg = (
+                    f"⚠️ *Budget Alert — {label}*\n"
+                    f"You've spent ${display_spent:.2f} of your ${b['budget_amount']:.2f} "
+                    f"{b['period']} budget ({effective_current:.0f}%).\n"
+                    f"${display_remaining:.2f} remaining for the rest of the {period_word}."
+                )
+                await self.app.bot.send_message(
+                    chat_id=self.chat_id, text=msg, parse_mode="Markdown"
+                )
+
     async def _category_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         await query.answer()

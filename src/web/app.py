@@ -438,6 +438,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         return {
             "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
             "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
+            "budgets_enabled": storage.get_setting("budgets_enabled", "false") == "true",
         }
 
     @app.put("/api/settings")
@@ -473,6 +474,16 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         if errors:
             raise HTTPException(status_code=422, detail=errors)
 
+        if "budgets_enabled" in body:
+            val = body["budgets_enabled"]
+            if not isinstance(val, bool):
+                errors["budgets_enabled"] = "must be a boolean"
+            else:
+                storage.set_setting("budgets_enabled", "true" if val else "false")
+
+        if errors:
+            raise HTTPException(status_code=422, detail=errors)
+
         # Write all-or-nothing after validation
         for key, value in validated.items():
             storage.set_setting(key, value)
@@ -480,7 +491,64 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         return {
             "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
             "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
+            "budgets_enabled": storage.get_setting("budgets_enabled", "false") == "true",
         }
+
+    # ── Budgets ──────────────────────────────────────────────────────────
+
+    @app.get("/api/budgets")
+    async def list_budgets(_auth=Depends(require_auth)):
+        return storage.get_budgets()
+
+    @app.post("/api/budgets")
+    async def create_budget(request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        amount = body.get("amount")
+        period = body.get("period", "monthly")
+        category = body.get("category")  # None = overall
+        if amount is None:
+            raise HTTPException(status_code=400, detail="amount is required")
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="amount must be a number")
+        if period not in ("monthly", "weekly"):
+            raise HTTPException(status_code=422, detail="period must be 'monthly' or 'weekly'")
+        try:
+            budget_id = storage.create_budget(category=category, amount=amount, period=period)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        row = storage.conn.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        return dict(row)
+
+    @app.get("/api/budgets/progress")
+    async def budget_progress(_auth=Depends(require_auth)):
+        return storage.get_budget_progress()
+
+    @app.put("/api/budgets/{budget_id}")
+    async def update_budget(budget_id: int, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        amount = body.get("amount")
+        if amount is None:
+            raise HTTPException(status_code=400, detail="amount is required")
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="amount must be a number")
+        try:
+            storage.update_budget(budget_id, amount=amount)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        row = storage.conn.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        return dict(row)
+
+    @app.delete("/api/budgets/{budget_id}")
+    async def delete_budget(budget_id: int, _auth=Depends(require_auth)):
+        try:
+            storage.delete_budget(budget_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok"}
 
     # Serve React SPA
 
