@@ -2,6 +2,7 @@ import pytest
 import os
 import yaml
 from src.config import load_config
+from zoneinfo import ZoneInfo
 
 
 @pytest.fixture
@@ -102,3 +103,43 @@ class TestEnvConfig:
         monkeypatch.setenv("WEBHOOK_BASE_URL", "https://example.com")
         config = load_config(str(tmp_path / "nonexistent.yaml"))
         assert config["server"]["webhook_base_url"] == "https://example.com"
+
+
+class TestLocalNow:
+    def test_local_now_returns_timezone_aware_datetime(self):
+        from src.config import local_now
+        now = local_now("Asia/Singapore")
+        assert now.tzinfo is not None
+        assert now.tzinfo == ZoneInfo("Asia/Singapore")
+
+    def test_local_now_default_is_singapore(self):
+        from src.config import local_now
+        now = local_now()
+        assert now.tzinfo == ZoneInfo("Asia/Singapore")
+
+    def test_local_now_singapore_differs_from_utc_at_late_evening(self):
+        """Illustrates the root bug: UTC 5pm on Apr 22 = 1am Apr 23 in SGT."""
+        from datetime import datetime, timezone
+        utc_time = datetime(2026, 4, 22, 17, 0, 0, tzinfo=timezone.utc)
+        sgt_time = utc_time.astimezone(ZoneInfo("Asia/Singapore"))
+        assert utc_time.strftime("%Y-%m-%d") == "2026-04-22"
+        assert sgt_time.strftime("%Y-%m-%d") == "2026-04-23"
+
+    def test_load_config_exposes_timezone(self, tmp_path):
+        config_data = {
+            "gmail": {}, "server": {}, "web": {}, "telegram": {},
+            "timezone": "Asia/Singapore",
+        }
+        path = tmp_path / "config.yaml"
+        with open(path, "w") as f:
+            yaml.dump(config_data, f)
+        config = load_config(str(path))
+        assert config["timezone"] == "Asia/Singapore"
+
+    def test_load_config_default_timezone_is_singapore(self, tmp_path):
+        minimal = {"gmail": {}, "server": {}, "web": {}, "telegram": {}}
+        path = tmp_path / "config.yaml"
+        with open(path, "w") as f:
+            yaml.dump(minimal, f)
+        config = load_config(str(path))
+        assert config["timezone"] == "Asia/Singapore"

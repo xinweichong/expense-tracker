@@ -10,6 +10,7 @@ import csv
 import io
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
+from src.config import local_now
 from src.storage import Storage
 from src.web.auth import verify_password, create_session, verify_session
 from src.analytics import (
@@ -62,7 +63,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         end_date: Optional[str] = None,
         _auth=Depends(require_auth),
     ):
-        today = datetime.now()
+        today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_spending_summary(start_date=start, end_date=end)
@@ -123,7 +124,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
                 "description": tx.get("description") or "",
             })
         output.seek(0)
-        filename = f"transactions-{datetime.now().strftime('%Y-%m-%d')}.csv"
+        filename = f"transactions-{local_now().strftime('%Y-%m-%d')}.csv"
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
@@ -159,7 +160,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         category = body.get("category")
         currency = body.get("currency", "SGD")
         exchange_rate = body.get("exchange_rate", 1.0)
-        transaction_date = body.get("transaction_date") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        transaction_date = body.get("transaction_date") or local_now().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
             tx_id = storage.insert_transaction(
@@ -275,14 +276,14 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
 
     @app.get("/api/balance")
     async def balance(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
-        today = datetime.now()
+        today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_balance(start, end)
 
     @app.get("/api/income-vs-expense")
     async def income_vs_expense(months: int = 6, _auth=Depends(require_auth)):
-        today = datetime.now()
+        today = local_now()
         results = []
         for i in range(months):
             m = today.month - i
@@ -301,21 +302,21 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
 
     @app.get("/api/trend")
     async def trend(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
-        today = datetime.now()
+        today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_trend(start, end)
 
     @app.get("/api/trend/by-category")
     async def trend_by_category(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
-        today = datetime.now()
+        today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_trend_by_category(start, end)
 
     @app.get("/api/merchants")
     async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
-        today = datetime.now()
+        today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         rows = storage.conn.execute(
@@ -326,7 +327,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
 
     @app.get("/api/insights")
     async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
-        today = datetime.now()
+        today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return {

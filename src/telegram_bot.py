@@ -19,6 +19,7 @@ from src.analytics import (
     check_new_merchants,
 )
 from src.categorizer import Categorizer
+from src.config import local_now
 from src.exchange import ExchangeRateService
 from src.storage import Storage
 
@@ -79,12 +80,13 @@ def estimate_next_date(frequency: str, last_seen: str) -> str:
 
 
 class TelegramBotService:
-    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None, exchange_service: Optional[ExchangeRateService] = None, dashboard_url: str = ""):
+    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None, exchange_service: Optional[ExchangeRateService] = None, dashboard_url: str = "", timezone: str = "Asia/Singapore"):
         self.storage = storage
         self.bot_token = bot_token
         self.categorizer = categorizer
         self.exchange_service = exchange_service
         self.dashboard_url = dashboard_url
+        self.timezone = timezone
         self.app = None
         self.chat_id: Optional[int] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -106,6 +108,10 @@ class TelegramBotService:
             (str(chat_id),),
         )
         self.storage.conn.commit()
+
+    def _local_now(self) -> datetime:
+        """Return current datetime in the configured local timezone."""
+        return local_now(self.timezone)
 
     def parse_add_command(self, text: str) -> Optional[dict]:
         parts = text.strip().split()
@@ -519,7 +525,7 @@ class TelegramBotService:
         )
 
     async def _today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = self._local_now().strftime("%Y-%m-%d")
         text = self.format_daily_summary(today)
         keyboard = InlineKeyboardMarkup([
             [
@@ -533,19 +539,19 @@ class TelegramBotService:
         await self._send_long_message(update, text, reply_markup=keyboard)
 
     async def _yesterday(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        yesterday = (self._local_now() - timedelta(days=1)).strftime("%Y-%m-%d")
         text = self.format_daily_summary(yesterday)
         await self._send_long_message(update, text)
 
     async def _week(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        today = datetime.now()
+        today = self._local_now()
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = today.strftime("%Y-%m-%d")
         text = self.format_weekly_summary(start, end)
         await self._send_long_message(update, text)
 
     async def _month(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        today = datetime.now()
+        today = self._local_now()
         start = f"{today.year}-{today.month:02d}-01"
         end = today.strftime("%Y-%m-%d")
         summary = self.storage.get_spending_summary(start_date=start, end_date=end)
@@ -582,7 +588,7 @@ class TelegramBotService:
             await update.message.reply_text("Invalid format. Usage: /add <amount> [currency] <merchant> [category] [date]")
             return
 
-        now = datetime.now()
+        now = self._local_now()
         tx_date = parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S")
         category = parsed["category"]
         if not category and self.categorizer:
@@ -630,7 +636,7 @@ class TelegramBotService:
             await update.message.reply_text("Missing merchant. Usage: /cash <amount> <merchant> [category] [date]")
             return
 
-        now = datetime.now()
+        now = self._local_now()
         tx_date = parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S")
         category = parsed["category"]
         if not category and self.categorizer:
@@ -729,7 +735,7 @@ class TelegramBotService:
                 pass
 
         description = " ".join(remaining) if remaining else "Income"
-        now = datetime.now()
+        now = self._local_now()
         date_str = tx_date or now.strftime("%Y-%m-%dT%H:%M:%S")
 
         tx_id = self.storage.insert_transaction(
@@ -746,7 +752,7 @@ class TelegramBotService:
         await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        today = datetime.now()
+        today = self._local_now()
         start = f"{today.year}-{today.month:02d}-01"
         end = today.strftime("%Y-%m-%d")
         balance = self.storage.get_balance(start, end)
@@ -775,7 +781,7 @@ class TelegramBotService:
         )
 
     async def _insights(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        today = datetime.now()
+        today = self._local_now()
         start = f"{today.year}-{today.month:02d}-01"
         end = today.strftime("%Y-%m-%d")
 
@@ -1180,8 +1186,9 @@ class TelegramBotService:
             return
 
         conn = self.storage.conn
-        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        today = datetime.now().strftime("%Y-%m-%d")
+        _now = self._local_now()
+        yesterday = (_now - timedelta(days=1)).strftime("%Y-%m-%d")
+        today = _now.strftime("%Y-%m-%d")
 
         # Yesterday's total
         yesterday_txs = self.storage.query_transactions(start_date=yesterday, end_date=yesterday)
@@ -1191,7 +1198,7 @@ class TelegramBotService:
         )
 
         # Month to date
-        month_start = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+        month_start = _now.replace(day=1).strftime("%Y-%m-%d")
         month_txs = self.storage.query_transactions(start_date=month_start, end_date=today)
         month_total = sum(
             tx["amount"] * (tx.get("exchange_rate") or 1)

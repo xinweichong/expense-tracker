@@ -33,7 +33,9 @@
       "Bash(npx shadcn@latest add button card dialog input select sheet tabs badge dropdown-menu separator --yes --overwrite)",
       "Bash(npm run:*)",
       "Bash(npx tsc:*)",
-      "mcp__plugin_claude-mem_mcp-search__smart_unfold"
+      "mcp__plugin_claude-mem_mcp-search__smart_unfold",
+      "Bash(grep -E \"\\\\.\\(py|js|html|css|sql|json\\)$\")",
+      "Bash(grep -E \"\\\\.\\(js|jsx|ts|tsx\\)$\")"
     ]
   },
   "enabledPlugins": {

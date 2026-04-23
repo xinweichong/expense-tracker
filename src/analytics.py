@@ -6,13 +6,15 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
 
+from src.config import local_now
 
-def _get_month_range(date_str: str | None = None):
+
+def _get_month_range(date_str: str | None = None, now: datetime | None = None):
     """Return (start, end) for the month containing date_str (or current month)."""
     if date_str:
         d = datetime.strptime(date_str, "%Y-%m-%d")
     else:
-        d = datetime.now()
+        d = now if now is not None else local_now()
     start = d.replace(day=1)
     if d.month == 12:
         end = d.replace(year=d.year + 1, month=1, day=1) - timedelta(days=1)
@@ -21,12 +23,12 @@ def _get_month_range(date_str: str | None = None):
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
-def _get_week_range(date_str: str | None = None):
+def _get_week_range(date_str: str | None = None, now: datetime | None = None):
     """Return (start, end) for the week containing date_str."""
     if date_str:
         d = datetime.strptime(date_str, "%Y-%m-%d")
     else:
-        d = datetime.now()
+        d = now if now is not None else local_now()
     start = d - timedelta(days=d.weekday())
     end = start + timedelta(days=6)
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
@@ -154,7 +156,7 @@ def get_top_merchants(
 
 
 def get_merchant_trend(
-    conn: sqlite3.Connection, merchant: str
+    conn: sqlite3.Connection, merchant: str, now: datetime | None = None
 ) -> dict:
     """Get spending trend for a specific merchant across months (ASC order for charting)."""
     rows = conn.execute(
@@ -173,7 +175,7 @@ def get_merchant_trend(
 
     months = [dict(r) for r in rows]
 
-    now = datetime.now()
+    now = now if now is not None else local_now()
     current_month_str = now.strftime("%Y-%m")
     if now.month == 1:
         prev_month_str = now.replace(year=now.year - 1, month=12).strftime("%Y-%m")
@@ -193,9 +195,9 @@ def get_merchant_trend(
     }
 
 
-def get_spending_velocity(conn: sqlite3.Connection) -> dict:
+def get_spending_velocity(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
     """Calculate spending velocity: current MTD vs projected based on last month's pace."""
-    now = datetime.now()
+    now = now if now is not None else local_now()
     today = now.strftime("%Y-%m-%d")
 
     # Current month range
@@ -364,7 +366,7 @@ def generate_summary(
         "change": round(change, 2),
         "change_percent": round(change_pct, 1) if change_pct is not None else None,
         "new_merchant_count": new_merchant_count_row["cnt"],
-        "generated_at": datetime.now().isoformat(),
+        "generated_at": local_now().isoformat(),
     }
 
     if cache_dir:
