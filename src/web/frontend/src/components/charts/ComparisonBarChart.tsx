@@ -2,6 +2,14 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
+import {
+  CHART_AXIS_PROPS,
+  CHART_TOOLTIP_STYLE,
+  CHART_CURSOR_BAR,
+  CHART_LEGEND_STYLE,
+  COLOR_ACCENT,
+  COLOR_MUTED_BAR,
+} from '@/lib/chartTheme';
 
 interface ComparisonData {
   category: string;
@@ -16,30 +24,21 @@ export function ComparisonBarChart({ data }: { data: ComparisonData[] }) {
         <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <XAxis
             dataKey="category"
-            tick={{ fontSize: 11, fill: '#72727E' }}
-            tickLine={false}
-            axisLine={false}
+            {...CHART_AXIS_PROPS}
             tickFormatter={(v: string) => v.replace(/\s*[\u{1F000}-\u{1FFFF}]/gu, '').trim()}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: '#72727E' }}
-            tickLine={false}
-            axisLine={false}
+            {...CHART_AXIS_PROPS}
             tickFormatter={(v: number) => `$${v}`}
           />
           <Tooltip
-            cursor={{ fill: '#1C1C22' }}
-            contentStyle={{
-              background: '#16161A',
-              border: '1px solid #2A2A32',
-              borderRadius: '8px',
-              fontSize: '13px',
-            }}
+            cursor={CHART_CURSOR_BAR}
+            contentStyle={CHART_TOOLTIP_STYLE}
             formatter={(value) => value != null ? formatCurrency(Number(value)) : ''}
           />
-          <Legend wrapperStyle={{ fontSize: '12px' }} />
-          <Bar dataKey="current" name="This period" fill="#00D4AA" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="previous" name="Last period" fill="#3A3A46" radius={[4, 4, 0, 0]} />
+          <Legend wrapperStyle={CHART_LEGEND_STYLE} />
+          <Bar dataKey="current" name="This period" fill={COLOR_ACCENT} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="previous" name="Last period" fill={COLOR_MUTED_BAR} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

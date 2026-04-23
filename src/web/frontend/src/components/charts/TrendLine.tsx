@@ -3,6 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
+import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, COLOR_ACCENT } from '@/lib/chartTheme';
 
 interface TrendPoint {
   date: string;
@@ -22,30 +23,21 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
         <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#00D4AA" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#00D4AA" stopOpacity={0} />
+              <stop offset="5%" stopColor={COLOR_ACCENT} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={COLOR_ACCENT} stopOpacity={0} />
             </linearGradient>
           </defs>
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 11, fill: '#72727E' }}
-            tickLine={false}
-            axisLine={false}
+            {...CHART_AXIS_PROPS}
             tickFormatter={(v: string) => new Date(v).getDate().toString()}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: '#72727E' }}
-            tickLine={false}
-            axisLine={false}
+            {...CHART_AXIS_PROPS}
             tickFormatter={(v: number) => `$${v}`}
           />
           <Tooltip
-            contentStyle={{
-              background: '#16161A',
-              border: '1px solid #2A2A32',
-              borderRadius: '8px',
-              fontSize: '13px',
-            }}
+            contentStyle={CHART_TOOLTIP_STYLE}
             formatter={(value) => formatCurrency(Number(value ?? 0))}
             labelFormatter={(label) =>
               new Date(String(label)).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
@@ -54,7 +46,7 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
           <Area
             type="monotone"
             dataKey="amount"
-            stroke="#00D4AA"
+            stroke={COLOR_ACCENT}
             strokeWidth={2}
             fill={`url(#${gradientId})`}
           />

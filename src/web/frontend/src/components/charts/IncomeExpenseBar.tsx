@@ -3,16 +3,23 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { api } from '@/api/client';
-import { Card } from '@/components/ui/card';
-
-const COLOR_INCOME = '#22c55e';
-const COLOR_EXPENSE = '#ef4444';
+import { ChartCard } from '@/components/ui/cards';
+import {
+  CHART_AXIS_PROPS,
+  CHART_TOOLTIP_STYLE,
+  CHART_CURSOR_BAR,
+  CHART_LEGEND_STYLE,
+  COLOR_INCOME,
+  COLOR_EXPENSE,
+} from '@/lib/chartTheme';
 
 function formatMonth(month: string): string {
   // "2026-04" → "Apr"
   const [year, m] = month.split('-');
   return new Date(Number(year), Number(m) - 1, 1).toLocaleString('default', { month: 'short' });
 }
+
+const TITLE = 'Income vs Expenses — Last 6 Months';
 
 export function IncomeExpenseBar() {
   const { data, isLoading, isError } = useQuery({
@@ -23,19 +30,17 @@ export function IncomeExpenseBar() {
 
   if (isLoading) {
     return (
-      <Card className="p-4 bg-card border-border">
-        <h3 className="text-sm font-medium mb-4">Income vs Expenses — Last 6 Months</h3>
-        <div className="h-64 flex items-center justify-center text-muted text-sm">Loading…</div>
-      </Card>
+      <ChartCard title={TITLE}>
+        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Loading…</div>
+      </ChartCard>
     );
   }
 
   if (isError) {
     return (
-      <Card className="p-4 bg-card border-border">
-        <h3 className="text-sm font-medium mb-4">Income vs Expenses — Last 6 Months</h3>
-        <div className="h-64 flex items-center justify-center text-muted text-sm">Failed to load data</div>
-      </Card>
+      <ChartCard title={TITLE}>
+        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Failed to load data</div>
+      </ChartCard>
     );
   }
 
@@ -48,41 +53,31 @@ export function IncomeExpenseBar() {
   }));
 
   return (
-    <Card className="p-4 bg-card border-border">
-      <h3 className="text-sm font-medium mb-4">Income vs Expenses — Last 6 Months</h3>
-      <div className="w-full h-64">
+    <ChartCard title={TITLE}>
+      <div className="p-4 w-full h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <XAxis
               dataKey="month"
-              tick={{ fontSize: 11, fill: '#72727E' }}
-              tickLine={false}
-              axisLine={false}
+              {...CHART_AXIS_PROPS}
             />
             <YAxis
-              tick={{ fontSize: 11, fill: '#72727E' }}
-              tickLine={false}
-              axisLine={false}
+              {...CHART_AXIS_PROPS}
               tickFormatter={(v: number) => `$${v}`}
             />
             <Tooltip
-              cursor={{ fill: '#1C1C22' }}
-              contentStyle={{
-                background: '#16161A',
-                border: '1px solid #2A2A32',
-                borderRadius: '8px',
-                fontSize: '13px',
-              }}
+              cursor={CHART_CURSOR_BAR}
+              contentStyle={CHART_TOOLTIP_STYLE}
               formatter={(value) => value != null
                 ? `$${Number(value).toLocaleString('en-SG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                 : ''}
             />
-            <Legend wrapperStyle={{ fontSize: '12px', color: '#72727E' }} />
+            <Legend wrapperStyle={CHART_LEGEND_STYLE} />
             <Bar dataKey="Income" fill={COLOR_INCOME} radius={[4, 4, 0, 0]} />
             <Bar dataKey="Expenses" fill={COLOR_EXPENSE} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </Card>
+    </ChartCard>
   );
 }

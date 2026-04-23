@@ -3,6 +3,12 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { formatCurrency, getCategoryColor } from '@/lib/utils';
+import {
+  CHART_AXIS_PROPS,
+  CHART_TOOLTIP_STYLE,
+  CHART_CURSOR_LINE,
+  CHART_LEGEND_STYLE,
+} from '@/lib/chartTheme';
 
 export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
   const categories = useMemo(() => {
@@ -21,31 +27,22 @@ export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
         <LineChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 11, fill: '#72727E' }}
-            tickLine={false}
-            axisLine={false}
+            {...CHART_AXIS_PROPS}
             tickFormatter={(v: string) => new Date(v).getDate().toString()}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: '#72727E' }}
-            tickLine={false}
-            axisLine={false}
+            {...CHART_AXIS_PROPS}
             tickFormatter={(v: number) => `$${v}`}
           />
           <Tooltip
-            cursor={{ stroke: '#2A2A32', strokeWidth: 1 }}
-            contentStyle={{
-              background: '#16161A',
-              border: '1px solid #2A2A32',
-              borderRadius: '8px',
-              fontSize: '13px',
-            }}
+            cursor={CHART_CURSOR_LINE}
+            contentStyle={CHART_TOOLTIP_STYLE}
             formatter={(value: any, name: any) => [formatCurrency(Number(value ?? 0)), String(name ?? '')]}
             labelFormatter={(label) =>
               new Date(String(label)).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
             }
           />
-          <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+          <Legend wrapperStyle={{ ...CHART_LEGEND_STYLE, paddingTop: '8px' }} />
           {categories.map((cat) => (
             <Line
               key={cat}

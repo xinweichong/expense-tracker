@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
+import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -158,7 +159,7 @@ export function SettingsPage() {
       <h1 className="text-xl font-bold">Settings</h1>
 
       {/* Categories */}
-      <Card className="bg-card border-border">
+      <Card className="border-border">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <h2 className="font-medium">Categories</h2>
           <Button size="sm" variant="ghost" onClick={() => { setShowAddCategory(true); setError(''); }}>
@@ -365,8 +366,7 @@ export function SettingsPage() {
       </Dialog>
 
       {/* Alert Thresholds */}
-      <Card className="p-6 bg-card border-border">
-        <h2 className="text-lg font-semibold mb-4">Alert Thresholds</h2>
+      <PageCard title="Alert Thresholds">
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium text-foreground">Anomaly Detection Multiplier</label>
@@ -375,7 +375,7 @@ export function SettingsPage() {
               type="number" step="0.1" min="1.0" max="10.0"
               value={anomalyMultiplier}
               onChange={(e) => setAnomalyMultiplier(e.target.value)}
-              className="w-32 px-3 py-1.5 text-sm bg-background border border-border rounded-md"
+              className="input-field w-32"
             />
           </div>
           <div>
@@ -385,21 +385,21 @@ export function SettingsPage() {
               type="number" step="1" min="50" max="300"
               value={velocityThreshold}
               onChange={(e) => setVelocityThreshold(e.target.value)}
-              className="w-32 px-3 py-1.5 text-sm bg-background border border-border rounded-md"
+              className="input-field w-32"
             />
           </div>
           <button
             onClick={saveSettings}
-            className="px-4 py-1.5 text-sm bg-foreground text-background rounded-md hover:opacity-90"
+            className="btn-action"
           >
             Save
           </button>
           {error && <p className="text-sm text-destructive mt-1">{error}</p>}
         </div>
-      </Card>
+      </PageCard>
 
       {/* Merchant Overrides */}
-      <Card className="bg-card border-border">
+      <Card className="border-border">
         <div className="p-4 border-b border-border">
           <h2 className="font-medium">Learned Merchant Overrides</h2>
           <p className="text-xs text-muted mt-0.5">These are merchant-to-category mappings learned from your recategorizations.</p>
