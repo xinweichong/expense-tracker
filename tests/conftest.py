@@ -60,6 +60,13 @@ def in_memory_db():
         occurrences INTEGER DEFAULT 2
     );
 
+    CREATE TABLE IF NOT EXISTS merchant_tags (
+        merchant   TEXT PRIMARY KEY,
+        tags       TEXT DEFAULT '',
+        notes      TEXT DEFAULT '',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS app_settings (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL,
