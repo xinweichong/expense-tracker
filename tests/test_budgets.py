@@ -285,3 +285,107 @@ class TestBudgetAPI:
         assert resp.status_code == 200
         resp2 = await ac.get("/api/settings")
         assert resp2.json()["budgets_enabled"] is True
+
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+
+class TestBudgetAlerts:
+    @pytest.mark.asyncio
+    async def test_no_alert_when_budgets_disabled(self, in_memory_db):
+        """_check_and_alert_budgets should be a no-op when budgets_enabled=false."""
+        from src.storage import Storage
+        from src.telegram_bot import TelegramBotService
+
+        storage = Storage(connection=in_memory_db)
+        # budgets_enabled defaults to "false" (not set = uses default)
+        bot = TelegramBotService.__new__(TelegramBotService)
+        bot.storage = storage
+        bot.chat_id = 12345
+        bot.app = MagicMock()
+        bot.app.bot.send_message = AsyncMock()
+
+        await bot._check_and_alert_budgets("Dining", 50.0)
+
+        bot.app.bot.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_warning_alert_fired_when_crossing_80_percent(self, in_memory_db):
+        """Alert sent when a transaction pushes spending from below 80% to at/above 80%."""
+        from src.storage import Storage
+        from src.telegram_bot import TelegramBotService
+
+        storage = Storage(connection=in_memory_db)
+        storage.set_setting("budgets_enabled", "true")
+        storage.create_budget(category=None, amount=100.0, period="monthly")
+
+        today = date.today().isoformat()
+        # Pre-seed 70 already spent (below 80%)
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, transaction_date, type) VALUES ('manual', 'p1', 70.0, 'SGD', 1.0, 'M', ?, 'expense')",
+            (today,),
+        )
+        in_memory_db.commit()
+
+        bot = TelegramBotService.__new__(TelegramBotService)
+        bot.storage = storage
+        bot.chat_id = 12345
+        bot.app = MagicMock()
+        bot.app.bot.send_message = AsyncMock()
+
+        # New transaction adds 15 SGD → total 85 → 85%, crosses 80%
+        await bot._check_and_alert_budgets(None, 15.0)
+
+        bot.app.bot.send_message.assert_called_once()
+        call_text = bot.app.bot.send_message.call_args[1]["text"]
+        assert "⚠️" in call_text or "Budget Alert" in call_text
+
+    @pytest.mark.asyncio
+    async def test_exceeded_alert_fired_when_crossing_100_percent(self, in_memory_db):
+        """Alert sent when a transaction pushes spending from below 100% to at/above 100%."""
+        from src.storage import Storage
+        from src.telegram_bot import TelegramBotService
+
+        storage = Storage(connection=in_memory_db)
+        storage.set_setting("budgets_enabled", "true")
+        storage.create_budget(category=None, amount=100.0, period="monthly")
+
+        today = date.today().isoformat()
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, transaction_date, type) VALUES ('manual', 'p1', 90.0, 'SGD', 1.0, 'M', ?, 'expense')",
+            (today,),
+        )
+        in_memory_db.commit()
+
+        bot = TelegramBotService.__new__(TelegramBotService)
+        bot.storage = storage
+        bot.chat_id = 12345
+        bot.app = MagicMock()
+        bot.app.bot.send_message = AsyncMock()
+
+        await bot._check_and_alert_budgets(None, 20.0)
+
+        bot.app.bot.send_message.assert_called_once()
+        call_text = bot.app.bot.send_message.call_args[1]["text"]
+        assert "🚨" in call_text or "Exceeded" in call_text
+
+    @pytest.mark.asyncio
+    async def test_no_alert_when_below_80_percent(self, in_memory_db):
+        from src.storage import Storage
+        from src.telegram_bot import TelegramBotService
+
+        storage = Storage(connection=in_memory_db)
+        storage.set_setting("budgets_enabled", "true")
+        storage.create_budget(category=None, amount=1000.0, period="monthly")
+
+        bot = TelegramBotService.__new__(TelegramBotService)
+        bot.storage = storage
+        bot.chat_id = 12345
+        bot.app = MagicMock()
+        bot.app.bot.send_message = AsyncMock()
+
+        await bot._check_and_alert_budgets(None, 100.0)  # 10% of 1000
+
+        bot.app.bot.send_message.assert_not_called()
