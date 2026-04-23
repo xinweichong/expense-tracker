@@ -17,7 +17,6 @@ export function Sidebar() {
     { to: '/transactions', icon: List, label: 'Transactions' },
     { to: '/analytics', icon: BarChart3, label: 'Analytics' },
     { to: '/merchants', icon: Store, label: 'Merchants' },
-    { to: '/settings', icon: Settings, label: 'Settings' },
   ];
 
   return (
@@ -70,6 +69,21 @@ export function Sidebar() {
             <Lock className="hidden lg:inline w-3 h-3 ml-auto shrink-0" />
           </button>
         )}
+
+        {/* Settings — always last */}
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive
+                ? 'bg-foreground/10 text-foreground font-medium'
+                : 'text-muted hover:text-foreground hover:bg-foreground/5'
+            }`
+          }
+        >
+          <Settings className="w-5 h-5 shrink-0" />
+          <span className="hidden lg:inline">Settings</span>
+        </NavLink>
       </nav>
     </aside>
   );

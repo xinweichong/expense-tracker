@@ -384,8 +384,8 @@ export function SettingsPage() {
             }`}
           >
             <span
-              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0.5'
+              className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
           </button>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, List, BarChart3, Settings,
-  MoreHorizontal, Store, Wallet, X,
+  MoreHorizontal, Store, Wallet, X, Lock,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
@@ -94,14 +94,24 @@ export function BottomTabs() {
               <Store className="w-5 h-5 text-muted" />
               Merchants
             </button>
-            {/* Finance — only shown when budgets_enabled=true */}
-            {settings?.budgets_enabled && (
+            {/* Finance — always visible, dimmed with lock icon when disabled */}
+            {settings?.budgets_enabled ? (
               <button
                 onClick={() => handleMoreItemClick('/finance')}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-foreground/5 transition-colors"
               >
                 <Wallet className="w-5 h-5 text-muted" />
                 Finance
+              </button>
+            ) : (
+              <button
+                onClick={() => handleMoreItemClick('/settings')}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-muted/40 hover:text-muted/60 hover:bg-foreground/5 transition-colors"
+                title="Enable Budgets in Settings"
+              >
+                <Wallet className="w-5 h-5" />
+                Finance
+                <Lock className="w-3 h-3 ml-auto shrink-0" />
               </button>
             )}
           </div>
