@@ -295,7 +295,7 @@ class Storage:
         ).fetchone()
         return row is not None
 
-    def add_category(self, name: str, keywords: str, icon: str = "📌", color: Optional[str] = None) -> None:
+    def add_category(self, name: str, keywords: str, icon: str = "📌", color: Optional[str] = None, cat_type: str = "neutral") -> None:
         existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if existing:
             raise ValueError(f"category '{name}' already exists")
@@ -303,10 +303,13 @@ class Storage:
             clash = self.conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
             if clash:
                 raise ValueError(f"color '{color}' is already used by category '{clash['name']}'")
-        self.conn.execute("INSERT INTO categories (name, keywords, icon, color) VALUES (?, ?, ?, ?)", (name, keywords, icon, color))
+        _VALID_TYPES = {"needs", "wants", "neutral"}
+        if cat_type not in _VALID_TYPES:
+            raise ValueError(f"cat_type must be one of {_VALID_TYPES}, got '{cat_type}'")
+        self.conn.execute("INSERT INTO categories (name, keywords, icon, color, type) VALUES (?, ?, ?, ?, ?)", (name, keywords, icon, color, cat_type))
         self.conn.commit()
 
-    def update_category(self, name: str, keywords: Optional[str] = None, icon: Optional[str] = None, color: Optional[str] = None) -> None:
+    def update_category(self, name: str, keywords: Optional[str] = None, icon: Optional[str] = None, color: Optional[str] = None, cat_type: Optional[str] = None) -> None:
         existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if not existing:
             raise ValueError(f"category '{name}' not found")
@@ -325,6 +328,12 @@ class Storage:
         if color is not None:
             updates.append("color = ?")
             params.append(color)
+        if cat_type is not None:
+            _VALID_TYPES = {"needs", "wants", "neutral"}
+            if cat_type not in _VALID_TYPES:
+                raise ValueError(f"cat_type must be one of {_VALID_TYPES}, got '{cat_type}'")
+            updates.append("type = ?")
+            params.append(cat_type)
         if not updates:
             return
         params.append(name)
@@ -893,4 +902,185 @@ class Storage:
             "savings": savings,
             "allocated_to_goals": allocated,
             "unallocated": max(0.0, savings - allocated),
+        }
+
+    # ── Financial Health Score ──────────────────────────────────────────────
+
+    def get_health_score(self, months: int = 1) -> dict:
+        """Compute 0-100 financial health score using the 50/30/20 rule.
+
+        Components (max pts):
+          savings_rate      40  — min(savings_rate / 0.20, 1.0) × 40
+          needs_ratio       20  — max(0, 1 − (needs_ratio − 0.50) / 0.50) × 20
+          wants_ratio       20  — max(0, 1 − (wants_ratio − 0.30) / 0.30) × 20
+          budget_adherence  10  — (budgets_within_limit / total_budgets) × 10
+          anomaly_frequency 10  — max(0, 1 − anomaly_count / 5) × 10
+        """
+        from src.config import local_now
+
+        now = local_now()
+        period = now.strftime("%Y-%m")
+
+        # Compute start date: first day N months back (months=1 → start of current month)
+        year, month = now.year, now.month
+        month -= months - 1
+        while month <= 0:
+            month += 12
+            year -= 1
+        start = f"{year}-{month:02d}-01"
+        end = now.strftime("%Y-%m-%d")
+
+        # ── Income ──────────────────────────────────────────────────────────
+        income = self.conn.execute(
+            """SELECT COALESCE(SUM(amount * exchange_rate), 0.0)
+               FROM transactions WHERE type = 'income'
+               AND DATE(transaction_date) BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchone()[0]
+
+        if income == 0:
+            return {
+                "has_income_data": False,
+                "score": None,
+                "grade": None,
+                "components": {},
+                "period": period,
+            }
+
+        # ── Total expenses ───────────────────────────────────────────────────
+        total_expense = self.conn.execute(
+            """SELECT COALESCE(SUM(amount * exchange_rate), 0.0)
+               FROM transactions WHERE type = 'expense'
+               AND DATE(transaction_date) BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchone()[0]
+
+        # ── Needs (expenses in categories with type='needs') ─────────────────
+        needs = self.conn.execute(
+            """SELECT COALESCE(SUM(t.amount * t.exchange_rate), 0.0)
+               FROM transactions t
+               LEFT JOIN categories c ON t.category = c.name
+               WHERE t.type = 'expense'
+               AND COALESCE(c.type, 'neutral') = 'needs'
+               AND DATE(t.transaction_date) BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchone()[0]
+
+        # ── Wants (expenses in categories with type='wants') ─────────────────
+        wants = self.conn.execute(
+            """SELECT COALESCE(SUM(t.amount * t.exchange_rate), 0.0)
+               FROM transactions t
+               LEFT JOIN categories c ON t.category = c.name
+               WHERE t.type = 'expense'
+               AND COALESCE(c.type, 'neutral') = 'wants'
+               AND DATE(t.transaction_date) BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchone()[0]
+
+        savings = income - total_expense
+        savings_rate = savings / income
+        needs_ratio = needs / income
+        wants_ratio = wants / income
+
+        # ── Component scores ────────────────────────────────────────────────
+        savings_score = round(min(max(savings_rate, 0.0) / 0.20, 1.0) * 40, 1)
+        needs_score = round(max(0.0, 1.0 - max(0.0, needs_ratio - 0.50) / 0.50) * 20, 1)
+        wants_score = round(max(0.0, 1.0 - max(0.0, wants_ratio - 0.30) / 0.30) * 20, 1)
+
+        # ── Budget adherence ────────────────────────────────────────────────
+        budgets = self.get_budget_progress()
+        if budgets:
+            within = sum(1 for b in budgets if b["percent"] <= 100)
+            budget_score = round((within / len(budgets)) * 10, 1)
+            budget_adherence_value = round(within / len(budgets), 2)
+        else:
+            budget_score = 0.0
+            budget_adherence_value = 0.0
+
+        # ── Anomaly frequency ───────────────────────────────────────────────
+        multiplier = float(self.get_setting("anomaly_multiplier", "2.0"))
+
+        # Historical average per merchant (all time)
+        merchant_avgs = {
+            row["merchant"]: row["avg_amt"]
+            for row in self.conn.execute(
+                """SELECT merchant, AVG(amount * exchange_rate) as avg_amt
+                   FROM transactions WHERE type = 'expense' AND merchant IS NOT NULL
+                   GROUP BY merchant"""
+            ).fetchall()
+        }
+
+        # Period transactions
+        period_txs = self.conn.execute(
+            """SELECT merchant, amount * exchange_rate as amt_sgd
+               FROM transactions WHERE type = 'expense' AND merchant IS NOT NULL
+               AND DATE(transaction_date) BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchall()
+
+        anomaly_count = sum(
+            1
+            for r in period_txs
+            if r["merchant"] in merchant_avgs
+            and merchant_avgs[r["merchant"]] > 0
+            and r["amt_sgd"] > multiplier * merchant_avgs[r["merchant"]]
+        )
+        anomaly_score = round(max(0.0, 1.0 - anomaly_count / 5.0) * 10, 1)
+
+        # ── Total and grade ─────────────────────────────────────────────────
+        total_score = round(
+            savings_score + needs_score + wants_score + budget_score + anomaly_score
+        )
+        grade = (
+            "Excellent"       if total_score >= 80 else
+            "Good"            if total_score >= 60 else
+            "Fair"            if total_score >= 40 else
+            "Needs Attention"
+        )
+
+        return {
+            "score": total_score,
+            "grade": grade,
+            "has_income_data": True,
+            "period": period,
+            "components": {
+                "savings_rate": {
+                    "score": savings_score,
+                    "max": 40,
+                    "value": round(savings_rate, 3),
+                    "benchmark": 0.20,
+                    "label": "Savings Rate",
+                    "description": "Percentage of income saved after all expenses",
+                },
+                "needs_ratio": {
+                    "score": needs_score,
+                    "max": 20,
+                    "value": round(needs_ratio, 3),
+                    "benchmark": 0.50,
+                    "label": "Needs Ratio",
+                    "description": "Essential spending (transport, groceries, bills) as % of income",
+                },
+                "wants_ratio": {
+                    "score": wants_score,
+                    "max": 20,
+                    "value": round(wants_ratio, 3),
+                    "benchmark": 0.30,
+                    "label": "Wants Ratio",
+                    "description": "Discretionary spending (dining, entertainment, shopping) as % of income",
+                },
+                "budget_adherence": {
+                    "score": budget_score,
+                    "max": 10,
+                    "value": budget_adherence_value,
+                    "label": "Budget Adherence",
+                    "description": "Fraction of active budgets that are within their limit",
+                },
+                "anomaly_frequency": {
+                    "score": anomaly_score,
+                    "max": 10,
+                    "value": anomaly_count,
+                    "label": "Spending Anomalies",
+                    "description": "Transactions significantly above your typical spend for that merchant",
+                },
+            },
         }
