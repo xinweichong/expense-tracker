@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,6 +56,34 @@ export function SettingsPage() {
   const [editIcon, setEditIcon] = useState('');
   const [editColor, setEditColor] = useState('');
   const [error, setError] = useState('');
+
+  // Alert threshold state
+  const [anomalyMultiplier, setAnomalyMultiplier] = useState<string>('');
+  const [velocityThreshold, setVelocityThreshold] = useState<string>('');
+
+  const { data: settings, refetch: refetchSettings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.getSettings(),
+  });
+
+  useEffect(() => {
+    if (settings) {
+      setAnomalyMultiplier(String(settings.anomaly_multiplier));
+      setVelocityThreshold(String(settings.velocity_alert_threshold));
+    }
+  }, [settings]);
+
+  const saveSettings = async () => {
+    try {
+      await api.updateSettings({
+        anomaly_multiplier: parseFloat(anomalyMultiplier),
+        velocity_alert_threshold: parseInt(velocityThreshold),
+      });
+      refetchSettings();
+    } catch (e) {
+      console.error('Failed to save settings', e);
+    }
+  };
 
   // Colors already in use by other categories
   const usedColors = (categories ?? [])
@@ -333,6 +361,39 @@ export function SettingsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Alert Thresholds */}
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold mb-4">Alert Thresholds</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-foreground">Anomaly Detection Multiplier</label>
+            <p className="text-xs text-muted mb-1">Flag transactions exceeding Nx the category average (1.0–10.0)</p>
+            <input
+              type="number" step="0.1" min="1.0" max="10.0"
+              value={anomalyMultiplier}
+              onChange={(e) => setAnomalyMultiplier(e.target.value)}
+              className="w-32 px-3 py-1.5 text-sm bg-background border border-border rounded-md"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-foreground">Velocity Alert Threshold (%)</label>
+            <p className="text-xs text-muted mb-1">Alert when monthly pace exceeds X% of last month (50–300)</p>
+            <input
+              type="number" step="1" min="50" max="300"
+              value={velocityThreshold}
+              onChange={(e) => setVelocityThreshold(e.target.value)}
+              className="w-32 px-3 py-1.5 text-sm bg-background border border-border rounded-md"
+            />
+          </div>
+          <button
+            onClick={saveSettings}
+            className="px-4 py-1.5 text-sm bg-foreground text-background rounded-md hover:opacity-90"
+          >
+            Save
+          </button>
+        </div>
+      </Card>
 
       {/* Merchant Overrides */}
       <Card className="bg-card border-border">

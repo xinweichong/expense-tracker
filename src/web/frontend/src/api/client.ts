@@ -159,4 +159,14 @@ export const api = {
 
   getAnalyticsSummaries: () =>
     request<any>('/api/analytics/summaries'),
+
+  // App Settings
+  getSettings: () =>
+    request<{ anomaly_multiplier: number; velocity_alert_threshold: number }>('/api/settings'),
+
+  updateSettings: (data: { anomaly_multiplier?: number; velocity_alert_threshold?: number }) =>
+    request<{ anomaly_multiplier: number; velocity_alert_threshold: number }>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };

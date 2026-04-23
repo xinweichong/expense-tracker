@@ -981,7 +981,8 @@ class TelegramBotService:
         # Velocity, new merchants, anomalies
         velocity = get_spending_velocity(conn)
         new_merchants = check_new_merchants(conn)
-        anomalies = get_anomalies(conn)
+        anomaly_multiplier = float(self.storage.get_setting("anomaly_multiplier", "2.0"))
+        anomalies = get_anomalies(conn, multiplier=anomaly_multiplier)
 
         lines = [
             "*Morning Digest*\n",
@@ -989,7 +990,8 @@ class TelegramBotService:
             f"Month to date: *${month_total:.2f}*\n",
         ]
 
-        if velocity["status"] == "ahead":
+        velocity_threshold = float(self.storage.get_setting("velocity_alert_threshold", "110"))
+        if velocity["pace_percent"] > velocity_threshold:
             lines.append(f"⚠ Spending {velocity['pace_percent']:.0f}% of last month's pace")
 
         if new_merchants:

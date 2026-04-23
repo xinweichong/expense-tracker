@@ -178,3 +178,37 @@ class TestDeleteTransaction:
     async def test_delete_nonexistent_returns_404(self, client):
         response = await client.delete("/api/transactions/99999")
         assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_settings_returns_defaults(client):
+    """GET /api/settings should return the two default threshold values."""
+    resp = await client.get("/api/settings")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["anomaly_multiplier"] == 2.0
+    assert data["velocity_alert_threshold"] == 110
+
+@pytest.mark.asyncio
+async def test_put_settings_updates_values(client):
+    """PUT /api/settings should persist new threshold values."""
+    resp = await client.put("/api/settings", json={
+        "anomaly_multiplier": 3.0,
+        "velocity_alert_threshold": 120,
+    })
+    assert resp.status_code == 200
+    # Verify persisted
+    resp2 = await client.get("/api/settings")
+    assert resp2.json()["anomaly_multiplier"] == 3.0
+    assert resp2.json()["velocity_alert_threshold"] == 120
+
+@pytest.mark.asyncio
+async def test_put_settings_rejects_out_of_range(client):
+    """PUT /api/settings should reject values outside allowed range."""
+    resp = await client.put("/api/settings", json={"anomaly_multiplier": 0.5})
+    assert resp.status_code == 422
+
+@pytest.mark.asyncio
+async def test_put_settings_rejects_velocity_out_of_range(client):
+    resp = await client.put("/api/settings", json={"velocity_alert_threshold": 30})
+    assert resp.status_code == 422
