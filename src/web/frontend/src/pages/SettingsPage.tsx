@@ -88,6 +88,11 @@ export function SettingsPage() {
     }
   };
 
+  const toggleBudgets = async (enabled: boolean) => {
+    await api.updateSettings({ budgets_enabled: enabled });
+    refetchSettings();
+  };
+
   // Colors already in use by other categories
   const usedColors = (categories ?? [])
     .filter((c: Category) => c.color)
@@ -364,6 +369,28 @@ export function SettingsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Feature Toggles */}
+      <PageCard title="Feature Toggles">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-foreground">Budgets</p>
+            <p className="text-xs text-muted">Set spending limits and track progress</p>
+          </div>
+          <button
+            onClick={() => toggleBudgets(!settings?.budgets_enabled)}
+            className={`relative w-10 h-5 rounded-full transition-colors ${
+              settings?.budgets_enabled ? 'bg-success' : 'bg-foreground/20'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      </PageCard>
 
       {/* Alert Thresholds */}
       <PageCard title="Alert Thresholds">

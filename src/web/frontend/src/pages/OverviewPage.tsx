@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummary, useTrend, useTrendByCategory, useBalance } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
-import type { Transaction } from '@/api/client';
+import { api, type Transaction, type BudgetProgress } from '@/api/client';
 import { formatCurrency, formatDate, getCategoryColor, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
@@ -65,6 +67,19 @@ export function OverviewPage() {
   const { data: trendByCategory } = useTrendByCategory(start, end);
   const { data: balance } = useBalance(start, end);
   const { data: recentTransactions } = useTransactions({ start_date: start, end_date: end, limit: 50 });
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.getSettings(),
+    staleTime: 10_000,
+  });
+
+  const { data: budgetProgress = [] } = useQuery({
+    queryKey: ['budget-progress'],
+    queryFn: () => api.getBudgetProgress(),
+    enabled: settings?.budgets_enabled === true,
+    staleTime: 30_000,
+  });
 
   // API returns { by_category: { "Food": 50, ... } } — transform to array
   const categories = useMemo(() => {
@@ -145,6 +160,46 @@ export function OverviewPage() {
         <StatCard label="Spent" value={formatCurrency(expenses)} variant="expense" />
         <StatCard label="Income" value={formatCurrency(income)} variant="income" />
       </div>
+
+      {/* Budget Summary */}
+      {settings?.budgets_enabled && budgetProgress.length > 0 && (
+        <PageCard
+          title="Budget Summary"
+          action={
+            <Link to="/finance" className="text-xs text-muted hover:text-foreground">
+              Manage Budgets →
+            </Link>
+          }
+        >
+          {budgetProgress.every((b: BudgetProgress) => b.status === 'on_track') ? (
+            <p className="text-sm text-success">All budgets on track.</p>
+          ) : (
+            <div className="space-y-2">
+              {budgetProgress
+                .filter((b: BudgetProgress) => b.status !== 'on_track')
+                .map((b: BudgetProgress) => (
+                  <div key={b.id} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-foreground">
+                        {b.label}{' '}
+                        <span className="text-muted capitalize">({b.period})</span>
+                      </span>
+                      <span className={b.status === 'over_budget' ? 'text-destructive' : 'text-warning'}>
+                        {b.percent.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${b.status === 'over_budget' ? 'bg-destructive' : 'bg-warning'}`}
+                        style={{ width: `${Math.min(b.percent, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </PageCard>
+      )}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

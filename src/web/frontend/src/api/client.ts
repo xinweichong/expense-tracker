@@ -41,6 +41,30 @@ export interface Category {
   color: string | null;
 }
 
+export interface Budget {
+  id: number;
+  category: string | null;
+  period: 'monthly' | 'weekly';
+  amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BudgetProgress {
+  id: number;
+  category: string | null;
+  label: string;
+  period: 'monthly' | 'weekly';
+  budget_amount: number;
+  spent: number;
+  remaining: number;
+  percent: number;
+  projected: number;
+  status: 'on_track' | 'warning' | 'over_budget';
+  period_start: string;
+  period_end: string;
+}
+
 export interface MerchantSummary {
   merchant: string;
   total_sgd: number;
@@ -229,12 +253,32 @@ export const api = {
   getMerchantTrend: (merchant: string) =>
     request<MerchantTrend>(`/api/merchant-intelligence/${encodeURIComponent(merchant)}/trend`),
 
+  // Budgets
+  getBudgets: () => request<Budget[]>('/api/budgets'),
+
+  getBudgetProgress: () => request<BudgetProgress[]>('/api/budgets/progress'),
+
+  createBudget: (data: { category: string | null; amount: number; period: string }) =>
+    request<Budget>('/api/budgets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateBudget: (id: number, amount: number) =>
+    request<Budget>(`/api/budgets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ amount }),
+    }),
+
+  deleteBudget: (id: number) =>
+    request<{ status: string }>(`/api/budgets/${id}`, { method: 'DELETE' }),
+
   // App Settings
   getSettings: () =>
-    request<{ anomaly_multiplier: number; velocity_alert_threshold: number }>('/api/settings'),
+    request<{ anomaly_multiplier: number; velocity_alert_threshold: number; budgets_enabled: boolean }>('/api/settings'),
 
-  updateSettings: (data: { anomaly_multiplier?: number; velocity_alert_threshold?: number }) =>
-    request<{ anomaly_multiplier: number; velocity_alert_threshold: number }>('/api/settings', {
+  updateSettings: (data: { anomaly_multiplier?: number; velocity_alert_threshold?: number; budgets_enabled?: boolean }) =>
+    request<{ anomaly_multiplier: number; velocity_alert_threshold: number; budgets_enabled: boolean }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
