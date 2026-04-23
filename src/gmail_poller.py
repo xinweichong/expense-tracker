@@ -182,7 +182,7 @@ class GmailPoller:
         logger.info(f"Processed {len(transactions)} new transactions")
         return transactions
 
-    def _save_and_detect(self, result) -> None:
+    def _save_and_detect(self, result) -> int | None:
         """Save a parsed transaction and run recurring detection."""
         tx_id = self.storage.insert_transaction(
             source=result.source,
@@ -205,6 +205,7 @@ class GmailPoller:
                 )
         except Exception as e:
             logger.warning("Recurring detection failed for %s: %s", result.merchant, e)
+        return tx_id
 
     def poll_loop(self, interval_seconds: int = 120) -> None:
         self.authenticate()
@@ -213,9 +214,9 @@ class GmailPoller:
                 results = self.poll_once()
                 for result in results:
                     try:
-                        self._save_and_detect(result)
+                        tx_id = self._save_and_detect(result)
                         if self.on_transaction:
-                            self.on_transaction(result, None)
+                            self.on_transaction(result, tx_id)
                     except Exception as e:
                         logger.error(f"Failed to store transaction: {e}")
             except Exception as e:

@@ -123,4 +123,5 @@ def test_recurring_detector_called_after_gmail_ingest(in_memory_db):
         instance.detect.return_value = {"frequency": "monthly", "avg_amount": 50.0, "occurrences": 3}
         poller._save_and_detect(mock_result)
         instance.detect.assert_called_once_with("Netflix", 50.0)
-        instance.save_recurring.assert_called_once()
+        from unittest.mock import ANY
+        instance.save_recurring.assert_called_once_with("Netflix", 50.0, "monthly", ANY)
