@@ -1,6 +1,128 @@
 import base64
+import sqlite3
 
+import pytest
+
+from src.storage import Storage
+from src.parsers.base import ParseResult
 from src.gmail_poller import GmailPoller
+
+
+def _make_storage():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            source_id TEXT UNIQUE,
+            amount REAL NOT NULL,
+            currency TEXT DEFAULT 'SGD',
+            exchange_rate REAL DEFAULT 1.0,
+            merchant TEXT,
+            description TEXT,
+            category TEXT,
+            transaction_date DATETIME,
+            ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            raw_data TEXT,
+            type TEXT DEFAULT 'expense'
+        );
+        CREATE TABLE categories (name TEXT PRIMARY KEY, keywords TEXT, icon TEXT, color TEXT, type TEXT DEFAULT 'neutral');
+        CREATE TABLE ingestion_state (source TEXT PRIMARY KEY, last_processed_id TEXT, last_processed_at TEXT, updated_at TEXT);
+        CREATE TABLE merchant_overrides (merchant TEXT PRIMARY KEY, category TEXT, source TEXT, updated_at TEXT);
+        CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
+        CREATE TABLE recurring_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            merchant TEXT NOT NULL,
+            avg_amount REAL NOT NULL,
+            frequency TEXT NOT NULL,
+            category TEXT,
+            first_seen DATETIME,
+            last_seen DATETIME,
+            occurrences INTEGER DEFAULT 2
+        );
+        CREATE TABLE merchant_tags (merchant TEXT PRIMARY KEY, tags TEXT DEFAULT '', notes TEXT DEFAULT '', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE budgets (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, period TEXT NOT NULL DEFAULT 'monthly', amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(category, period));
+        CREATE TABLE goals (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, target_amount REAL NOT NULL, saved_amount REAL NOT NULL DEFAULT 0, target_date DATE, status TEXT NOT NULL DEFAULT 'active', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE goal_contributions (id INTEGER PRIMARY KEY AUTOINCREMENT, goal_id INTEGER NOT NULL, amount REAL NOT NULL, month TEXT NOT NULL, contributed_date TEXT, source TEXT NOT NULL DEFAULT 'auto', note TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+    """)
+    return Storage(conn)
+
+
+class TestGmailPollerCrossSourceDedup:
+    def setup_method(self):
+        self.storage = _make_storage()
+        self.poller = GmailPoller.__new__(GmailPoller)
+        self.poller.storage = self.storage
+        self.poller.on_transaction = None
+
+    def test_skips_insert_when_apple_wallet_exists(self):
+        # Pre-insert an Apple Wallet transaction
+        self.storage.insert_transaction(
+            source="apple_wallet",
+            source_id="aw_abc123",
+            amount=12.50,
+            merchant="Toast Box",
+        )
+
+        result = ParseResult(
+            source="uob_card",
+            source_id="gmail_msg_xyz",
+            amount=12.50,
+            merchant="Toast Box",
+        )
+
+        tx_id = self.poller._save_and_detect(result)
+
+        assert tx_id is None
+        # Only the original Apple Wallet record exists — no duplicate
+        rows = self.storage.conn.execute(
+            "SELECT * FROM transactions WHERE merchant = 'Toast Box'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["source"] == "apple_wallet"
+
+    def test_inserts_when_no_cross_source_match(self):
+        result = ParseResult(
+            source="uob_card",
+            source_id="gmail_msg_xyz",
+            amount=12.50,
+            merchant="Toast Box",
+        )
+
+        tx_id = self.poller._save_and_detect(result)
+
+        assert tx_id is not None
+        rows = self.storage.conn.execute(
+            "SELECT * FROM transactions WHERE merchant = 'Toast Box'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["source"] == "uob_card"
+
+    def test_on_transaction_not_called_for_duplicate(self):
+        called = []
+        self.poller.on_transaction = lambda result, tx_id: called.append(tx_id)
+
+        self.storage.insert_transaction(
+            source="apple_wallet",
+            source_id="aw_abc123",
+            amount=9.80,
+            merchant="Qashier",
+        )
+
+        result = ParseResult(
+            source="dbs_paylah",
+            source_id="gmail_msg_dbs",
+            amount=9.80,
+            merchant="Qashier",
+        )
+
+        # Simulate poll_loop behaviour: only call on_transaction when tx_id is not None
+        tx_id = self.poller._save_and_detect(result)
+        if tx_id is not None and self.poller.on_transaction:
+            self.poller.on_transaction(result, tx_id)
+
+        assert called == []  # callback was not invoked
 
 
 def _make_poller():

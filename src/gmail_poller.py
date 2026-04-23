@@ -184,6 +184,17 @@ class GmailPoller:
 
     def _save_and_detect(self, result) -> int | None:
         """Save a parsed transaction and run recurring detection."""
+        # Cross-source dedup: skip if another source already ingested this transaction
+        # recently (e.g. Apple Wallet push arrived before this email alert).
+        dup = self.storage.find_cross_source_duplicate(
+            result.merchant, result.amount, result.source
+        )
+        if dup:
+            logger.info(
+                "Cross-source duplicate skipped: %s %.2f matches existing %s (id=%s)",
+                result.merchant, result.amount, dup["source"], dup["id"],
+            )
+            return None
         tx_id = self.storage.insert_transaction(
             source=result.source,
             source_id=result.source_id,
@@ -217,7 +228,7 @@ class GmailPoller:
                 for result in results:
                     try:
                         tx_id = self._save_and_detect(result)
-                        if self.on_transaction:
+                        if tx_id is not None and self.on_transaction:
                             self.on_transaction(result, tx_id)
                     except Exception as e:
                         logger.error(f"Failed to store transaction: {e}")
