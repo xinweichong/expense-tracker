@@ -39,6 +39,7 @@ export interface Category {
   keywords: string | null;
   icon: string | null;
   color: string | null;
+  type: 'needs' | 'wants' | 'neutral';
 }
 
 export interface Budget {
@@ -131,6 +132,29 @@ export interface MerchantTrend {
   trend: 'up' | 'down' | 'stable';
 }
 
+export interface HealthScoreComponent {
+  score: number;
+  max: number;
+  value: number;
+  benchmark?: number;
+  label: string;
+  description: string;
+}
+
+export interface HealthScore {
+  score: number | null;
+  grade: string | null;
+  has_income_data: boolean;
+  period: string;
+  components: {
+    savings_rate: HealthScoreComponent;
+    needs_ratio: HealthScoreComponent;
+    wants_ratio: HealthScoreComponent;
+    budget_adherence: HealthScoreComponent;
+    anomaly_frequency: HealthScoreComponent;
+  };
+}
+
 export const api = {
   // Auth
   login: (password: string) =>
@@ -204,7 +228,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  updateCategory: (name: string, data: { keywords?: string; icon?: string; color?: string }) =>
+  updateCategory: (name: string, data: { keywords?: string; icon?: string; color?: string; type?: 'needs' | 'wants' | 'neutral' }) =>
     request<{ status: string; name: string }>(`/api/categories/${encodeURIComponent(name)}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -306,6 +330,9 @@ export const api = {
 
   deleteBudget: (id: number) =>
     request<{ status: string }>(`/api/budgets/${id}`, { method: 'DELETE' }),
+
+  getHealthScore: (months?: number) =>
+    request<HealthScore>(`/api/health-score${months ? `?months=${months}` : ''}`),
 
   // App Settings
   getSettings: () =>
