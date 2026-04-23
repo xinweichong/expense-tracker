@@ -113,9 +113,9 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             writer.writerow({
                 "date": (tx.get("transaction_date") or "")[:10],
                 "merchant": tx.get("merchant") or "",
-                "amount": tx.get("amount") or "",
+                "amount": tx.get("amount") if tx.get("amount") is not None else "",
                 "currency": tx.get("currency") or "SGD",
-                "exchange_rate": tx.get("exchange_rate") or 1.0,
+                "exchange_rate": tx.get("exchange_rate") if tx.get("exchange_rate") is not None else 1.0,
                 "amount_sgd": round((tx.get("amount") or 0) * (tx.get("exchange_rate") or 1.0), 2),
                 "type": tx.get("type") or "expense",
                 "category": tx.get("category") or "",
@@ -127,7 +127,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     @app.get("/api/transactions/{tx_id}")
