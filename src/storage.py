@@ -390,7 +390,7 @@ class Storage:
         }
         order = sort_map.get(sort_by, "total_sgd DESC")
 
-        conditions = ["t.merchant IS NOT NULL", "t.type = 'expense'"]
+        conditions = ["t.merchant IS NOT NULL", "(t.type IS NULL OR t.type = 'expense')"]
         params: list = []
 
         if name_search:
@@ -420,7 +420,7 @@ class Storage:
                 SELECT merchant, category,
                        ROW_NUMBER() OVER (PARTITION BY merchant ORDER BY COUNT(*) DESC) as rn
                 FROM transactions
-                WHERE merchant IS NOT NULL AND type = 'expense' AND category IS NOT NULL
+                WHERE merchant IS NOT NULL AND (type IS NULL OR type = 'expense') AND category IS NOT NULL
                 GROUP BY merchant, category
             )
             SELECT
@@ -430,7 +430,7 @@ class Storage:
                 COALESCE(mt.notes, '') as notes
             FROM merchant_stats ms
             LEFT JOIN merchant_category mc ON ms.merchant = mc.merchant AND mc.rn = 1
-            LEFT JOIN merchant_tags mt ON LOWER(ms.merchant) = LOWER(mt.merchant)
+            LEFT JOIN merchant_tags mt ON ms.merchant = mt.merchant
             WHERE (? IS NULL OR ',' || COALESCE(mt.tags, '') || ',' LIKE '%,' || ? || ',%')
             ORDER BY {order}
             LIMIT ? OFFSET ?
@@ -457,7 +457,7 @@ class Storage:
                 DATE(MIN(t.transaction_date)) as first_seen,
                 DATE(MAX(t.transaction_date)) as last_seen
             FROM transactions t
-            WHERE t.merchant = ? AND t.type = 'expense'
+            WHERE t.merchant = ? AND (t.type IS NULL OR t.type = 'expense')
             """,
             (merchant,),
         ).fetchone()
