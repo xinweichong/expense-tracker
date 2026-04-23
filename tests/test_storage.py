@@ -653,3 +653,28 @@ class TestTrendByCategory:
         # Apr 3: Food present, Transport absent → must be None
         assert by_date["2026-04-03"]["Food"] == pytest.approx(35.0)
         assert by_date["2026-04-03"]["Transport"] is None
+
+
+class TestAppSettings:
+    def test_get_setting_returns_none_when_missing(self, in_memory_db):
+        from src.storage import Storage
+        storage = Storage(connection=in_memory_db)
+        assert storage.get_setting("nonexistent") is None
+
+    def test_get_setting_returns_default_when_missing(self, in_memory_db):
+        from src.storage import Storage
+        storage = Storage(connection=in_memory_db)
+        assert storage.get_setting("nonexistent", default="42") == "42"
+
+    def test_set_and_get_setting(self, in_memory_db):
+        from src.storage import Storage
+        storage = Storage(connection=in_memory_db)
+        storage.set_setting("anomaly_multiplier", "3.5")
+        assert storage.get_setting("anomaly_multiplier") == "3.5"
+
+    def test_set_setting_overwrites_existing(self, in_memory_db):
+        from src.storage import Storage
+        storage = Storage(connection=in_memory_db)
+        storage.set_setting("velocity_alert_threshold", "110")
+        storage.set_setting("velocity_alert_threshold", "125")
+        assert storage.get_setting("velocity_alert_threshold") == "125"

@@ -98,6 +98,11 @@ def init_db(db_path: str) -> sqlite3.Connection:
             last_seen DATETIME,
             occurrences INTEGER DEFAULT 2
         );
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     # Migrate: add exchange_rate column if missing
     try:
@@ -124,6 +129,16 @@ def init_db(db_path: str) -> sqlite3.Connection:
     ]
     for stmt in index_statements:
         conn.execute(stmt)
+    conn.commit()
+    # Seed default app settings (INSERT OR IGNORE — never overwrites user changes)
+    defaults = [
+        ("anomaly_multiplier", "2.0"),
+        ("velocity_alert_threshold", "110"),
+    ]
+    for key, value in defaults:
+        conn.execute(
+            "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)", (key, value)
+        )
     conn.commit()
     tx_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
     cat_count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
