@@ -371,3 +371,179 @@ class Storage:
             (key, value),
         )
         self.conn.commit()
+
+    def get_merchant_list(
+        self,
+        sort_by: str = "total_spent",
+        tag_filter: str | None = None,
+        category_filter: str | None = None,
+        name_search: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> list[dict]:
+        """Return paginated merchant list with computed stats and tags."""
+        sort_map = {
+            "total_spent":       "total_sgd DESC",
+            "transaction_count": "transaction_count DESC",
+            "last_seen":         "last_seen DESC",
+            "merchant_name":     "ms.merchant ASC",
+        }
+        order = sort_map.get(sort_by, "total_sgd DESC")
+
+        conditions = ["t.merchant IS NOT NULL", "(t.type IS NULL OR t.type = 'expense')"]
+        params: list = []
+
+        if name_search:
+            conditions.append("t.merchant LIKE ?")
+            params.append(f"%{name_search}%")
+        if category_filter:
+            conditions.append("t.category = ?")
+            params.append(category_filter)
+
+        where = " AND ".join(conditions)
+
+        rows = self.conn.execute(
+            f"""
+            WITH merchant_stats AS (
+                SELECT
+                    t.merchant,
+                    ROUND(SUM(t.amount * t.exchange_rate), 2) as total_sgd,
+                    COUNT(*) as transaction_count,
+                    ROUND(AVG(t.amount * t.exchange_rate), 2) as avg_amount_sgd,
+                    DATE(MIN(t.transaction_date)) as first_seen,
+                    DATE(MAX(t.transaction_date)) as last_seen
+                FROM transactions t
+                WHERE {where}
+                GROUP BY t.merchant
+            ),
+            merchant_category AS (
+                SELECT merchant, category,
+                       ROW_NUMBER() OVER (PARTITION BY merchant ORDER BY COUNT(*) DESC) as rn
+                FROM transactions
+                WHERE merchant IS NOT NULL AND (type IS NULL OR type = 'expense') AND category IS NOT NULL
+                GROUP BY merchant, category
+            )
+            SELECT
+                ms.*,
+                mc.category,
+                COALESCE(mt.tags, '') as tags,
+                COALESCE(mt.notes, '') as notes
+            FROM merchant_stats ms
+            LEFT JOIN merchant_category mc ON ms.merchant = mc.merchant AND mc.rn = 1
+            LEFT JOIN merchant_tags mt ON ms.merchant = mt.merchant
+            WHERE (? IS NULL OR ',' || COALESCE(mt.tags, '') || ',' LIKE '%,' || ? || ',%')
+            ORDER BY {order}
+            LIMIT ? OFFSET ?
+            """,
+            params + [tag_filter, tag_filter, limit, offset],
+        ).fetchall()
+
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["tags"] = [t.strip() for t in d["tags"].split(",") if t.strip()]
+            result.append(d)
+        return result
+
+    def get_merchant_profile(self, merchant: str) -> dict | None:
+        """Return full stats for a single merchant, or None if merchant has no transactions."""
+        row = self.conn.execute(
+            """
+            SELECT
+                t.merchant,
+                ROUND(SUM(t.amount * t.exchange_rate), 2) as total_sgd,
+                COUNT(*) as transaction_count,
+                ROUND(AVG(t.amount * t.exchange_rate), 2) as avg_amount_sgd,
+                DATE(MIN(t.transaction_date)) as first_seen,
+                DATE(MAX(t.transaction_date)) as last_seen
+            FROM transactions t
+            WHERE t.merchant = ? AND (t.type IS NULL OR t.type = 'expense')
+            """,
+            (merchant,),
+        ).fetchone()
+
+        if not row or row["transaction_count"] == 0:
+            return None
+
+        profile = dict(row)
+        tags_row = self.conn.execute(
+            "SELECT tags, notes FROM merchant_tags WHERE merchant = ?", (merchant,)
+        ).fetchone()
+        profile["tags"] = []
+        profile["notes"] = ""
+        if tags_row:
+            profile["tags"] = [t.strip() for t in (tags_row["tags"] or "").split(",") if t.strip()]
+            profile["notes"] = tags_row["notes"] or ""
+        return profile
+
+    def get_merchant_tags(self, merchant: str) -> dict:
+        """Return tags and notes for a merchant (empty defaults if not set)."""
+        row = self.conn.execute(
+            "SELECT tags, notes FROM merchant_tags WHERE merchant = ?", (merchant,)
+        ).fetchone()
+        if not row:
+            return {"merchant": merchant, "tags": [], "notes": ""}
+        return {
+            "merchant": merchant,
+            "tags": [t.strip() for t in (row["tags"] or "").split(",") if t.strip()],
+            "notes": row["notes"] or "",
+        }
+
+    def set_merchant_tags(self, merchant: str, tags: list[str]) -> None:
+        """Upsert tags for a merchant (does not touch notes)."""
+        tags_str = ",".join(tags)
+        self.conn.execute(
+            """INSERT INTO merchant_tags (merchant, tags, updated_at)
+               VALUES (?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(merchant) DO UPDATE SET
+                   tags = excluded.tags,
+                   updated_at = excluded.updated_at""",
+            (merchant, tags_str),
+        )
+        self.conn.commit()
+
+    def set_merchant_notes(self, merchant: str, notes: str) -> None:
+        """Upsert notes for a merchant (does not touch tags)."""
+        self.conn.execute(
+            """INSERT INTO merchant_tags (merchant, notes, updated_at)
+               VALUES (?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(merchant) DO UPDATE SET
+                   notes = excluded.notes,
+                   updated_at = excluded.updated_at""",
+            (merchant, notes),
+        )
+        self.conn.commit()
+
+    def get_merchant_trend(self, merchant: str, months: int = 6) -> dict:
+        """Return monthly spend totals for a merchant over the last N months."""
+        rows = self.conn.execute(
+            """
+            SELECT strftime('%Y-%m', transaction_date) as month,
+                   ROUND(SUM(amount * exchange_rate), 2) as total,
+                   COUNT(*) as count
+            FROM transactions
+            WHERE merchant = ?
+              AND (type IS NULL OR type = 'expense')
+              AND transaction_date >= date('now', ? || ' months')
+            GROUP BY month
+            ORDER BY month ASC
+            """,
+            (merchant, f"-{months}"),
+        ).fetchall()
+        month_data = [dict(r) for r in rows]
+        totals = [m["total"] for m in month_data]
+        current = totals[-1] if totals else 0
+        previous = totals[-2] if len(totals) >= 2 else 0
+        if current > previous * 1.1:
+            trend = "up"
+        elif current < previous * 0.9:
+            trend = "down"
+        else:
+            trend = "stable"
+        return {
+            "merchant": merchant,
+            "months": month_data,
+            "current_month": current,
+            "previous_month": previous,
+            "trend": trend,
+        }

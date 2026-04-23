@@ -41,6 +41,38 @@ export interface Category {
   color: string | null;
 }
 
+export interface MerchantSummary {
+  merchant: string;
+  total_sgd: number;
+  transaction_count: number;
+  avg_amount_sgd: number;
+  category: string | null;
+  first_seen: string;
+  last_seen: string;
+  tags: string[];
+  notes: string;
+}
+
+export interface MerchantProfile {
+  merchant: string;
+  total_sgd: number;
+  transaction_count: number;
+  avg_amount_sgd: number;
+  category: string | null;
+  first_seen: string;
+  last_seen: string;
+  tags: string[];
+  notes: string;
+}
+
+export interface MerchantTrend {
+  merchant: string;
+  months: Array<{ month: string; total: number; count: number }>;
+  current_month: number;
+  previous_month: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
 export const api = {
   // Auth
   login: (password: string) =>
@@ -159,6 +191,43 @@ export const api = {
 
   getAnalyticsSummaries: () =>
     request<any>('/api/analytics/summaries'),
+
+  // Merchant Intelligence
+  getMerchantIntelligenceList: (params?: {
+    sort_by?: 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name';
+    tag?: string;
+    category?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = params
+      ? '?' + new URLSearchParams(
+          Object.entries(params)
+            .filter(([, v]) => v !== undefined && v !== '')
+            .map(([k, v]) => [k, String(v)])
+        ).toString()
+      : '';
+    return request<MerchantSummary[]>(`/api/merchant-intelligence${query}`);
+  },
+
+  getMerchantProfile: (merchant: string) =>
+    request<MerchantProfile>(`/api/merchant-intelligence/${encodeURIComponent(merchant)}`),
+
+  setMerchantTags: (merchant: string, tags: string[]) =>
+    request<{ merchant: string; tags: string[]; notes: string }>(
+      `/api/merchant-intelligence/${encodeURIComponent(merchant)}/tags`,
+      { method: 'PUT', body: JSON.stringify({ tags }) }
+    ),
+
+  setMerchantNotes: (merchant: string, notes: string) =>
+    request<{ merchant: string; tags: string[]; notes: string }>(
+      `/api/merchant-intelligence/${encodeURIComponent(merchant)}/notes`,
+      { method: 'PUT', body: JSON.stringify({ notes }) }
+    ),
+
+  getMerchantTrend: (merchant: string) =>
+    request<MerchantTrend>(`/api/merchant-intelligence/${encodeURIComponent(merchant)}/trend`),
 
   // App Settings
   getSettings: () =>

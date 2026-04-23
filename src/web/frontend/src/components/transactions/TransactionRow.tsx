@@ -25,7 +25,15 @@ const SOURCE_LABELS: Record<string, string> = {
   cash:         'Cash',
 };
 
-export function TransactionRow({ tx, readOnly = false }: { tx: Transaction; readOnly?: boolean }) {
+export function TransactionRow({
+  tx,
+  readOnly = false,
+  onMerchantClick,
+}: {
+  tx: Transaction;
+  readOnly?: boolean;
+  onMerchantClick?: (merchant: string) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [merchant, setMerchant] = useState(tx.merchant ?? '');
@@ -158,7 +166,16 @@ export function TransactionRow({ tx, readOnly = false }: { tx: Transaction; read
         {categoryIcon}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{tx.merchant || tx.description || 'Transaction'}</p>
+        {tx.merchant && onMerchantClick ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMerchantClick(tx.merchant!); }}
+            className="text-sm font-medium truncate text-left hover:underline underline-offset-2 hover:text-foreground/80 transition-colors"
+          >
+            {tx.merchant}
+          </button>
+        ) : (
+          <p className="text-sm font-medium truncate">{tx.merchant || tx.description || 'Transaction'}</p>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-xs text-muted">{formatDate(tx.transaction_date)}</p>
           {tx.category && (
