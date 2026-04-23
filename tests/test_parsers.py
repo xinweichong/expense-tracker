@@ -6,6 +6,11 @@ from src.parsers.uob_card import UobCardParser
 from src.parsers.apple_wallet import AppleWalletParser
 
 
+def test_parse_result_has_tx_type_default():
+    result = ParseResult(source="x", source_id="y", amount=1.0, merchant="M")
+    assert result.tx_type == "expense"
+
+
 class TestDbsPaylahParser:
     def setup_method(self):
         self.parser = DbsPaylahParser()

@@ -192,6 +192,8 @@ class GmailPoller:
             description=result.description,
             transaction_date=result.transaction_date,
             raw_data=result.raw_data,
+            currency=result.currency,
+            tx_type=result.tx_type,
         )
         logger.info(f"Stored transaction: {result.merchant} ${result.amount:.2f}")
         try:
