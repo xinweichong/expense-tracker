@@ -3,6 +3,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
+from src.config import local_now
+
 
 def _get_budget_period(period: str) -> tuple[str, str]:
     """Return (start_date, end_date) for the current budget period as ISO strings."""
@@ -771,7 +773,7 @@ class Storage:
         on_track = None
         if goal["target_date"] and months_to_target is not None:
             target_dt = datetime.strptime(goal["target_date"], "%Y-%m-%d")
-            now = datetime.now()
+            now = local_now()
             months_remaining = (target_dt.year - now.year) * 12 + (target_dt.month - now.month)
             if months_to_target < months_remaining * 0.9:
                 on_track = "ahead"
@@ -823,6 +825,13 @@ class Storage:
         ).fetchall()
         results = []
         for g in active_goals:
+            # Idempotency: skip if an auto contribution already exists for this month
+            existing = self.conn.execute(
+                "SELECT 1 FROM goal_contributions WHERE goal_id = ? AND month = ? AND source = 'auto'",
+                (g["id"], month),
+            ).fetchone()
+            if existing:
+                continue
             self.add_contribution(g["id"], amount=savings, month=month, source="auto")
             results.append({"goal_id": g["id"], "goal_name": g["name"], "amount": savings})
         return results
