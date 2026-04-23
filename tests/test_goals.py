@@ -165,3 +165,112 @@ class TestGoalProgress:
     def test_get_goal_progress_returns_none_for_unknown(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         assert storage.get_goal_progress(999) is None
+
+
+import bcrypt
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from src.web.app import create_dashboard_app
+
+
+@pytest.fixture
+def goal_app(in_memory_db):
+    storage = Storage(connection=in_memory_db)
+    pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
+    return create_dashboard_app(storage, pw_hash), storage
+
+
+@pytest_asyncio.fixture
+async def api(goal_app):
+    app, storage = goal_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        await ac.post("/api/login", json={"password": "test"})
+        yield ac, storage
+
+
+class TestGoalAPI:
+    @pytest.mark.asyncio
+    async def test_get_goals_empty(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/goals")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    @pytest.mark.asyncio
+    async def test_create_goal(self, api):
+        ac, _ = api
+        resp = await ac.post(
+            "/api/goals",
+            json={"name": "Emergency Fund", "target_amount": 10000},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "Emergency Fund"
+        assert data["target_amount"] == 10000.0
+        assert data["saved_amount"] == 0.0
+        assert "id" in data
+
+    @pytest.mark.asyncio
+    async def test_create_goal_requires_name_and_amount(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/goals", json={"name": "X"})
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_goal(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "X", "target_amount": 500})
+        goal_id = create.json()["id"]
+        resp = await ac.put(f"/api/goals/{goal_id}", json={"name": "Y", "target_amount": 1000})
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Y"
+        assert resp.json()["target_amount"] == 1000.0
+
+    @pytest.mark.asyncio
+    async def test_delete_goal(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "X", "target_amount": 100})
+        goal_id = create.json()["id"]
+        resp = await ac.delete(f"/api/goals/{goal_id}")
+        assert resp.status_code == 200
+        assert (await ac.get("/api/goals")).json() == []
+
+    @pytest.mark.asyncio
+    async def test_manual_contribution(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "X", "target_amount": 1000})
+        goal_id = create.json()["id"]
+        resp = await ac.post(
+            f"/api/goals/{goal_id}/contribute",
+            json={"amount": 250, "note": "Bonus"},
+        )
+        assert resp.status_code == 200
+        goals_resp = await ac.get("/api/goals")
+        assert goals_resp.json()[0]["saved_amount"] == 250.0
+
+    @pytest.mark.asyncio
+    async def test_get_contributions(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "X", "target_amount": 1000})
+        goal_id = create.json()["id"]
+        await ac.post(f"/api/goals/{goal_id}/contribute", json={"amount": 100})
+        resp = await ac.get(f"/api/goals/{goal_id}/contributions")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert resp.json()[0]["source"] == "manual"
+
+    @pytest.mark.asyncio
+    async def test_settings_includes_goals_enabled(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/settings")
+        assert "goals_enabled" in resp.json()
+        assert resp.json()["goals_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_toggle_goals_enabled(self, api):
+        ac, _ = api
+        resp = await ac.put("/api/settings", json={"goals_enabled": True})
+        assert resp.status_code == 200
+        resp2 = await ac.get("/api/settings")
+        assert resp2.json()["goals_enabled"] is True
