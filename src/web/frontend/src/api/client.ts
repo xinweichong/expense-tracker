@@ -53,7 +53,17 @@ export interface MerchantSummary {
   notes: string;
 }
 
-export interface MerchantProfile extends MerchantSummary {}
+export interface MerchantProfile {
+  merchant: string;
+  total_sgd: number;
+  transaction_count: number;
+  avg_amount_sgd: number;
+  category: string | null;
+  first_seen: string;
+  last_seen: string;
+  tags: string[];
+  notes: string;
+}
 
 export interface MerchantTrend {
   merchant: string;
@@ -184,7 +194,7 @@ export const api = {
 
   // Merchant Intelligence
   getMerchantIntelligenceList: (params?: {
-    sort_by?: string;
+    sort_by?: 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name';
     tag?: string;
     category?: string;
     search?: string;

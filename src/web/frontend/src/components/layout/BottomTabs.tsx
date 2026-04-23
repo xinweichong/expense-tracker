@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, List, BarChart3, Settings, MoreHorizontal, Store, X } from 'lucide-react';
 
-// Spec order: Overview | Transactions | Analytics | More(⋯) | Settings
-// Settings is a direct bottom tab (5th position), More is 4th.
 const primaryTabs = [
   { to: '/', icon: LayoutDashboard, label: 'Overview' },
   { to: '/transactions', icon: List, label: 'Transactions' },
@@ -13,6 +11,8 @@ const primaryTabs = [
 export function BottomTabs() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const moreIsActive = drawerOpen || location.pathname.startsWith('/merchants');
 
   const handleMoreItemClick = (to: string) => {
     setDrawerOpen(false);
@@ -69,7 +69,9 @@ export function BottomTabs() {
         ))}
         <button
           onClick={() => setDrawerOpen(!drawerOpen)}
-          className="flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs text-muted"
+          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs transition-colors ${
+            moreIsActive ? 'text-foreground' : 'text-muted'
+          }`}
         >
           <MoreHorizontal className="w-5 h-5" />
           <span>More</span>
