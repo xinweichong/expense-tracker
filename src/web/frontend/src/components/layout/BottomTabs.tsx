@@ -105,7 +105,7 @@ export function BottomTabs() {
               </button>
             ) : (
               <button
-                onClick={() => handleMoreItemClick('/settings')}
+                onClick={() => handleMoreItemClick('/settings#feature-toggles')}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm text-muted/40 hover:text-muted/60 hover:bg-foreground/5 transition-colors"
                 title="Enable Budgets in Settings"
               >
