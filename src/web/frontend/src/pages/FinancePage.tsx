@@ -392,7 +392,9 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
           {g.contributions.slice(-6).reverse().map((c) => (
             <div key={c.id} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
-                <span className="text-muted">{c.month}</span>
+                <span className="text-muted">
+                  {c.contributed_date ?? c.month}
+                </span>
                 {c.note && <span className="text-muted italic truncate max-w-28">{c.note}</span>}
               </div>
               <div className="flex items-center gap-2">

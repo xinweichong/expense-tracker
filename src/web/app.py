@@ -621,9 +621,16 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             amount = float(amount)
         except (TypeError, ValueError):
             raise HTTPException(status_code=422, detail="amount must be a number")
-        today = datetime.now().strftime("%Y-%m")
+        today = local_now()
         try:
-            storage.add_contribution(goal_id, amount=amount, month=today, source="manual", note=note)
+            storage.add_contribution(
+                goal_id,
+                amount=amount,
+                month=today.strftime("%Y-%m"),
+                contributed_date=today.strftime("%Y-%m-%d"),
+                source="manual",
+                note=note,
+            )
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return storage.get_goal_progress(goal_id)

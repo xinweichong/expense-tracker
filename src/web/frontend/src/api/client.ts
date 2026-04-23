@@ -70,6 +70,7 @@ export interface GoalContribution {
   goal_id: number;
   amount: number;
   month: string;
+  contributed_date: string | null;
   source: 'auto' | 'manual';
   note: string | null;
   created_at: string;

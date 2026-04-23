@@ -130,13 +130,14 @@ def init_db(db_path: str) -> sqlite3.Connection:
             updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS goal_contributions (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            goal_id    INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
-            amount     REAL NOT NULL,
-            month      TEXT NOT NULL,
-            source     TEXT NOT NULL DEFAULT 'auto',
-            note       TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            goal_id          INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+            amount           REAL NOT NULL,
+            month            TEXT NOT NULL,
+            contributed_date TEXT,
+            source           TEXT NOT NULL DEFAULT 'auto',
+            note             TEXT,
+            created_at       DATETIME DEFAULT CURRENT_TIMESTAMP
         );
     """)
     # Migrate: add exchange_rate column if missing
@@ -152,6 +153,11 @@ def init_db(db_path: str) -> sqlite3.Connection:
     # Migrate: add color column to categories if missing
     try:
         conn.execute("ALTER TABLE categories ADD COLUMN color TEXT DEFAULT NULL")
+    except Exception:
+        pass
+    # Migrate: add contributed_date column to goal_contributions if missing
+    try:
+        conn.execute("ALTER TABLE goal_contributions ADD COLUMN contributed_date TEXT")
     except Exception:
         pass
     conn.commit()

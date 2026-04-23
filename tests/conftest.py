@@ -96,13 +96,14 @@ def in_memory_db():
     );
 
     CREATE TABLE IF NOT EXISTS goal_contributions (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        goal_id    INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
-        amount     REAL NOT NULL,
-        month      TEXT NOT NULL,
-        source     TEXT NOT NULL DEFAULT 'auto',
-        note       TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        goal_id          INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+        amount           REAL NOT NULL,
+        month            TEXT NOT NULL,
+        contributed_date TEXT,
+        source           TEXT NOT NULL DEFAULT 'auto',
+        note             TEXT,
+        created_at       DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """
     conn.executescript(schema)

@@ -719,14 +719,17 @@ class Storage:
         month: str,
         source: str = "auto",
         note: Optional[str] = None,
+        contributed_date: Optional[str] = None,
     ) -> int:
+        if contributed_date is None:
+            contributed_date = local_now().strftime("%Y-%m-%d")
         row = self.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
             raise ValueError(f"Goal {goal_id} not found")
         cursor = self.conn.execute(
-            """INSERT INTO goal_contributions (goal_id, amount, month, source, note)
-               VALUES (?, ?, ?, ?, ?)""",
-            (goal_id, amount, month, source, note),
+            """INSERT INTO goal_contributions (goal_id, amount, month, contributed_date, source, note)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (goal_id, amount, month, contributed_date, source, note),
         )
         # Update saved_amount on the goal
         self.conn.execute(
