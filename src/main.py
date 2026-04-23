@@ -124,7 +124,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
             target_amount REAL NOT NULL,
             saved_amount  REAL NOT NULL DEFAULT 0,
             target_date   DATE,
-            status        TEXT NOT NULL DEFAULT 'active',
+            status        TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused')),
             created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
         );
@@ -133,7 +133,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
             goal_id    INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
             amount     REAL NOT NULL,
             month      TEXT NOT NULL,
-            source     TEXT DEFAULT 'auto',
+            source     TEXT NOT NULL DEFAULT 'auto',
             note       TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
