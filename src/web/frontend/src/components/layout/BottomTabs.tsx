@@ -30,44 +30,48 @@ export function BottomTabs() {
 
   return (
     <>
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border flex justify-around items-center h-16 z-50">
-        {mainTabs.map(({ to, icon: Icon, label }) => (
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
+        <div className="flex justify-around items-center h-16">
+          {mainTabs.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs transition-colors ${
+                  isActive ? 'text-foreground' : 'text-muted'
+                }`
+              }
+            >
+              <Icon className="w-5 h-5" />
+              <span>{label}</span>
+            </NavLink>
+          ))}
+
+          {/* More button */}
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs text-muted"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+            <span>More</span>
+          </button>
+
+          {/* Settings */}
           <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
+            to="/settings"
             className={({ isActive }) =>
               `flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs transition-colors ${
                 isActive ? 'text-foreground' : 'text-muted'
               }`
             }
           >
-            <Icon className="w-5 h-5" />
-            <span>{label}</span>
+            <Settings className="w-5 h-5" />
+            <span>Settings</span>
           </NavLink>
-        ))}
-
-        {/* More button */}
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs text-muted"
-        >
-          <MoreHorizontal className="w-5 h-5" />
-          <span>More</span>
-        </button>
-
-        {/* Settings */}
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            `flex flex-col items-center gap-0.5 px-3 py-1.5 text-xs transition-colors ${
-              isActive ? 'text-foreground' : 'text-muted'
-            }`
-          }
-        >
-          <Settings className="w-5 h-5" />
-          <span>Settings</span>
-        </NavLink>
+        </div>
+        {/* Safe area spacer — extends the background below tab row on devices with curved corners */}
+        <div className="h-[env(safe-area-inset-bottom)]" />
       </nav>
 
       {/* More Drawer */}
@@ -113,8 +117,10 @@ export function BottomTabs() {
                 Finance
                 <Lock className="w-3 h-3 ml-auto shrink-0" />
               </button>
-            )}
-          </div>
+              )}
+              {/* Safe area spacer */}
+              <div className="h-[env(safe-area-inset-bottom)]" />
+            </div>
         </>
       )}
     </>
