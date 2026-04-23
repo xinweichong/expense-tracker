@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, type BudgetProgress, type Category, type GoalProgress } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { cn } from '@/lib/utils';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, X } from 'lucide-react';
 
 function ProgressBar({ percent, status }: { percent: number; status: string }) {
   const color =
@@ -239,12 +239,20 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
             placeholder="Target ($)"
             className="input-field w-28"
           />
-          <input
-            type="date"
-            value={editDate}
-            onChange={(e) => setEditDate(e.target.value)}
-            className="input-field"
-          />
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              value={editDate}
+              onChange={(e) => setEditDate(e.target.value)}
+              className="input-field"
+              title="Deadline (optional)"
+            />
+            {editDate && (
+              <button type="button" onClick={() => setEditDate('')} className="text-muted hover:text-foreground transition-colors">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <button
@@ -293,25 +301,32 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
         </div>
       </div>
 
-      {/* Sparkline: last 6 months contributions */}
-      {g.contributions.length > 0 && (
-        <div className="flex items-end gap-1 h-8">
-          {(() => {
-            const last6 = g.contributions.slice(-6);
-            const maxAmt = Math.max(...last6.map((x) => x.amount), 1);
-            return last6.map((c) => {
-              const h = Math.max(4, (c.amount / maxAmt) * 32);
-              return (
-                <div
-                  key={c.id}
-                  title={`${c.month}: $${c.amount}`}
-                  className="flex-1 rounded-sm bg-foreground/20 hover:bg-foreground/40 transition-colors"
-                  style={{ height: `${h}px` }}
-                />
-              );
-            });
-          })()}
+      {/* Contribution history */}
+      {g.contributions.length > 0 ? (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-muted">Contribution History</p>
+          {g.contributions.slice(-6).reverse().map((c) => (
+            <div key={c.id} className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-muted">{c.month}</span>
+                {c.note && <span className="text-muted italic truncate max-w-28">{c.note}</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-1.5 py-0.5 rounded ${
+                  c.source === 'auto' ? 'text-muted bg-foreground/10' : 'text-accent bg-accent/10'
+                }`}>
+                  {c.source}
+                </span>
+                <span className="font-medium text-foreground">${c.amount.toFixed(0)}</span>
+              </div>
+            </div>
+          ))}
+          {g.contributions.length > 6 && (
+            <p className="text-xs text-muted">+{g.contributions.length - 6} more</p>
+          )}
         </div>
+      ) : (
+        <p className="text-xs text-muted italic">No contributions yet.</p>
       )}
 
       <div className="flex gap-2">
@@ -463,12 +478,20 @@ function GoalsSection() {
               placeholder="Target ($)"
               className="input-field w-28"
             />
-            <input
-              type="date"
-              value={newDate}
-              onChange={(e) => setNewDate(e.target.value)}
-              className="input-field"
-            />
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+                className="input-field"
+                title="Deadline (optional)"
+              />
+              {newDate && (
+                <button type="button" onClick={() => setNewDate('')} className="text-muted hover:text-foreground transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
           <button
             onClick={() => createMutation.mutate()}
