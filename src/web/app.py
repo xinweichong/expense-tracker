@@ -274,6 +274,55 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         storage.remove_merchant_override(merchant)
         return {"status": "ok"}
 
+    VALID_TAGS = {"online", "subscription", "local", "foreign", "business", "cash-equivalent"}
+
+    @app.get("/api/merchant-intelligence")
+    async def merchant_intelligence_list(
+        sort_by: str = "total_spent",
+        tag: Optional[str] = None,
+        category: Optional[str] = None,
+        search: Optional[str] = None,
+        limit: int = 25,
+        offset: int = 0,
+        _auth=Depends(require_auth),
+    ):
+        return storage.get_merchant_list(
+            sort_by=sort_by,
+            tag_filter=tag,
+            category_filter=category,
+            name_search=search,
+            limit=limit,
+            offset=offset,
+        )
+
+    @app.get("/api/merchant-intelligence/{merchant}/trend")
+    async def merchant_trend(merchant: str, _auth=Depends(require_auth)):
+        return storage.get_merchant_trend(merchant)
+
+    @app.put("/api/merchant-intelligence/{merchant}/tags")
+    async def merchant_set_tags(merchant: str, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        tags = body.get("tags", [])
+        invalid = [t for t in tags if t not in VALID_TAGS]
+        if invalid:
+            raise HTTPException(status_code=422, detail=f"Invalid tags: {invalid}. Valid: {sorted(VALID_TAGS)}")
+        storage.set_merchant_tags(merchant, tags)
+        return storage.get_merchant_tags(merchant)
+
+    @app.put("/api/merchant-intelligence/{merchant}/notes")
+    async def merchant_set_notes(merchant: str, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        notes = body.get("notes", "")
+        storage.set_merchant_notes(merchant, notes)
+        return storage.get_merchant_tags(merchant)
+
+    @app.get("/api/merchant-intelligence/{merchant}")
+    async def merchant_intelligence_profile(merchant: str, _auth=Depends(require_auth)):
+        profile = storage.get_merchant_profile(merchant)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Merchant not found")
+        return profile
+
     @app.get("/api/balance")
     async def balance(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
         today = local_now()

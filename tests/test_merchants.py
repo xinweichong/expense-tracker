@@ -1,6 +1,11 @@
+import json
 import pytest
+import bcrypt
+import sqlite3
 from datetime import datetime
+from fastapi.testclient import TestClient
 from src.storage import Storage
+from src.web.app import create_dashboard_app
 
 
 class TestMerchantList:
@@ -162,3 +167,175 @@ class TestMerchantProfile:
     def test_profile_returns_none_for_unknown(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         assert storage.get_merchant_profile("NonExistent") is None
+
+
+@pytest.fixture
+def client():
+    # Use check_same_thread=False so TestClient's worker thread can access the DB
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            source_id TEXT UNIQUE,
+            amount REAL NOT NULL,
+            currency TEXT DEFAULT 'SGD',
+            exchange_rate REAL DEFAULT 1.0,
+            merchant TEXT,
+            description TEXT,
+            category TEXT,
+            transaction_date DATETIME,
+            ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            raw_data TEXT,
+            type TEXT DEFAULT 'expense'
+        );
+        CREATE TABLE IF NOT EXISTS merchant_tags (
+            merchant   TEXT PRIMARY KEY,
+            tags       TEXT DEFAULT '',
+            notes      TEXT DEFAULT '',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS merchant_overrides (
+            merchant TEXT PRIMARY KEY,
+            category TEXT NOT NULL,
+            source TEXT DEFAULT 'manual',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE categories (
+            name TEXT PRIMARY KEY,
+            keywords TEXT,
+            icon TEXT,
+            color TEXT
+        );
+        CREATE TABLE ingestion_state (
+            source TEXT PRIMARY KEY,
+            last_processed_id TEXT,
+            last_processed_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS recurring_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            merchant TEXT NOT NULL,
+            avg_amount REAL NOT NULL,
+            frequency TEXT NOT NULL,
+            category TEXT,
+            first_seen DATETIME,
+            last_seen DATETIME,
+            occurrences INTEGER DEFAULT 2
+        );
+    """)
+    pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
+    app = create_dashboard_app(
+        storage=Storage(connection=conn),
+        password_hash=pw_hash,
+    )
+    c = TestClient(app, raise_server_exceptions=True)
+    c.post("/api/login", json={"password": "test"})
+    return c, conn
+
+
+class TestMerchantAPI:
+    def test_get_merchant_list_empty(self, client):
+        c, db = client
+        resp = c.get("/api/merchant-intelligence")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_get_merchant_list_returns_stats(self, client):
+        c, db = client
+        today = datetime.now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, category, transaction_date, type) VALUES ('manual', 'g1', 25.0, 'SGD', 1.0, "
+            "'Grab', 'Transport', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.get("/api/merchant-intelligence")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["merchant"] == "Grab"
+        assert data[0]["total_sgd"] == 25.0
+        assert data[0]["tags"] == []
+
+    def test_get_merchant_profile(self, client):
+        c, db = client
+        today = datetime.now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, transaction_date, type) VALUES ('manual', 'g1', 15.0, 'SGD', 1.0, "
+            "'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.get("/api/merchant-intelligence/Grab")
+        assert resp.status_code == 200
+        assert resp.json()["merchant"] == "Grab"
+
+    def test_get_merchant_profile_404_for_unknown(self, client):
+        c, _ = client
+        resp = c.get("/api/merchant-intelligence/Unknown")
+        assert resp.status_code == 404
+
+    def test_put_merchant_tags(self, client):
+        c, db = client
+        today = datetime.now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.put(
+            "/api/merchant-intelligence/Grab/tags",
+            json={"tags": ["online", "local"]},
+        )
+        assert resp.status_code == 200
+        # Verify stored
+        resp2 = c.get("/api/merchant-intelligence/Grab")
+        assert resp2.json()["tags"] == ["online", "local"]
+
+    def test_put_merchant_tags_rejects_invalid_tag(self, client):
+        c, _ = client
+        resp = c.put(
+            "/api/merchant-intelligence/Grab/tags",
+            json={"tags": ["invalid-tag"]},
+        )
+        assert resp.status_code == 422
+
+    def test_put_merchant_notes(self, client):
+        c, db = client
+        today = datetime.now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.put(
+            "/api/merchant-intelligence/Grab/notes",
+            json={"notes": "Ride-hailing app"},
+        )
+        assert resp.status_code == 200
+        resp2 = c.get("/api/merchant-intelligence/Grab")
+        assert resp2.json()["notes"] == "Ride-hailing app"
+
+    def test_get_merchant_trend(self, client):
+        c, db = client
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'g1', 10.0, 'Grab', '2026-03-15', 'expense')"
+        )
+        db.commit()
+        resp = c.get("/api/merchant-intelligence/Grab/trend")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "merchant" in data
+        assert "months" in data
