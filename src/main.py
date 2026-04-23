@@ -6,6 +6,7 @@ import os
 import sys
 import sqlite3
 import threading
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Add project root to sys.path so `src.*` imports work when run directly
@@ -118,6 +119,25 @@ def init_db(db_path: str) -> sqlite3.Connection:
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(category, period)
         );
+        CREATE TABLE IF NOT EXISTS goals (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT NOT NULL,
+            target_amount REAL NOT NULL,
+            saved_amount  REAL NOT NULL DEFAULT 0,
+            target_date   DATE,
+            status        TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused')),
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS goal_contributions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            goal_id    INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+            amount     REAL NOT NULL,
+            month      TEXT NOT NULL,
+            source     TEXT NOT NULL DEFAULT 'auto',
+            note       TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     # Migrate: add exchange_rate column if missing
     try:
@@ -150,6 +170,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
         ("anomaly_multiplier", "2.0"),
         ("velocity_alert_threshold", "110"),
         ("budgets_enabled", "false"),
+        ("goals_enabled", "false"),
     ]
     for key, value in defaults:
         conn.execute(
@@ -320,9 +341,61 @@ def main():
             except Exception as e:
                 logger.error(f"Failed to generate/send {report_type} summary: {e}")
 
+        def _run_goals_monthly(month_str: str) -> None:
+            """Auto-contribute monthly savings to all active goals.
+
+            Sends a Goals Update message and individual completion notifications
+            via Telegram. Only runs when goals_enabled = true. Goals that were
+            active at the start of the run and reach their target are detected
+            by checking for status == 'completed' after contribution (set
+            automatically by add_contribution).
+            """
+            try:
+                if storage.get_setting("goals_enabled", "false") != "true":
+                    return
+                contributions = storage.auto_contribute_monthly_savings(month_str)
+                if not contributions:
+                    return
+
+                goals_progress = [
+                    storage.get_goal_progress(c["goal_id"]) for c in contributions
+                ]
+
+                # Send completion notifications first (goal just crossed target)
+                for g in goals_progress:
+                    if g and g["status"] == "completed":
+                        bot.notify_text(
+                            f"🎯 Goal Achieved!\n"
+                            f"You've reached your \"{g['name']}\" goal of ${g['target_amount']:.0f}!"
+                        )
+
+                # Monthly update for goals still active
+                active_progress = [g for g in goals_progress if g and g["status"] != "completed"]
+                if active_progress:
+                    lines = ["💰 *Goals Update*"]
+                    for g in active_progress:
+                        line = f"{g['name']}: ${g['saved_amount']:.0f} / ${g['target_amount']:.0f} ({g['percent']:.0f}%)"
+                        if g["on_track"] == "on_track" and g["target_date"]:
+                            line += f" — on track for {g['target_date']}"
+                        elif g["on_track"] == "ahead":
+                            line += " — ahead of schedule 🎉"
+                        elif g["on_track"] == "behind":
+                            line += " — behind 🔴"
+                        lines.append(line)
+                    bot.notify_text("\n".join(lines))
+            except Exception as e:
+                logger.error(f"Goals monthly update failed: {e}")
+
         scheduler = BackgroundScheduler()
         scheduler.add_job(lambda: _format_and_send_summary("weekly"), 'cron', day_of_week='sun', hour=9)
-        scheduler.add_job(lambda: _format_and_send_summary("monthly"), 'cron', day=1, hour=9)
+
+        def _monthly_jobs() -> None:
+            now = datetime.now()
+            prev_month = (now.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+            _format_and_send_summary("monthly")
+            _run_goals_monthly(prev_month)
+
+        scheduler.add_job(_monthly_jobs, 'cron', day=1, hour=9)
         scheduler.add_job(bot.notify_daily_digest, 'cron', hour=9, minute=0)
         scheduler.start()
         atexit.register(lambda: scheduler.shutdown(wait=False))

@@ -439,6 +439,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
             "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
             "budgets_enabled": storage.get_setting("budgets_enabled", "false") == "true",
+            "goals_enabled": storage.get_setting("goals_enabled", "false") == "true",
         }
 
     @app.put("/api/settings")
@@ -481,6 +482,13 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             else:
                 storage.set_setting("budgets_enabled", "true" if val else "false")
 
+        if "goals_enabled" in body:
+            val = body["goals_enabled"]
+            if not isinstance(val, bool):
+                errors["goals_enabled"] = "must be a boolean"
+            else:
+                storage.set_setting("goals_enabled", "true" if val else "false")
+
         if errors:
             raise HTTPException(status_code=422, detail=errors)
 
@@ -492,6 +500,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
             "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
             "budgets_enabled": storage.get_setting("budgets_enabled", "false") == "true",
+            "goals_enabled": storage.get_setting("goals_enabled", "false") == "true",
         }
 
     # ── Budgets ──────────────────────────────────────────────────────────
@@ -549,6 +558,82 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return {"status": "ok"}
+
+    # ── Goals ──────────────────────────────────────────────────────────────
+
+    @app.get("/api/goals")
+    async def list_goals(_auth=Depends(require_auth)):
+        goals = storage.get_goals()
+        results = []
+        for g in goals:
+            progress = storage.get_goal_progress(g["id"])
+            results.append(progress if progress else g)
+        return results
+
+    @app.post("/api/goals")
+    async def create_goal(request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        name = body.get("name", "").strip()
+        target_amount = body.get("target_amount")
+        target_date = body.get("target_date")
+        if not name:
+            raise HTTPException(status_code=400, detail="name is required")
+        if target_amount is None:
+            raise HTTPException(status_code=400, detail="target_amount is required")
+        try:
+            target_amount = float(target_amount)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="target_amount must be a number")
+        goal_id = storage.create_goal(
+            name=name, target_amount=target_amount, target_date=target_date
+        )
+        return storage.get_goal_progress(goal_id)
+
+    @app.put("/api/goals/{goal_id}")
+    async def update_goal(goal_id: int, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        allowed = {"name", "target_amount", "target_date", "status"}
+        fields = {k: v for k, v in body.items() if k in allowed}
+        if not fields:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        try:
+            storage.update_goal(goal_id, **fields)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return storage.get_goal_progress(goal_id)
+
+    @app.delete("/api/goals/{goal_id}")
+    async def delete_goal(goal_id: int, _auth=Depends(require_auth)):
+        try:
+            storage.delete_goal(goal_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok"}
+
+    @app.post("/api/goals/{goal_id}/contribute")
+    async def contribute_to_goal(goal_id: int, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        amount = body.get("amount")
+        note = body.get("note")
+        if amount is None:
+            raise HTTPException(status_code=400, detail="amount is required")
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="amount must be a number")
+        today = datetime.now().strftime("%Y-%m")
+        try:
+            storage.add_contribution(goal_id, amount=amount, month=today, source="manual", note=note)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return storage.get_goal_progress(goal_id)
+
+    @app.get("/api/goals/{goal_id}/contributions")
+    async def goal_contributions(goal_id: int, _auth=Depends(require_auth)):
+        row = storage.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Goal not found")
+        return storage.get_contributions(goal_id)
 
     # Serve React SPA
 

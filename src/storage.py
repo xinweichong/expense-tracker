@@ -3,6 +3,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
+from src.config import local_now
+
 
 def _get_budget_period(period: str) -> tuple[str, str]:
     """Return (start_date, end_date) for the current budget period as ISO strings."""
@@ -662,4 +664,174 @@ class Storage:
                 "period_start": start,
                 "period_end": end,
             })
+        return results
+
+    # ── Goals ──────────────────────────────────────────────────────────────
+
+    def create_goal(
+        self,
+        name: str,
+        target_amount: float,
+        target_date: Optional[str] = None,
+    ) -> int:
+        cursor = self.conn.execute(
+            """INSERT INTO goals (name, target_amount, target_date)
+               VALUES (?, ?, ?)""",
+            (name, target_amount, target_date),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_goals(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM goals ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_goal(self, goal_id: int, **fields) -> None:
+        allowed = {"name", "target_amount", "target_date", "status"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return
+        row = self.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Goal {goal_id} not found")
+        set_clauses = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [goal_id]
+        self.conn.execute(
+            f"UPDATE goals SET {set_clauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            values,
+        )
+        self.conn.commit()
+
+    def delete_goal(self, goal_id: int) -> None:
+        row = self.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Goal {goal_id} not found")
+        # ON DELETE CASCADE removes contributions automatically
+        self.conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+        self.conn.commit()
+
+    def add_contribution(
+        self,
+        goal_id: int,
+        amount: float,
+        month: str,
+        source: str = "auto",
+        note: Optional[str] = None,
+    ) -> int:
+        row = self.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Goal {goal_id} not found")
+        cursor = self.conn.execute(
+            """INSERT INTO goal_contributions (goal_id, amount, month, source, note)
+               VALUES (?, ?, ?, ?, ?)""",
+            (goal_id, amount, month, source, note),
+        )
+        # Update saved_amount on the goal
+        self.conn.execute(
+            "UPDATE goals SET saved_amount = saved_amount + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (amount, goal_id),
+        )
+        # Auto-complete goal when saved_amount reaches or exceeds target_amount
+        updated = self.conn.execute(
+            "SELECT saved_amount, target_amount, status FROM goals WHERE id = ?", (goal_id,)
+        ).fetchone()
+        if updated and updated["saved_amount"] >= updated["target_amount"] and updated["status"] == "active":
+            self.conn.execute(
+                "UPDATE goals SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (goal_id,),
+            )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_contributions(self, goal_id: int) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM goal_contributions WHERE goal_id = ? ORDER BY month ASC",
+            (goal_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_goal_progress(self, goal_id: int) -> Optional[dict]:
+        row = self.conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        if not row:
+            return None
+        goal = dict(row)
+        contributions = self.get_contributions(goal_id)
+
+        # Monthly rate: average of last 3 auto contributions
+        auto_contribs = [c["amount"] for c in contributions if c["source"] == "auto"]
+        recent = auto_contribs[-3:]
+        monthly_rate = sum(recent) / len(recent) if recent else 0.0
+
+        saved = goal["saved_amount"]
+        target = goal["target_amount"]
+        percent = round(saved / target * 100, 1) if target > 0 else 0.0
+        remaining = target - saved
+        months_to_target = round(remaining / monthly_rate, 1) if monthly_rate > 0 else None
+
+        on_track = None
+        if goal["target_date"] and months_to_target is not None:
+            target_dt = datetime.strptime(goal["target_date"], "%Y-%m-%d")
+            now = local_now()
+            months_remaining = (target_dt.year - now.year) * 12 + (target_dt.month - now.month)
+            if months_to_target < months_remaining * 0.9:
+                on_track = "ahead"
+            elif months_to_target <= months_remaining:
+                on_track = "on_track"
+            else:
+                on_track = "behind"
+
+        return {
+            **goal,
+            "percent": percent,
+            "monthly_rate": round(monthly_rate, 2),
+            "months_to_target": months_to_target,
+            "on_track": on_track,
+            "contributions": contributions,
+        }
+
+    def auto_contribute_monthly_savings(self, month: str) -> list[dict]:
+        """Compute monthly savings (income - expenses) and add auto contribution to all active goals.
+
+        Called on the 1st of each month from the APScheduler monthly job.
+        Returns list of {goal_id, goal_name, amount} for each contribution made.
+        """
+        import calendar as _cal
+        year, mon = int(month[:4]), int(month[5:7])
+        start = f"{month}-01"
+        last_day = _cal.monthrange(year, mon)[1]
+        end = f"{month}-{last_day:02d}"
+
+        income_row = self.conn.execute(
+            """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+               FROM transactions WHERE type = 'income'
+               AND DATE(transaction_date) BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchone()
+        expense_row = self.conn.execute(
+            """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+               FROM transactions WHERE (type IS NULL OR type = 'expense')
+               AND DATE(transaction_date) BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchone()
+        savings = income_row["total"] - expense_row["total"]
+
+        if savings <= 0:
+            return []
+
+        active_goals = self.conn.execute(
+            "SELECT id, name FROM goals WHERE status = 'active'"
+        ).fetchall()
+        results = []
+        for g in active_goals:
+            # Idempotency: skip if an auto contribution already exists for this month
+            existing = self.conn.execute(
+                "SELECT 1 FROM goal_contributions WHERE goal_id = ? AND month = ? AND source = 'auto'",
+                (g["id"], month),
+            ).fetchone()
+            if existing:
+                continue
+            self.add_contribution(g["id"], amount=savings, month=month, source="auto")
+            results.append({"goal_id": g["id"], "goal_name": g["name"], "amount": savings})
         return results

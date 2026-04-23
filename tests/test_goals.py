@@ -1,0 +1,276 @@
+import pytest
+from datetime import datetime, date, timedelta
+from src.storage import Storage
+
+
+class TestGoalCRUD:
+    def test_create_goal_no_deadline(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Emergency Fund", target_amount=10000.0)
+        assert isinstance(goal_id, int)
+        goals = storage.get_goals()
+        assert len(goals) == 1
+        assert goals[0]["name"] == "Emergency Fund"
+        assert goals[0]["target_amount"] == 10000.0
+        assert goals[0]["saved_amount"] == 0.0
+        assert goals[0]["status"] == "active"
+        assert goals[0]["target_date"] is None
+
+    def test_create_goal_with_deadline(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        storage.create_goal(name="Japan Trip", target_amount=2000.0, target_date="2026-12-01")
+        goals = storage.get_goals()
+        assert goals[0]["target_date"] == "2026-12-01"
+
+    def test_update_goal_name_and_target(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Old Name", target_amount=500.0)
+        storage.update_goal(goal_id, name="New Name", target_amount=1000.0)
+        goals = storage.get_goals()
+        assert goals[0]["name"] == "New Name"
+        assert goals[0]["target_amount"] == 1000.0
+
+    def test_update_goal_status(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Test", target_amount=100.0)
+        storage.update_goal(goal_id, status="paused")
+        assert storage.get_goals()[0]["status"] == "paused"
+
+    def test_update_nonexistent_raises(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        with pytest.raises(ValueError):
+            storage.update_goal(999, name="X")
+
+    def test_delete_goal_removes_contributions(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Test", target_amount=100.0)
+        storage.add_contribution(goal_id, amount=50.0, month="2026-04", source="manual")
+        storage.delete_goal(goal_id)
+        assert storage.get_goals() == []
+        # Contributions should also be gone (ON DELETE CASCADE)
+        rows = in_memory_db.execute("SELECT * FROM goal_contributions WHERE goal_id = ?", (goal_id,)).fetchall()
+        assert len(rows) == 0
+
+    def test_delete_nonexistent_raises(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        with pytest.raises(ValueError):
+            storage.delete_goal(999)
+
+
+class TestGoalContributions:
+    def test_add_manual_contribution_updates_saved_amount(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        storage.add_contribution(goal_id, amount=200.0, month="2026-04", source="manual")
+        goals = storage.get_goals()
+        assert goals[0]["saved_amount"] == 200.0
+
+    def test_add_auto_contribution(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        storage.add_contribution(goal_id, amount=300.0, month="2026-03", source="auto")
+        goals = storage.get_goals()
+        assert goals[0]["saved_amount"] == 300.0
+
+    def test_multiple_contributions_accumulate(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        storage.add_contribution(goal_id, amount=100.0, month="2026-02", source="auto")
+        storage.add_contribution(goal_id, amount=200.0, month="2026-03", source="auto")
+        storage.add_contribution(goal_id, amount=50.0, month="2026-04", source="manual")
+        assert storage.get_goals()[0]["saved_amount"] == 350.0
+
+    def test_get_contributions_ordered_by_month(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        storage.add_contribution(goal_id, amount=300.0, month="2026-03", source="auto")
+        storage.add_contribution(goal_id, amount=100.0, month="2026-01", source="auto")
+        contribs = storage.get_contributions(goal_id)
+        assert contribs[0]["month"] == "2026-01"
+        assert contribs[1]["month"] == "2026-03"
+
+    def test_add_contribution_for_nonexistent_goal_raises(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        with pytest.raises(ValueError):
+            storage.add_contribution(999, amount=100.0, month="2026-04", source="manual")
+
+    def test_add_contribution_auto_completes_goal(self, in_memory_db):
+        """Contribution that hits or exceeds target_amount auto-sets status to 'completed'."""
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=100.0)
+        storage.add_contribution(goal_id, amount=100.0, month="2026-04", source="manual")
+        assert storage.get_goals()[0]["status"] == "completed"
+
+    def test_add_contribution_partial_stays_active(self, in_memory_db):
+        """Contribution below the target does not change status."""
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=100.0)
+        storage.add_contribution(goal_id, amount=50.0, month="2026-04", source="manual")
+        assert storage.get_goals()[0]["status"] == "active"
+
+    def test_add_contribution_over_target_completes_goal(self, in_memory_db):
+        """Contribution exceeding target_amount also sets status to 'completed'."""
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=100.0)
+        storage.add_contribution(goal_id, amount=150.0, month="2026-04", source="auto")
+        assert storage.get_goals()[0]["status"] == "completed"
+
+
+class TestGoalProgress:
+    def test_progress_zero_when_no_contributions(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        progress = storage.get_goal_progress(goal_id)
+        assert progress["percent"] == 0.0
+        assert progress["monthly_rate"] == 0.0
+        assert progress["months_to_target"] is None
+
+    def test_percent_calculated_correctly(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        storage.add_contribution(goal_id, amount=250.0, month="2026-04", source="manual")
+        progress = storage.get_goal_progress(goal_id)
+        assert progress["percent"] == pytest.approx(25.0, 0.01)
+
+    def test_monthly_rate_uses_last_3_auto_contributions(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=10000.0)
+        # 4 auto contributions; only last 3 should factor into monthly_rate
+        for month, amount in [
+            ("2026-01", 100.0),
+            ("2026-02", 200.0),
+            ("2026-03", 300.0),
+            ("2026-04", 400.0),
+        ]:
+            storage.add_contribution(goal_id, amount=amount, month=month, source="auto")
+        progress = storage.get_goal_progress(goal_id)
+        # Average of 200, 300, 400 = 300
+        assert progress["monthly_rate"] == pytest.approx(300.0, 0.01)
+
+    def test_months_to_target_calculated(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1200.0)
+        # 3 auto contributions of 100 each → rate=100, saved=300, remaining=900 → 9 months
+        for month, amount in [("2026-02", 100.0), ("2026-03", 100.0), ("2026-04", 100.0)]:
+            storage.add_contribution(goal_id, amount=amount, month=month, source="auto")
+        progress = storage.get_goal_progress(goal_id)
+        assert progress["months_to_target"] == pytest.approx(9.0, 0.1)
+
+    def test_on_track_status_when_no_deadline(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        progress = storage.get_goal_progress(goal_id)
+        assert progress["on_track"] is None  # no deadline → no on_track verdict
+
+    def test_get_goal_progress_returns_none_for_unknown(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        assert storage.get_goal_progress(999) is None
+
+
+import bcrypt
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from src.web.app import create_dashboard_app
+
+
+@pytest.fixture
+def goal_app(in_memory_db):
+    storage = Storage(connection=in_memory_db)
+    pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
+    return create_dashboard_app(storage, pw_hash), storage
+
+
+@pytest_asyncio.fixture
+async def api(goal_app):
+    app, storage = goal_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        await ac.post("/api/login", json={"password": "test"})
+        yield ac, storage
+
+
+class TestGoalAPI:
+    @pytest.mark.asyncio
+    async def test_get_goals_empty(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/goals")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    @pytest.mark.asyncio
+    async def test_create_goal(self, api):
+        ac, _ = api
+        resp = await ac.post(
+            "/api/goals",
+            json={"name": "Emergency Fund", "target_amount": 10000},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "Emergency Fund"
+        assert data["target_amount"] == 10000.0
+        assert data["saved_amount"] == 0.0
+        assert "id" in data
+
+    @pytest.mark.asyncio
+    async def test_create_goal_requires_name_and_amount(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/goals", json={"name": "X"})
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_goal(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "X", "target_amount": 500})
+        goal_id = create.json()["id"]
+        resp = await ac.put(f"/api/goals/{goal_id}", json={"name": "Y", "target_amount": 1000})
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Y"
+        assert resp.json()["target_amount"] == 1000.0
+
+    @pytest.mark.asyncio
+    async def test_delete_goal(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "X", "target_amount": 100})
+        goal_id = create.json()["id"]
+        resp = await ac.delete(f"/api/goals/{goal_id}")
+        assert resp.status_code == 200
+        assert (await ac.get("/api/goals")).json() == []
+
+    @pytest.mark.asyncio
+    async def test_manual_contribution(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "X", "target_amount": 1000})
+        goal_id = create.json()["id"]
+        resp = await ac.post(
+            f"/api/goals/{goal_id}/contribute",
+            json={"amount": 250, "note": "Bonus"},
+        )
+        assert resp.status_code == 200
+        goals_resp = await ac.get("/api/goals")
+        assert goals_resp.json()[0]["saved_amount"] == 250.0
+
+    @pytest.mark.asyncio
+    async def test_get_contributions(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "X", "target_amount": 1000})
+        goal_id = create.json()["id"]
+        await ac.post(f"/api/goals/{goal_id}/contribute", json={"amount": 100})
+        resp = await ac.get(f"/api/goals/{goal_id}/contributions")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert resp.json()[0]["source"] == "manual"
+
+    @pytest.mark.asyncio
+    async def test_settings_includes_goals_enabled(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/settings")
+        assert "goals_enabled" in resp.json()
+        assert resp.json()["goals_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_toggle_goals_enabled(self, api):
+        ac, _ = api
+        resp = await ac.put("/api/settings", json={"goals_enabled": True})
+        assert resp.status_code == 200
+        resp2 = await ac.get("/api/settings")
+        assert resp2.json()["goals_enabled"] is True
