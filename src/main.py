@@ -22,8 +22,7 @@ from src.config import load_config
 from src.storage import Storage
 from src.categorizer import Categorizer
 from src.parsers.dbs_paylah import DbsPaylahParser
-from src.parsers.uob_paynow import UobPaynowParser
-from src.parsers.uob_card import UobCardParser
+from src.parsers.uob import UobParser
 from src.gmail_poller import GmailPoller
 from src.telegram_bot import TelegramBotService
 from src.webhook import create_webhook_app
@@ -263,7 +262,7 @@ def main():
     )
 
     # Set up parsers
-    parsers = [DbsPaylahParser(), UobPaynowParser(), UobCardParser()]
+    parsers = [DbsPaylahParser(), UobParser()]
 
     # Set up Gmail poller
     def on_transaction(result, tx_id):
