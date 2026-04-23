@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from typing import Optional
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonCommands, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ConversationHandler, ContextTypes, MessageHandler, filters
 
 from src.analytics import (
     get_period_comparison,
@@ -23,6 +23,9 @@ from src.exchange import ExchangeRateService
 from src.storage import Storage
 
 logger = logging.getLogger(__name__)
+
+EDIT_SELECT_FIELD = 0
+EDIT_ENTER_VALUE = 1
 
 SOURCE_LABELS: dict[str, str] = {
     "dbs_paylah":   "DBS PayLah!",
@@ -238,6 +241,192 @@ class TelegramBotService:
             f"*Weekly Summary ({start_date} to {end_date})*", summary, start_date, end_date
         )
 
+    async def _delete_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        args = context.args
+        if not args or not args[0].isdigit():
+            await update.message.reply_text("Usage: /delete <id>")
+            return
+        tx_id = int(args[0])
+        tx = self.storage.get_transaction(tx_id)
+        if not tx:
+            await update.message.reply_text("Transaction not found.")
+            return
+        amount_sgd = tx["amount"] * tx.get("exchange_rate", 1.0)
+        date_str = (tx.get("transaction_date") or "")[:10]
+        msg = (
+            f"Delete this transaction?\n\n"
+            f"*{tx.get('merchant', '—')}* — ${amount_sgd:.2f} SGD\n"
+            f"Category: {tx.get('category', '—')}\n"
+            f"Date: {date_str}\n"
+            f"Source: {tx.get('source', '—')}"
+        )
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Confirm Delete", callback_data=f"confirm_delete_{tx_id}"),
+            InlineKeyboardButton("Cancel", callback_data="cancel_delete"),
+        ]])
+        await update.message.reply_text(msg, reply_markup=keyboard, parse_mode="Markdown")
+
+    async def _delete_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        if data == "cancel_delete":
+            await query.edit_message_text("Cancelled.")
+            return
+        if data.startswith("confirm_delete_"):
+            tx_id = int(data.split("_")[-1])
+            try:
+                self.storage.delete_transaction(tx_id)
+                await query.edit_message_text(f"Transaction #{tx_id} deleted.")
+            except ValueError:
+                await query.edit_message_text("Transaction not found (may have already been deleted).")
+
+    async def _edit_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        args = context.args
+        if not args or not args[0].isdigit():
+            await update.message.reply_text("Usage: /edit <id>")
+            return ConversationHandler.END
+        tx_id = int(args[0])
+        tx = self.storage.get_transaction(tx_id)
+        if not tx:
+            await update.message.reply_text("Transaction not found.")
+            return ConversationHandler.END
+        context.user_data["edit_tx_id"] = tx_id
+        amount_sgd = tx["amount"] * tx.get("exchange_rate", 1.0)
+        date_str = (tx.get("transaction_date") or "")[:10]
+        msg = (
+            f"*Transaction #{tx_id}*\n"
+            f"Merchant: {tx.get('merchant', '—')}\n"
+            f"Amount: {tx.get('currency', 'SGD')} {tx['amount']:.2f} (SGD {amount_sgd:.2f})\n"
+            f"Category: {tx.get('category', '—')}\n"
+            f"Date: {date_str}\n"
+            f"Description: {tx.get('description', '—')}\n\n"
+            "What would you like to edit?"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Merchant", callback_data="ef_merchant"),
+                InlineKeyboardButton("Amount", callback_data="ef_amount"),
+            ],
+            [
+                InlineKeyboardButton("Category", callback_data="ef_category"),
+                InlineKeyboardButton("Date", callback_data="ef_date"),
+            ],
+            [InlineKeyboardButton("Description", callback_data="ef_description")],
+            [InlineKeyboardButton("Cancel", callback_data="ef_cancel")],
+        ])
+        await update.message.reply_text(msg, reply_markup=keyboard, parse_mode="Markdown")
+        return EDIT_SELECT_FIELD
+
+    async def _edit_field_selected(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        query = update.callback_query
+        await query.answer()
+        field = query.data  # e.g. "ef_merchant"
+
+        if field == "ef_cancel":
+            await query.edit_message_text("Edit cancelled.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        field_name = field.split("_", 1)[1]  # "merchant", "amount", etc.
+        context.user_data["edit_field"] = field_name
+
+        if field_name == "category":
+            cats = self.storage.get_categories()
+            buttons = []
+            row = []
+            for i, cat in enumerate(cats):
+                icon = cat.get("icon", "") or ""
+                label = f"{icon} {cat['name']}".strip()
+                row.append(InlineKeyboardButton(label, callback_data=f"ec_{cat['name']}"))
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
+            buttons.append([InlineKeyboardButton("Cancel", callback_data="ef_cancel")])
+            await query.edit_message_text("Select new category:", reply_markup=InlineKeyboardMarkup(buttons))
+            return EDIT_SELECT_FIELD
+
+        prompts = {
+            "merchant": "Enter new merchant name:",
+            "amount": "Enter new amount (numbers only, e.g. 12.50):",
+            "date": "Enter new date (YYYY-MM-DD or DD/MM/YYYY):",
+            "description": "Enter new description (or 'clear' to remove):",
+        }
+        await query.edit_message_text(prompts.get(field_name, "Enter value:"))
+        return EDIT_ENTER_VALUE
+
+    async def _edit_category_selected(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        query = update.callback_query
+        await query.answer()
+
+        if query.data == "ef_cancel":
+            await query.edit_message_text("Edit cancelled.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        category = query.data[3:]  # strip "ec_"
+        tx_id = context.user_data.get("edit_tx_id")
+        tx = self.storage.get_transaction(tx_id)
+        if not tx:
+            await query.edit_message_text("Transaction no longer exists.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        self.storage.update_transaction(tx_id, category=category)
+        if tx.get("merchant"):
+            self.storage.set_merchant_override(tx["merchant"], category)
+
+        await query.edit_message_text(f"Category updated to *{category}*.", parse_mode="Markdown")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    async def _edit_value_entered(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        import re as _re
+        tx_id = context.user_data.get("edit_tx_id")
+        field = context.user_data.get("edit_field")
+        text = update.message.text.strip()
+
+        tx = self.storage.get_transaction(tx_id)
+        if not tx:
+            await update.message.reply_text("Transaction no longer exists.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        if field == "amount":
+            try:
+                value = float(text.replace(",", ""))
+            except ValueError:
+                await update.message.reply_text("Invalid amount. Enter a number like 12.50:")
+                return EDIT_ENTER_VALUE
+            self.storage.update_transaction(tx_id, amount=value)
+            await update.message.reply_text(f"Amount updated to {value:.2f}.")
+
+        elif field == "date":
+            if _re.match(r"\d{4}-\d{2}-\d{2}", text):
+                iso = text[:10]
+            elif _re.match(r"\d{2}/\d{2}/\d{4}", text):
+                d, m, y = text.split("/")
+                iso = f"{y}-{m}-{d}"
+            else:
+                await update.message.reply_text("Invalid date. Use YYYY-MM-DD or DD/MM/YYYY:")
+                return EDIT_ENTER_VALUE
+            self.storage.update_transaction(tx_id, transaction_date=f"{iso}T00:00:00")
+            await update.message.reply_text(f"Date updated to {iso}.")
+
+        elif field == "description":
+            value = None if text.lower() == "clear" else text
+            self.storage.update_transaction(tx_id, description=value)
+            await update.message.reply_text("Description updated." if value else "Description cleared.")
+
+        elif field == "merchant":
+            self.storage.update_transaction(tx_id, merchant=text)
+            await update.message.reply_text(f"Merchant updated to *{text}*.", parse_mode="Markdown")
+
+        context.user_data.clear()
+        return ConversationHandler.END
+
     def setup_handlers(self) -> None:
         async def _post_init(application: Application) -> None:
             await application.bot.set_my_commands([
@@ -260,6 +449,8 @@ class TelegramBotService:
                 BotCommand("dashboard",        "Open the web dashboard"),
                 BotCommand("menu",             "Quick action buttons"),
                 BotCommand("help",             "Show all commands"),
+                BotCommand("delete",           "Delete a transaction"),
+                BotCommand("edit",             "Edit a transaction field"),
             ])
             await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
@@ -288,6 +479,24 @@ class TelegramBotService:
         self.app.add_handler(CallbackQueryHandler(self._cmd_callback, pattern="^cmd_"))
         self.app.add_handler(CallbackQueryHandler(self._category_callback, pattern="^cat:"))
         self.app.add_handler(CallbackQueryHandler(self._recat_callback, pattern="^recat:"))
+
+        edit_conv = ConversationHandler(
+            entry_points=[CommandHandler("edit", self._edit_start)],
+            states={
+                EDIT_SELECT_FIELD: [
+                    CallbackQueryHandler(self._edit_category_selected, pattern=r"^ec_"),
+                    CallbackQueryHandler(self._edit_field_selected, pattern=r"^ef_"),
+                ],
+                EDIT_ENTER_VALUE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self._edit_value_entered),
+                ],
+            },
+            fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)],
+            conversation_timeout=300,
+        )
+        self.app.add_handler(edit_conv)
+        self.app.add_handler(CommandHandler("delete", self._delete_command))
+        self.app.add_handler(CallbackQueryHandler(self._delete_callback, pattern=r"^(confirm_delete_\d+|cancel_delete)$"))
 
         # Catch-all must be last
         self.app.add_handler(MessageHandler(filters.COMMAND, self._unknown))
@@ -722,6 +931,8 @@ class TelegramBotService:
             "",
             "⚙ *Management*",
             "  /recategorize — Change transaction category",
+            "  /delete <id> — Delete a transaction",
+            "  /edit <id> — Edit a transaction field",
             "  /menu — Quick action buttons",
         ]
         text = "\n".join(lines)
