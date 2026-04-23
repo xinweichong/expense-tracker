@@ -353,3 +353,21 @@ class Storage:
             (amount, source, cutoff, merchant),
         ).fetchone()
         return dict(row) if row else None
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        row = self.conn.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+        if row is None:
+            return default
+        return row["value"]
+
+    def set_setting(self, key: str, value: str) -> None:
+        self.conn.execute(
+            """INSERT INTO app_settings (key, value, updated_at)
+               VALUES (?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+               updated_at = excluded.updated_at""",
+            (key, value),
+        )
+        self.conn.commit()

@@ -6,7 +6,9 @@ from typing import Optional
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
+import csv
+import io
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.storage import Storage
 from src.web.auth import verify_password, create_session, verify_session
@@ -83,6 +85,49 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             merchant_search=merchant_search or merchant,
             limit=limit,
             offset=offset,
+        )
+
+    @app.get("/api/transactions/export")
+    async def export_transactions(
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        category: Optional[str] = None,
+        merchant_search: Optional[str] = None,
+        merchant: Optional[str] = None,
+        _auth=Depends(require_auth),
+    ):
+        rows = storage.query_transactions(
+            start_date=start_date,
+            end_date=end_date,
+            category=category,
+            merchant_search=merchant_search or merchant,
+            limit=50_000,
+            offset=0,
+        )
+        output = io.StringIO()
+        fieldnames = ["date", "merchant", "amount", "currency", "exchange_rate",
+                      "amount_sgd", "type", "category", "source", "description"]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for tx in rows:
+            writer.writerow({
+                "date": (tx.get("transaction_date") or "")[:10],
+                "merchant": tx.get("merchant") or "",
+                "amount": tx.get("amount") if tx.get("amount") is not None else "",
+                "currency": tx.get("currency") or "SGD",
+                "exchange_rate": tx.get("exchange_rate") if tx.get("exchange_rate") is not None else 1.0,
+                "amount_sgd": round((tx.get("amount") or 0) * (tx.get("exchange_rate") or 1.0), 2),
+                "type": tx.get("type") or "expense",
+                "category": tx.get("category") or "",
+                "source": tx.get("source") or "",
+                "description": tx.get("description") or "",
+            })
+        output.seek(0)
+        filename = f"transactions-{datetime.now().strftime('%Y-%m-%d')}.csv"
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     @app.get("/api/transactions/{tx_id}")
@@ -326,7 +371,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
     @app.get("/api/analytics/alerts")
     async def analytics_alerts(_auth=Depends(require_auth)):
         return {
-            "anomalies": get_anomalies(storage.conn),
+            "anomalies": get_anomalies(storage.conn, multiplier=float(storage.get_setting("anomaly_multiplier", "2.0"))),
             "new_merchants": check_new_merchants(storage.conn),
         }
 
@@ -337,6 +382,55 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         weekly = load_summary(SUMMARY_CACHE_DIR, "weekly")
         return {"monthly": monthly, "weekly": weekly}
 
+
+    @app.get("/api/settings")
+    async def get_settings(_auth=Depends(require_auth)):
+        return {
+            "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
+            "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
+        }
+
+    @app.put("/api/settings")
+    async def update_settings(request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        errors = {}
+        validated = {}
+
+        if "anomaly_multiplier" in body:
+            val = body["anomaly_multiplier"]
+            try:
+                val = float(val)
+            except (TypeError, ValueError):
+                errors["anomaly_multiplier"] = "must be a number"
+            else:
+                if not (1.0 <= val <= 10.0):
+                    errors["anomaly_multiplier"] = "must be between 1.0 and 10.0"
+                else:
+                    validated["anomaly_multiplier"] = str(val)
+
+        if "velocity_alert_threshold" in body:
+            val = body["velocity_alert_threshold"]
+            try:
+                val = int(val)
+            except (TypeError, ValueError):
+                errors["velocity_alert_threshold"] = "must be an integer"
+            else:
+                if not (50 <= val <= 300):
+                    errors["velocity_alert_threshold"] = "must be between 50 and 300"
+                else:
+                    validated["velocity_alert_threshold"] = str(val)
+
+        if errors:
+            raise HTTPException(status_code=422, detail=errors)
+
+        # Write all-or-nothing after validation
+        for key, value in validated.items():
+            storage.set_setting(key, value)
+
+        return {
+            "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
+            "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
+        }
 
     # Serve React SPA
 

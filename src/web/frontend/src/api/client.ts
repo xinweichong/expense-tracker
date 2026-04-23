@@ -99,6 +99,11 @@ export const api = {
   getRecurring: () =>
     request<any[]>('/api/recurring'),
 
+  getIncomeVsExpense: (months = 6) =>
+    request<Array<{ month: string; income: number; expenses: number }>>(
+      `/api/income-vs-expense?months=${months}`
+    ),
+
   // Categories
   getCategories: () =>
     request<Category[]>('/api/categories'),
@@ -154,4 +159,14 @@ export const api = {
 
   getAnalyticsSummaries: () =>
     request<any>('/api/analytics/summaries'),
+
+  // App Settings
+  getSettings: () =>
+    request<{ anomaly_multiplier: number; velocity_alert_threshold: number }>('/api/settings'),
+
+  updateSettings: (data: { anomaly_multiplier?: number; velocity_alert_threshold?: number }) =>
+    request<{ anomaly_multiplier: number; velocity_alert_threshold: number }>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };

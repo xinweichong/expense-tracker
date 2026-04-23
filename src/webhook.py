@@ -5,6 +5,7 @@ from pydantic import BaseModel, field_validator
 
 from src.parsers.apple_wallet import AppleWalletParser
 from src.storage import Storage
+from src.recurring import RecurringDetector
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,19 @@ def create_webhook_app(
 
         if on_transaction:
             on_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
+
+        # Run recurring detection (best-effort, non-blocking)
+        try:
+            detector = RecurringDetector(storage)
+            rec = detector.detect(result.merchant, result.amount)
+            if rec:
+                tx = storage.get_transaction(tx_id)
+                detector.save_recurring(
+                    result.merchant, rec["avg_amount"], rec["frequency"],
+                    tx.get("category") if tx else None
+                )
+        except Exception as e:
+            logger.warning("Recurring detection failed for %s: %s", result.merchant, e)
 
         return {"status": "ok", "transaction_id": tx_id}
 

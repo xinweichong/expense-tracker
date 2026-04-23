@@ -1,3 +1,4 @@
+import hashlib
 import re
 from typing import Optional
 from src.parsers.base import BankParser, ParseResult
@@ -20,9 +21,13 @@ class UobPaynowParser(BankParser):
             return None
         amount_str = match.group(1).replace(",", "")
         recipient = match.group(2).strip().rstrip(".")
+        # PayNow emails don't include a parseable transaction date, so we hash the full
+        # body. This deduplicates re-delivered identical emails; slight footer variations
+        # are acceptable because PayNow notifications are sent exactly once per transfer.
+        source_id = hashlib.sha256(email_body.strip().encode()).hexdigest()[:16]
         return ParseResult(
             source="uob_paynow",
-            source_id=None,
+            source_id=source_id,
             amount=float(amount_str),
             merchant=recipient,
             description=email_body.strip(),

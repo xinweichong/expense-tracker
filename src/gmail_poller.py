@@ -12,6 +12,7 @@ from googleapiclient.discovery import build
 
 from src.parsers.base import BankParser, ParseResult
 from src.storage import Storage
+from src.recurring import RecurringDetector
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,31 @@ class GmailPoller:
         logger.info(f"Processed {len(transactions)} new transactions")
         return transactions
 
+    def _save_and_detect(self, result) -> int | None:
+        """Save a parsed transaction and run recurring detection."""
+        tx_id = self.storage.insert_transaction(
+            source=result.source,
+            source_id=result.source_id,
+            amount=result.amount,
+            merchant=result.merchant,
+            description=result.description,
+            transaction_date=result.transaction_date,
+            raw_data=result.raw_data,
+        )
+        logger.info(f"Stored transaction: {result.merchant} ${result.amount:.2f}")
+        try:
+            detector = RecurringDetector(self.storage)
+            rec = detector.detect(result.merchant, result.amount)
+            if rec:
+                tx = self.storage.get_transaction(tx_id)
+                category = tx.get("category") if tx else None
+                detector.save_recurring(
+                    result.merchant, rec["avg_amount"], rec["frequency"], category
+                )
+        except Exception as e:
+            logger.warning("Recurring detection failed for %s: %s", result.merchant, e)
+        return tx_id
+
     def poll_loop(self, interval_seconds: int = 120) -> None:
         self.authenticate()
         while True:
@@ -188,16 +214,7 @@ class GmailPoller:
                 results = self.poll_once()
                 for result in results:
                     try:
-                        tx_id = self.storage.insert_transaction(
-                            source=result.source,
-                            source_id=result.source_id,
-                            amount=result.amount,
-                            merchant=result.merchant,
-                            description=result.description,
-                            transaction_date=result.transaction_date,
-                            raw_data=result.raw_data,
-                        )
-                        logger.info(f"Stored transaction: {result.merchant} ${result.amount:.2f}")
+                        tx_id = self._save_and_detect(result)
                         if self.on_transaction:
                             self.on_transaction(result, tx_id)
                     except Exception as e:

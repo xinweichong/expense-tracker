@@ -14,6 +14,8 @@ const PAGE_SIZE = 20;
 export function TransactionsPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [showForm, setShowForm] = useState(false);
   const { data: categories } = useCategories();
 
@@ -24,7 +26,7 @@ export function TransactionsPage() {
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ['transactions', search, category],
+    queryKey: ['transactions', search, category, startDate, endDate],
     queryFn: ({ pageParam = 0 }) => {
       const params: Record<string, string | number> = {
         limit: PAGE_SIZE,
@@ -32,6 +34,8 @@ export function TransactionsPage() {
       };
       if (search) params.merchant = search;
       if (category && category !== 'all') params.category = category;
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
       return api.getTransactions(params);
     },
     initialPageParam: 0,
@@ -73,6 +77,10 @@ export function TransactionsPage() {
         category={category}
         onCategoryChange={handleCategoryChange}
         categories={categories ?? []}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
       />
 
       {showForm && (

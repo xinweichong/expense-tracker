@@ -59,6 +59,12 @@ def in_memory_db():
         last_seen DATETIME,
         occurrences INTEGER DEFAULT 2
     );
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
     """
     conn.executescript(schema)
     yield conn
