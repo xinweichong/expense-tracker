@@ -128,11 +128,20 @@ class TelegramBotService:
         date = None
         category = None
 
-        # Check if the last token is a valid date
-        if len(remaining) >= 2:
+        # Check last two tokens for "YYYY-MM-DD HH:MM" datetime
+        if len(remaining) >= 3:
+            try:
+                datetime.strptime(f"{remaining[-2]} {remaining[-1]}", "%Y-%m-%d %H:%M")
+                date = f"{remaining[-2]}T{remaining[-1]}:00"
+                remaining = remaining[:-2]
+            except ValueError:
+                pass
+
+        # Fall back: check last token for bare "YYYY-MM-DD" — store as midnight
+        if date is None and len(remaining) >= 2:
             try:
                 datetime.strptime(remaining[-1], "%Y-%m-%d")
-                date = remaining[-1]
+                date = f"{remaining[-1]}T00:00:00"
                 remaining = remaining[:-1]
             except ValueError:
                 pass
@@ -725,11 +734,20 @@ class TelegramBotService:
         remaining = list(context.args[1:])
         tx_date = None
 
-        # Check if last token is a date
-        if remaining:
+        # Check last two tokens for "YYYY-MM-DD HH:MM"
+        if len(remaining) >= 2:
+            try:
+                datetime.strptime(f"{remaining[-2]} {remaining[-1]}", "%Y-%m-%d %H:%M")
+                tx_date = f"{remaining[-2]}T{remaining[-1]}:00"
+                remaining = remaining[:-2]
+            except ValueError:
+                pass
+
+        # Fall back: bare "YYYY-MM-DD" → midnight
+        if tx_date is None and remaining:
             try:
                 datetime.strptime(remaining[-1], "%Y-%m-%d")
-                tx_date = remaining[-1]
+                tx_date = f"{remaining[-1]}T00:00:00"
                 remaining = remaining[:-1]
             except ValueError:
                 pass
