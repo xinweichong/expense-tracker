@@ -38,8 +38,8 @@ class TestDbsPaylahParser:
         assert result.amount == 8.20
         assert result.merchant == "BAN MIAN"
         assert result.source == "dbs_paylah"
-        assert result.transaction_date is not None
-        assert result.transaction_date.endswith("-04-17T00:00:00")
+        from datetime import datetime as _dt
+        assert result.transaction_date == f"{_dt.now().year}-04-17T12:58:00"
 
     def test_parse_real_email_with_comma_amount(self):
         body = (
