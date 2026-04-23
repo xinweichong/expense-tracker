@@ -300,15 +300,15 @@ All icons from **lucide-react**. Three sizes: `w-3.5 h-3.5` inline actions (Penc
 
 **Edit/delete icon buttons — use this pattern everywhere, no exceptions:**
 ```tsx
-<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+<Button variant="ghost" size="icon" className={sizeClass} onClick={onEdit}>
   <Pencil className="w-3.5 h-3.5" />
 </Button>
-<Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onDelete}>
+<Button variant="ghost" size="icon" className={`${sizeClass} text-destructive`} onClick={onDelete}>
   <Trash2 className="w-3.5 h-3.5" />
 </Button>
 ```
 - Always use `Button` from `@/components/ui/button` — never a bare `<button>` for icon actions
-- Always `variant="ghost" size="icon" className="h-7 w-7"`
+- Always `variant="ghost" size="icon"` — button size class (e.g. `h-7 w-7`) should match the surrounding context, not be universally fixed
 - Edit button: no extra color class (inherits default muted ghost style)
 - Delete button: always `text-destructive` — **never `text-muted`**, **never hidden on hover**
 - Icons are always **persistent** — never `opacity-0 group-hover:opacity-100` or similar reveal patterns
