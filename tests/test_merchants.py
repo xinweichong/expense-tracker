@@ -115,9 +115,9 @@ class TestMerchantTags:
 
     def test_set_and_get_tags(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        storage.set_merchant_tags("Grab", ["online", "local"])
+        storage.set_merchant_tags("Grab", ["online", "recurring"])
         result = storage.get_merchant_tags("Grab")
-        assert result["tags"] == ["online", "local"]
+        assert result["tags"] == ["online", "recurring"]
         assert result["notes"] == ""
 
     def test_set_notes(self, in_memory_db):
@@ -130,9 +130,9 @@ class TestMerchantTags:
     def test_set_tags_overwrites_previous(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         storage.set_merchant_tags("Grab", ["online"])
-        storage.set_merchant_tags("Grab", ["online", "local"])
+        storage.set_merchant_tags("Grab", ["online", "recurring"])
         result = storage.get_merchant_tags("Grab")
-        assert result["tags"] == ["online", "local"]
+        assert result["tags"] == ["online", "recurring"]
 
     def test_set_tags_and_notes_independently(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
@@ -154,13 +154,13 @@ class TestMerchantProfile:
             [("g1", 10.0, today), ("g2", 20.0, today)],
         )
         in_memory_db.commit()
-        storage.set_merchant_tags("Grab", ["online", "local"])
+        storage.set_merchant_tags("Grab", ["online", "recurring"])
         storage.set_merchant_notes("Grab", "Ride-hailing")
         profile = storage.get_merchant_profile("Grab")
         assert profile["merchant"] == "Grab"
         assert profile["total_sgd"] == 30.0
         assert profile["transaction_count"] == 2
-        assert profile["tags"] == ["online", "local"]
+        assert profile["tags"] == ["online", "recurring"]
         assert profile["notes"] == "Ride-hailing"
 
     def test_profile_returns_none_for_unknown(self, in_memory_db):
@@ -294,12 +294,12 @@ class TestMerchantAPI:
         db.commit()
         resp = c.put(
             "/api/merchant-intelligence/Grab/tags",
-            json={"tags": ["online", "local"]},
+            json={"tags": ["online", "recurring"]},
         )
         assert resp.status_code == 200
         # Verify stored
         resp2 = c.get("/api/merchant-intelligence/Grab")
-        assert resp2.json()["tags"] == ["online", "local"]
+        assert resp2.json()["tags"] == ["online", "recurring"]
 
     def test_put_merchant_tags_rejects_invalid_tag(self, client):
         c, db = client

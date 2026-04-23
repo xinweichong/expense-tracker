@@ -274,7 +274,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         storage.remove_merchant_override(merchant)
         return {"status": "ok"}
 
-    VALID_TAGS = {"online", "subscription", "local", "foreign", "business", "cash-equivalent"}
+    VALID_TAGS = {"online", "subscription", "foreign", "essential", "recurring"}
 
     @app.get("/api/merchant-intelligence")
     async def merchant_intelligence_list(
