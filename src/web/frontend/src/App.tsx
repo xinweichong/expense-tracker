@@ -7,6 +7,7 @@ import { OverviewPage } from '@/pages/OverviewPage';
 import { TransactionsPage } from '@/pages/TransactionsPage';
 import { AnalyticsPage } from '@/pages/AnalyticsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { MerchantsPage } from '@/pages/MerchantsPage';
 import { api } from '@/api/client';
 import { setCategoryColors } from '@/lib/utils';
 
@@ -50,6 +51,8 @@ function AppContent() {
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="merchants" element={<MerchantsPage />} />
+          <Route path="merchants/:merchantName" element={<MerchantsPage />} />
         </Route>
       </Routes>
     </>

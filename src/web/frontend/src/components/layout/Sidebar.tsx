@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, List, BarChart3, Settings } from 'lucide-react';
+import { LayoutDashboard, List, BarChart3, Store, Settings } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Overview' },
   { to: '/transactions', icon: List, label: 'Transactions' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/merchants', icon: Store, label: 'Merchants' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
