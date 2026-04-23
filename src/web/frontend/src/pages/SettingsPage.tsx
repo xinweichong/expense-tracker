@@ -365,7 +365,7 @@ export function SettingsPage() {
       </Dialog>
 
       {/* Alert Thresholds */}
-      <Card className="p-6">
+      <Card className="p-6 bg-card border-border">
         <h2 className="text-lg font-semibold mb-4">Alert Thresholds</h2>
         <div className="space-y-4">
           <div>
