@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, type BudgetProgress, type Category, type GoalProgress } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { cn } from '@/lib/utils';
-import { Pencil, Trash2, X } from 'lucide-react';
+import { Pencil, Trash2, X, Check } from 'lucide-react';
 
 function SavingsOverviewCard() {
   const { data: overview } = useQuery({
@@ -217,6 +217,47 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
   const [editName, setEditName] = useState('');
   const [editTarget, setEditTarget] = useState('');
   const [editDate, setEditDate] = useState('');
+  const [editingContribId, setEditingContribId] = useState<number | null>(null);
+  const [editContribAmount, setEditContribAmount] = useState('');
+  const [editContribDate, setEditContribDate] = useState('');
+  const [editContribNote, setEditContribNote] = useState('');
+
+  const qc = useQueryClient();
+
+  const updateContribMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { amount?: number; note?: string | null; contributed_date?: string } }) =>
+      api.updateContribution(g.id, id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['savings-overview'] });
+      setEditingContribId(null);
+    },
+  });
+
+  const deleteContribMutation = useMutation({
+    mutationFn: (id: number) => api.deleteContribution(g.id, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['savings-overview'] });
+    },
+  });
+
+  const startEditContrib = (c: { id: number; amount: number; contributed_date: string | null; month: string; note: string | null }) => {
+    setEditingContribId(c.id);
+    setEditContribAmount(String(c.amount));
+    setEditContribDate(c.contributed_date ?? '');
+    setEditContribNote(c.note ?? '');
+  };
+
+  const handleSaveContrib = () => {
+    if (editingContribId === null) return;
+    const amount = parseFloat(editContribAmount);
+    if (isNaN(amount) || amount <= 0) return;
+    updateContribMutation.mutate({
+      id: editingContribId,
+      data: { amount, contributed_date: editContribDate || undefined, note: editContribNote || null },
+    });
+  };
 
   const startEdit = () => {
     setEditName(g.name);
@@ -390,21 +431,72 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted">Contribution History</p>
           {g.contributions.slice(-6).reverse().map((c) => (
-            <div key={c.id} className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-muted">
-                  {c.contributed_date ?? c.month}
-                </span>
-                {c.note && <span className="text-muted italic truncate max-w-28">{c.note}</span>}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`px-1.5 py-0.5 rounded ${
-                  c.source === 'auto' ? 'text-muted bg-foreground/10' : 'text-accent bg-accent/10'
-                }`}>
-                  {c.source}
-                </span>
-                <span className="font-medium text-foreground">${c.amount.toFixed(0)}</span>
-              </div>
+            <div key={c.id}>
+              {editingContribId === c.id ? (
+                <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+                  <input
+                    type="number"
+                    value={editContribAmount}
+                    onChange={(e) => setEditContribAmount(e.target.value)}
+                    className="input-field w-24 !py-1 !text-xs"
+                  />
+                  <input
+                    type="date"
+                    value={editContribDate}
+                    onChange={(e) => setEditContribDate(e.target.value)}
+                    className="input-field !py-1 !text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={editContribNote}
+                    onChange={(e) => setEditContribNote(e.target.value)}
+                    placeholder="Note"
+                    className="input-field flex-1 min-w-20 !py-1 !text-xs"
+                  />
+                  <button
+                    onClick={handleSaveContrib}
+                    disabled={updateContribMutation.isPending}
+                    className="text-accent hover:text-accent/80 disabled:opacity-40"
+                    title="Save"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setEditingContribId(null)}
+                    className="text-muted hover:text-foreground"
+                    title="Cancel"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-xs group">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted">
+                      {c.contributed_date ?? c.month}
+                    </span>
+                    {c.note && <span className="text-muted italic truncate max-w-28">{c.note}</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-foreground">${c.amount.toFixed(0)}</span>
+                    <button
+                      onClick={() => startEditContrib(c)}
+                      className="opacity-0 group-hover:opacity-100 text-muted hover:text-foreground transition-opacity"
+                      title="Edit"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => deleteContribMutation.mutate(c.id)}
+                      disabled={deleteContribMutation.isPending}
+                      className="opacity-0 group-hover:opacity-100 text-muted hover:text-destructive transition-opacity disabled:opacity-40"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           {g.contributions.length > 6 && (

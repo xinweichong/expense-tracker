@@ -750,10 +750,74 @@ class Storage:
 
     def get_contributions(self, goal_id: int) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT * FROM goal_contributions WHERE goal_id = ? ORDER BY month ASC",
+            "SELECT * FROM goal_contributions WHERE goal_id = ? ORDER BY contributed_date ASC, month ASC",
             (goal_id,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def update_contribution(self, contribution_id: int, **fields) -> None:
+        allowed = {"amount", "note", "contributed_date"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return
+        row = self.conn.execute(
+            "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError("Contribution not found")
+        # If amount is changing, adjust the goal's saved_amount by the delta
+        if "amount" in updates:
+            delta = updates["amount"] - row["amount"]
+            self.conn.execute(
+                "UPDATE goals SET saved_amount = saved_amount + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (delta, row["goal_id"]),
+            )
+            # Re-evaluate completion status
+            goal = self.conn.execute(
+                "SELECT saved_amount, target_amount, status FROM goals WHERE id = ?", (row["goal_id"],)
+            ).fetchone()
+            if goal:
+                if goal["saved_amount"] >= goal["target_amount"] and goal["status"] == "active":
+                    self.conn.execute(
+                        "UPDATE goals SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (row["goal_id"],),
+                    )
+                elif goal["saved_amount"] < goal["target_amount"] and goal["status"] == "completed":
+                    self.conn.execute(
+                        "UPDATE goals SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (row["goal_id"],),
+                    )
+        # Derive month from contributed_date if date is being updated
+        if "contributed_date" in updates and updates["contributed_date"]:
+            updates["month"] = updates["contributed_date"][:7]
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        self.conn.execute(
+            f"UPDATE goal_contributions SET {set_clause} WHERE id = ?",
+            (*updates.values(), contribution_id),
+        )
+        self.conn.commit()
+
+    def delete_contribution(self, contribution_id: int) -> None:
+        row = self.conn.execute(
+            "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError("Contribution not found")
+        self.conn.execute("DELETE FROM goal_contributions WHERE id = ?", (contribution_id,))
+        self.conn.execute(
+            "UPDATE goals SET saved_amount = MAX(0, saved_amount - ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (row["amount"], row["goal_id"]),
+        )
+        # If goal was completed but saved_amount now falls below target, revert to active
+        goal = self.conn.execute(
+            "SELECT saved_amount, target_amount, status FROM goals WHERE id = ?", (row["goal_id"],)
+        ).fetchone()
+        if goal and goal["saved_amount"] < goal["target_amount"] and goal["status"] == "completed":
+            self.conn.execute(
+                "UPDATE goals SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (row["goal_id"],),
+            )
+        self.conn.commit()
 
     def get_goal_progress(self, goal_id: int) -> Optional[dict]:
         row = self.conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
@@ -762,9 +826,8 @@ class Storage:
         goal = dict(row)
         contributions = self.get_contributions(goal_id)
 
-        # Monthly rate: average of last 3 auto contributions
-        auto_contribs = [c["amount"] for c in contributions if c["source"] == "auto"]
-        recent = auto_contribs[-3:]
+        # Monthly rate: average of last 3 contributions
+        recent = [c["amount"] for c in contributions[-3:]]
         monthly_rate = sum(recent) / len(recent) if recent else 0.0
 
         saved = goal["saved_amount"]

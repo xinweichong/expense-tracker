@@ -359,6 +359,17 @@ export const api = {
   getGoalContributions: (id: number) =>
     request<GoalContribution[]>(`/api/goals/${id}/contributions`),
 
+  updateContribution: (goalId: number, contributionId: number, data: { amount?: number; note?: string | null; contributed_date?: string }) =>
+    request<GoalProgress>(`/api/goals/${goalId}/contributions/${contributionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteContribution: (goalId: number, contributionId: number) =>
+    request<GoalProgress>(`/api/goals/${goalId}/contributions/${contributionId}`, {
+      method: 'DELETE',
+    }),
+
   getSavingsOverview: () =>
     request<SavingsOverview>('/api/savings/overview'),
 };

@@ -642,6 +642,30 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="Goal not found")
         return storage.get_contributions(goal_id)
 
+    @app.put("/api/goals/{goal_id}/contributions/{contribution_id}")
+    async def update_contribution(goal_id: int, contribution_id: int, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        allowed = {"amount", "note", "contributed_date"}
+        fields = {k: v for k, v in body.items() if k in allowed}
+        if "amount" in fields:
+            try:
+                fields["amount"] = float(fields["amount"])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=422, detail="amount must be a number")
+        try:
+            storage.update_contribution(contribution_id, **fields)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return storage.get_goal_progress(goal_id)
+
+    @app.delete("/api/goals/{goal_id}/contributions/{contribution_id}")
+    async def delete_contribution(goal_id: int, contribution_id: int, _auth=Depends(require_auth)):
+        try:
+            storage.delete_contribution(contribution_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return storage.get_goal_progress(goal_id)
+
     @app.get("/api/savings/overview")
     async def savings_overview(_auth=Depends(require_auth)):
         month = local_now().strftime("%Y-%m")
