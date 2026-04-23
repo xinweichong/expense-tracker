@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { type Transaction, api } from '@/api/client';
-import { formatCurrency, formatDate, getCategoryColor } from '@/lib/utils';
+import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
 import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ const SOURCE_LABELS: Record<string, string> = {
   dbs_paylah:   'DBS PayLah!',
   uob_paynow:   'UOB PayNow',
   uob_card:     'UOB Card',
+  uob_transfer: 'UOB Transfer',
   apple_wallet: 'Apple Wallet',
   manual:       'Manual',
   cash:         'Cash',
@@ -177,7 +178,7 @@ export function TransactionRow({
           <p className="text-sm font-medium truncate">{tx.merchant || tx.description || 'Transaction'}</p>
         )}
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-xs text-muted">{formatDate(tx.transaction_date)}</p>
+          <p className="text-xs text-muted">{formatDateTime(tx.transaction_date)}</p>
           {tx.category && (
             <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 border-border">
               {tx.category}

@@ -30,6 +30,38 @@ export function formatShortDate(date: string): string {
   });
 }
 
+/**
+ * Format a transaction_date string for display.
+ * Shows time only when it is non-midnight (i.e. a real time was captured).
+ * Handles null/undefined gracefully. Handles both "YYYY-MM-DD" (bare) and
+ * "YYYY-MM-DDTHH:MM:SS" (ISO) formats.
+ */
+export function formatDateTime(date: string | null | undefined): string {
+  if (!date) return '—';
+  const tIdx = date.indexOf('T');
+  const datePart = tIdx !== -1 ? date.slice(0, tIdx) : date.slice(0, 10);
+  const timePart = tIdx !== -1 ? date.slice(tIdx + 1) : null;
+
+  const [y, m, d] = datePart.split('-').map(Number);
+  const dateStr = new Date(y, m - 1, d).toLocaleDateString('en-SG', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  // Only show time when it is not synthetic midnight
+  if (timePart && !timePart.startsWith('00:00')) {
+    const [h, min] = timePart.split(':').map(Number);
+    const timeStr = new Date(y, m - 1, d, h, min).toLocaleTimeString('en-SG', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return `${dateStr}, ${timeStr}`;
+  }
+  return dateStr;
+}
+
 const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
   'Food': '#FF6B6B',
   'Transport': '#64D2FF',
