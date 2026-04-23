@@ -1,6 +1,18 @@
+import calendar
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from typing import Optional
+
+
+def _get_budget_period(period: str) -> tuple[str, str]:
+    """Return (start_date, end_date) for the current budget period as ISO strings."""
+    today = date.today()
+    if period == "monthly":
+        return today.replace(day=1).isoformat(), today.isoformat()
+    elif period == "weekly":
+        monday = today - timedelta(days=today.weekday())
+        return monday.isoformat(), today.isoformat()
+    raise ValueError(f"Unknown period '{period}'. Must be 'monthly' or 'weekly'.")
 
 
 class Storage:
@@ -547,3 +559,100 @@ class Storage:
             "previous_month": previous,
             "trend": trend,
         }
+
+    # ── Budgets ────────────────────────────────────────────────────────────
+
+    def create_budget(self, category: Optional[str], amount: float, period: str) -> int:
+        if period not in ("monthly", "weekly"):
+            raise ValueError(f"period must be 'monthly' or 'weekly', got '{period}'")
+        try:
+            cursor = self.conn.execute(
+                """INSERT INTO budgets (category, period, amount)
+                   VALUES (?, ?, ?)""",
+                (category, period, amount),
+            )
+            self.conn.commit()
+            return cursor.lastrowid
+        except sqlite3.IntegrityError:
+            label = category if category else "Overall"
+            raise ValueError(f"Budget for '{label}' ({period}) already exists")
+
+    def get_budgets(self) -> list[dict]:
+        rows = self.conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    def update_budget(self, budget_id: int, amount: float) -> None:
+        row = self.conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Budget {budget_id} not found")
+        self.conn.execute(
+            "UPDATE budgets SET amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (amount, budget_id),
+        )
+        self.conn.commit()
+
+    def delete_budget(self, budget_id: int) -> None:
+        row = self.conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Budget {budget_id} not found")
+        self.conn.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
+        self.conn.commit()
+
+    def get_budget_progress(self) -> list[dict]:
+        """Return all budgets with current-period spending stats."""
+        budgets = self.conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
+        results = []
+        today = date.today()
+
+        for b in budgets:
+            start, end = _get_budget_period(b["period"])
+
+            if b["category"] is None:
+                spent_row = self.conn.execute(
+                    """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+                       FROM transactions
+                       WHERE type = 'expense' AND DATE(transaction_date) BETWEEN ? AND ?""",
+                    (start, end),
+                ).fetchone()
+            else:
+                spent_row = self.conn.execute(
+                    """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+                       FROM transactions
+                       WHERE type = 'expense' AND category = ?
+                         AND DATE(transaction_date) BETWEEN ? AND ?""",
+                    (b["category"], start, end),
+                ).fetchone()
+
+            spent = spent_row["total"]
+            budget_amount = b["amount"]
+            remaining = budget_amount - spent
+            percent = round(spent / budget_amount * 100, 1) if budget_amount > 0 else 0.0
+
+            if b["period"] == "monthly":
+                days_in_month = calendar.monthrange(today.year, today.month)[1]
+                projected = round(spent / today.day * days_in_month, 2) if today.day > 0 else 0.0
+            else:  # weekly
+                weekday = today.weekday() + 1  # Mon = 1
+                projected = round(spent / weekday * 7, 2) if weekday > 0 else 0.0
+
+            status = (
+                "over_budget" if percent >= 100
+                else "warning" if percent >= 80
+                else "on_track"
+            )
+
+            results.append({
+                "id": b["id"],
+                "category": b["category"],
+                "label": b["category"] if b["category"] else "Overall",
+                "period": b["period"],
+                "budget_amount": budget_amount,
+                "spent": round(spent, 2),
+                "remaining": round(remaining, 2),
+                "percent": percent,
+                "projected": projected,
+                "status": status,
+                "period_start": start,
+                "period_end": end,
+            })
+        return results
