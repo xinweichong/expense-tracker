@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -47,7 +47,10 @@ export function MerchantProfile({
 
   const setTagsMutation = useMutation({
     mutationFn: (tags: string[]) => api.setMerchantTags(merchant, tags),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-profile', merchant] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['merchant-profile', merchant] });
+      qc.invalidateQueries({ queryKey: ['merchant-intelligence'] });
+    },
   });
 
   const [notes, setNotes] = useState('');
@@ -61,10 +64,9 @@ export function MerchantProfile({
     },
   });
 
-  // Sync notes textarea with loaded profile
-  if (profile && notes === '' && profile.notes) {
-    setNotes(profile.notes);
-  }
+  useEffect(() => {
+    setNotes(profile?.notes ?? '');
+  }, [merchant]); // reset notes when merchant changes
 
   const toggleTag = (tag: string) => {
     if (!profile) return;

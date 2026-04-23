@@ -78,7 +78,7 @@ export function TransactionsPage() {
   useEffect(() => {
     const m = searchParams.get('merchant');
     if (m) handleMerchantClick(m);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, handleMerchantClick]);
 
   return (
     <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
