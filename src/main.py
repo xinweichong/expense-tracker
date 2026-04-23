@@ -160,6 +160,23 @@ def init_db(db_path: str) -> sqlite3.Connection:
         conn.execute("ALTER TABLE goal_contributions ADD COLUMN contributed_date TEXT")
     except Exception:
         pass
+    # Migrate: add type column to categories if missing
+    try:
+        conn.execute("ALTER TABLE categories ADD COLUMN type TEXT DEFAULT 'neutral'")
+    except Exception:
+        pass
+    # Populate default type values for known categories
+    type_defaults = [
+        ("needs",  ("Transport", "Groceries", "Bills & Utilities", "Healthcare", "Housing", "Insurance")),
+        ("wants",  ("Dining", "Entertainment", "Shopping", "Travel", "Subscriptions")),
+        ("neutral", ("Other", "Transfers", "Income")),
+    ]
+    for type_val, names in type_defaults:
+        placeholders = ",".join("?" * len(names))
+        conn.execute(
+            f"UPDATE categories SET type = ? WHERE name IN ({placeholders}) AND (type IS NULL OR type = 'neutral')",
+            [type_val, *names],
+        )
     conn.commit()
     # Create indexes for query performance (idempotent — IF NOT EXISTS)
     index_statements = [

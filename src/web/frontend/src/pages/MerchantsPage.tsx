@@ -13,15 +13,14 @@ const SORT_OPTIONS = [
   { value: 'merchant_name',     label: 'Name' },
 ];
 
-const ALL_TAGS = ['online', 'subscription', 'local', 'foreign', 'business', 'cash-equivalent'];
+const ALL_TAGS = ['online', 'subscription', 'foreign', 'essential', 'recurring'];
 
 const TAG_COLORS: Record<string, string> = {
-  online:           'bg-blue-500/20 text-blue-400',
-  subscription:     'bg-purple-500/20 text-purple-400',
-  local:            'bg-green-500/20 text-green-400',
-  foreign:          'bg-orange-500/20 text-orange-400',
-  business:         'bg-indigo-500/20 text-indigo-400',
-  'cash-equivalent':'bg-zinc-500/20 text-zinc-400',
+  online:       'bg-blue-500/20 text-blue-400',
+  subscription: 'bg-purple-500/20 text-purple-400',
+  foreign:      'bg-orange-500/20 text-orange-400',
+  essential:    'bg-amber-500/20 text-amber-400',
+  recurring:    'bg-teal-500/20 text-teal-400',
 };
 
 function formatSGD(v: number) {
