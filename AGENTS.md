@@ -298,7 +298,22 @@ Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive
 
 All icons from **lucide-react**. Three sizes: `w-3.5 h-3.5` inline actions (Pencil, Trash2), `w-4 h-4` standard buttons and form icons, `w-5 h-5` navigation. Category avatars use the emoji from the `icon` DB column, rendered inside a colored `div` (not an `<img>`).
 
-Font: Inter (system-ui / -apple-system fallback). Size scale: `text-xs` labels/metadata, `text-sm` body/button labels, `text-base` default inputs, `text-lg` card titles, `text-xl` page headings, `text-2xl` main figures and balance amounts. Weights: `font-medium` labels/nav items, `font-semibold` card titles/amounts, `font-bold` page h1s/balance figures.
+**Edit/delete icon buttons — use this pattern everywhere, no exceptions:**
+```tsx
+<Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
+  <Pencil className="w-3.5 h-3.5" />
+</Button>
+<Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onDelete}>
+  <Trash2 className="w-3.5 h-3.5" />
+</Button>
+```
+- Always use `Button` from `@/components/ui/button` — never a bare `<button>` for icon actions
+- Always `variant="ghost" size="icon" className="h-7 w-7"`
+- Edit button: no extra color class (inherits default muted ghost style)
+- Delete button: always `text-destructive` — **never `text-muted`**, **never hidden on hover**
+- Icons are always **persistent** — never `opacity-0 group-hover:opacity-100` or similar reveal patterns
+
+Size scale: `text-xs` labels/metadata, `text-sm` body/button labels, `text-base` default inputs, `text-lg` card titles, `text-xl` page headings, `text-2xl` main figures and balance amounts. Weights: `font-medium` labels/nav items, `font-semibold` card titles/amounts, `font-bold` page h1s/balance figures.
 
 Responsive breakpoints: `sm` (640px) form layout changes, `md` (768px) sidebar visible / bottom tabs hidden / padding increases, `lg` (1024px) wider sidebar / two-column analytics grid.
 

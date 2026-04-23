@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api, type BudgetProgress, type Category, type GoalProgress } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Pencil, Trash2, X, Check } from 'lucide-react';
 
@@ -470,30 +471,21 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center justify-between text-xs group">
+                <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <span className="text-muted">
                       {c.contributed_date ?? c.month}
                     </span>
                     {c.note && <span className="text-muted italic truncate max-w-28">{c.note}</span>}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-foreground">${c.amount.toFixed(0)}</span>
-                    <button
-                      onClick={() => startEditContrib(c)}
-                      className="opacity-0 group-hover:opacity-100 text-muted hover:text-foreground transition-opacity"
-                      title="Edit"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={() => deleteContribMutation.mutate(c.id)}
-                      disabled={deleteContribMutation.isPending}
-                      className="opacity-0 group-hover:opacity-100 text-muted hover:text-destructive transition-opacity disabled:opacity-40"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-foreground mr-1">${c.amount.toFixed(0)}</span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEditContrib(c)} title="Edit">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteContribMutation.mutate(c.id)} disabled={deleteContribMutation.isPending} title="Delete">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
                 </div>
               )}
