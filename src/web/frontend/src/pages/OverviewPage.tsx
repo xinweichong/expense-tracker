@@ -115,7 +115,7 @@ export function OverviewPage() {
 
       {/* Balance Cards */}
       <div className="grid grid-cols-2 gap-4">
-        <Card>
+        <Card className="border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted">Spent</CardTitle>
           </CardHeader>
@@ -123,7 +123,7 @@ export function OverviewPage() {
             <p className="text-2xl font-bold text-destructive">{formatCurrency(expenses)}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted">Income</CardTitle>
           </CardHeader>
@@ -136,7 +136,7 @@ export function OverviewPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Category Donut */}
-        <Card>
+        <Card className="border-border">
           <CardHeader>
             <CardTitle className="text-base">Spending by Category</CardTitle>
           </CardHeader>
@@ -166,7 +166,7 @@ export function OverviewPage() {
         </Card>
 
         {/* Trend Line */}
-        <Card>
+        <Card className="border-border">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-base">Daily Spending Trend</CardTitle>
             <div className="flex rounded-md border border-border overflow-hidden">
@@ -204,7 +204,7 @@ export function OverviewPage() {
       </div>
 
       {/* Transactions */}
-      <Card>
+      <Card className="border-border">
         <CardHeader>
           <CardTitle className="text-base">Transactions</CardTitle>
         </CardHeader>
