@@ -40,6 +40,8 @@ class RecurringDetector:
         frequency = None
         if 25 <= avg_interval <= 35:
             frequency = "monthly"
+        elif 13 <= avg_interval <= 17:
+            frequency = "biweekly"
         elif 6 <= avg_interval <= 8:
             frequency = "weekly"
         if not frequency:
