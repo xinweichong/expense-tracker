@@ -94,7 +94,7 @@ export function MerchantsPage() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="text-xs px-2 py-1.5 bg-background border border-border rounded-md text-foreground"
+              className="select-field text-xs"
             >
               {SORT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>

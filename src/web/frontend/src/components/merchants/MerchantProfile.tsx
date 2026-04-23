@@ -93,8 +93,9 @@ export function MerchantProfile({
     );
   }
 
+  const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const chartData = (trend?.months ?? []).map((m) => ({
-    month: m.month.slice(5),   // "2026-04" → "04"
+    month: MONTH_LABELS[parseInt(m.month.slice(5), 10) - 1] ?? m.month.slice(5),
     Total: m.total,
   }));
 
