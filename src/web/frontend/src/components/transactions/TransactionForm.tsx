@@ -35,7 +35,11 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [currency, setCurrency] = useState('SGD');
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [datetime, setDatetime] = useState(() => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  });
 
   const createTx = useCreateTransaction();
 
@@ -52,7 +56,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
         description: description || undefined,
         currency,
         source: type === 'cash' ? 'cash' : 'manual',
-        transaction_date: date,
+        transaction_date: datetime ? datetime + ':00' : undefined,
       },
       { onSuccess: onClose }
     );
@@ -131,11 +135,11 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
         </div>
 
         <div>
-          <label className="text-xs text-muted">Date</label>
+          <label className="text-xs text-muted">Date & Time</label>
           <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
+            type="datetime-local"
+            value={datetime}
+            onChange={(e) => setDatetime(e.target.value)}
             className="bg-background border-border"
           />
         </div>
