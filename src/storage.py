@@ -129,8 +129,12 @@ class Storage:
     def load_categories(self, categories: list[dict]) -> None:
         for cat in categories:
             self.conn.execute(
-                """INSERT OR REPLACE INTO categories (name, keywords, icon, color)
-                   VALUES (?, ?, ?, ?)""",
+                """INSERT INTO categories (name, keywords, icon, color)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(name) DO UPDATE SET
+                     keywords = excluded.keywords,
+                     icon     = excluded.icon,
+                     color    = excluded.color""",
                 (cat["name"], cat["keywords"], cat["icon"], cat.get("color")),
             )
         self.conn.commit()

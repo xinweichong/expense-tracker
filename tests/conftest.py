@@ -33,7 +33,8 @@ def in_memory_db():
         name TEXT PRIMARY KEY,
         keywords TEXT,
         icon TEXT,
-        color TEXT
+        color TEXT,
+        type TEXT DEFAULT 'neutral'
     );
 
     CREATE TABLE ingestion_state (
