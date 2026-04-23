@@ -301,6 +301,27 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
         </div>
       </div>
 
+      {/* Sparkline: last 6 months contributions */}
+      {g.contributions.length > 0 && (
+        <div className="flex items-end gap-1 h-8">
+          {(() => {
+            const last6 = g.contributions.slice(-6);
+            const maxAmt = Math.max(...last6.map((x) => x.amount), 1);
+            return last6.map((c) => {
+              const h = Math.max(4, (c.amount / maxAmt) * 32);
+              return (
+                <div
+                  key={c.id}
+                  title={`${c.month}: $${c.amount}`}
+                  className="flex-1 rounded-sm bg-foreground/20 hover:bg-foreground/40 transition-colors"
+                  style={{ height: `${h}px` }}
+                />
+              );
+            });
+          })()}
+        </div>
+      )}
+
       {/* Contribution history */}
       {g.contributions.length > 0 ? (
         <div className="space-y-1.5">
