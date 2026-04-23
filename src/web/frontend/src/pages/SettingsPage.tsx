@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { PageCard } from '@/components/ui/cards';
@@ -35,6 +36,13 @@ export function SettingsPage() {
   const createCat = useCreateCategory();
   const updateCat = useUpdateCategory();
   const deleteCat = useDeleteCategory();
+
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const el = document.getElementById(hash.slice(1));
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [hash]);
 
   // Populate getCategoryColor overrides when categories load
   useEffect(() => {
@@ -371,26 +379,28 @@ export function SettingsPage() {
       </Dialog>
 
       {/* Feature Toggles */}
-      <PageCard title="Feature Toggles">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-foreground">Budgets</p>
-            <p className="text-xs text-muted">Set spending limits and track progress</p>
-          </div>
-          <button
-            onClick={() => toggleBudgets(!settings?.budgets_enabled)}
-            className={`relative w-10 h-5 rounded-full transition-colors ${
-              settings?.budgets_enabled ? 'bg-success' : 'bg-foreground/20'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0'
+      <div id="feature-toggles">
+        <PageCard title="Feature Toggles">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Budgets</p>
+              <p className="text-xs text-muted">Set spending limits and track progress</p>
+            </div>
+            <button
+              onClick={() => toggleBudgets(!settings?.budgets_enabled)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${
+                settings?.budgets_enabled ? 'bg-success' : 'bg-foreground/20'
               }`}
-            />
-          </button>
-        </div>
-      </PageCard>
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                  settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </PageCard>
+      </div>
 
       {/* Alert Thresholds */}
       <PageCard title="Alert Thresholds">

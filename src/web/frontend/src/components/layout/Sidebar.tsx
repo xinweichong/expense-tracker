@@ -60,7 +60,7 @@ export function Sidebar() {
           </NavLink>
         ) : (
           <button
-            onClick={() => navigate('/settings')}
+            onClick={() => navigate('/settings#feature-toggles')}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted/40 hover:text-muted/60 hover:bg-foreground/5"
             title="Enable Budgets in Settings"
           >
