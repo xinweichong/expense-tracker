@@ -7,6 +7,7 @@ interface TransactionListProps {
   onLoadMore: () => void;
   hasMore: boolean;
   isLoading: boolean;
+  onMerchantClick?: (merchant: string) => void;
 }
 
 export function TransactionList({
@@ -14,6 +15,7 @@ export function TransactionList({
   onLoadMore,
   hasMore,
   isLoading,
+  onMerchantClick,
 }: TransactionListProps) {
   const observerRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +45,7 @@ export function TransactionList({
   return (
     <div className="group">
       {transactions.map((tx) => (
-        <TransactionRow key={tx.id} tx={tx} />
+        <TransactionRow key={tx.id} tx={tx} onMerchantClick={onMerchantClick} />
       ))}
       {hasMore && (
         <div ref={observerRef} className="py-4 text-center text-muted text-xs">
