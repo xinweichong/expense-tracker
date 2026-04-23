@@ -65,6 +65,30 @@ export interface BudgetProgress {
   period_end: string;
 }
 
+export interface GoalContribution {
+  id: number;
+  goal_id: number;
+  amount: number;
+  month: string;
+  source: 'auto' | 'manual';
+  note: string | null;
+  created_at: string;
+}
+
+export interface GoalProgress {
+  id: number;
+  name: string;
+  target_amount: number;
+  saved_amount: number;
+  target_date: string | null;
+  status: 'active' | 'completed' | 'paused';
+  percent: number;
+  monthly_rate: number;
+  months_to_target: number | null;
+  on_track: 'on_track' | 'ahead' | 'behind' | null;
+  contributions: GoalContribution[];
+}
+
 export interface MerchantSummary {
   merchant: string;
   total_sgd: number;
@@ -275,11 +299,53 @@ export const api = {
 
   // App Settings
   getSettings: () =>
-    request<{ anomaly_multiplier: number; velocity_alert_threshold: number; budgets_enabled: boolean }>('/api/settings'),
+    request<{
+      anomaly_multiplier: number;
+      velocity_alert_threshold: number;
+      budgets_enabled: boolean;
+      goals_enabled: boolean;
+    }>('/api/settings'),
 
-  updateSettings: (data: { anomaly_multiplier?: number; velocity_alert_threshold?: number; budgets_enabled?: boolean }) =>
-    request<{ anomaly_multiplier: number; velocity_alert_threshold: number; budgets_enabled: boolean }>('/api/settings', {
+  updateSettings: (data: {
+    anomaly_multiplier?: number;
+    velocity_alert_threshold?: number;
+    budgets_enabled?: boolean;
+    goals_enabled?: boolean;
+  }) =>
+    request<{
+      anomaly_multiplier: number;
+      velocity_alert_threshold: number;
+      budgets_enabled: boolean;
+      goals_enabled: boolean;
+    }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  // Goals
+  getGoals: () => request<GoalProgress[]>('/api/goals'),
+
+  createGoal: (data: { name: string; target_amount: number; target_date?: string }) =>
+    request<GoalProgress>('/api/goals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateGoal: (id: number, data: { name?: string; target_amount?: number; target_date?: string; status?: 'active' | 'completed' | 'paused' }) =>
+    request<GoalProgress>(`/api/goals/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteGoal: (id: number) =>
+    request<{ status: string }>(`/api/goals/${id}`, { method: 'DELETE' }),
+
+  contributeToGoal: (id: number, data: { amount: number; note?: string }) =>
+    request<GoalProgress>(`/api/goals/${id}/contribute`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getGoalContributions: (id: number) =>
+    request<GoalContribution[]>(`/api/goals/${id}/contributions`),
 };

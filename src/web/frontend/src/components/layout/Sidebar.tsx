@@ -1,16 +1,15 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 
 export function Sidebar() {
-  const navigate = useNavigate();
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.getSettings(),
     staleTime: 30_000,
   });
-  const financeEnabled = settings?.budgets_enabled === true;
+  const financeEnabled = settings?.budgets_enabled || settings?.goals_enabled;
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -43,32 +42,23 @@ export function Sidebar() {
           </NavLink>
         ))}
 
-        {/* Finance — dimmed with lock icon when budgets_enabled=false */}
-        {financeEnabled ? (
-          <NavLink
-            to="/finance"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                isActive
-                  ? 'bg-foreground/10 text-foreground font-medium'
-                  : 'text-muted hover:text-foreground hover:bg-foreground/5'
-              }`
-            }
-          >
-            <Wallet className="w-5 h-5 shrink-0" />
-            <span className="hidden lg:inline">Finance</span>
-          </NavLink>
-        ) : (
-          <button
-            onClick={() => navigate('/settings#feature-toggles')}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted/40 hover:text-muted/60 hover:bg-foreground/5"
-            title="Enable Budgets in Settings"
-          >
-            <Wallet className="w-5 h-5 shrink-0" />
-            <span className="hidden lg:inline">Finance</span>
-            <Lock className="hidden lg:inline w-3 h-3 ml-auto shrink-0" />
-          </button>
-        )}
+        {/* Finance — always visible; dimmed when neither toggle is on */}
+        <NavLink
+          to="/finance"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive
+                ? 'bg-foreground/10 text-foreground font-medium'
+                : 'text-muted hover:text-foreground hover:bg-foreground/5'
+            } ${!financeEnabled ? 'opacity-40' : ''}`
+          }
+        >
+          <Wallet className="w-5 h-5 shrink-0" />
+          <span className="hidden lg:flex items-center gap-1">
+            Finance
+            {!financeEnabled && <Lock className="w-3 h-3 ml-1 inline" />}
+          </span>
+        </NavLink>
 
         {/* Settings — always last */}
         <NavLink

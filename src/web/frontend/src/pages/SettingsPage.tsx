@@ -101,6 +101,11 @@ export function SettingsPage() {
     refetchSettings();
   };
 
+  const toggleGoals = async (enabled: boolean) => {
+    await api.updateSettings({ goals_enabled: enabled });
+    refetchSettings();
+  };
+
   // Colors already in use by other categories
   const usedColors = (categories ?? [])
     .filter((c: Category) => c.color)
@@ -395,6 +400,24 @@ export function SettingsPage() {
               <span
                 className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
                   settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Goals</p>
+              <p className="text-xs text-muted">Track savings targets and monthly progress</p>
+            </div>
+            <button
+              onClick={() => toggleGoals(!settings?.goals_enabled)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${
+                settings?.goals_enabled ? 'bg-success' : 'bg-foreground/20'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                  settings?.goals_enabled ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
             </button>
