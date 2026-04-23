@@ -109,6 +109,15 @@ def init_db(db_path: str) -> sqlite3.Connection:
             value TEXT NOT NULL,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS budgets (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            category   TEXT,
+            period     TEXT NOT NULL DEFAULT 'monthly',
+            amount     REAL NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(category, period)
+        );
     """)
     # Migrate: add exchange_rate column if missing
     try:
@@ -140,6 +149,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
     defaults = [
         ("anomaly_multiplier", "2.0"),
         ("velocity_alert_threshold", "110"),
+        ("budgets_enabled", "false"),
     ]
     for key, value in defaults:
         conn.execute(
