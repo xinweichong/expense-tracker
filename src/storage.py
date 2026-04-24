@@ -1086,3 +1086,191 @@ class Storage:
                 },
             },
         }
+
+    # ── Trips ───────────────────────────────────────────────────────────────
+
+    def create_trip(
+        self,
+        name: str,
+        start_date: str,
+        destination: Optional[str] = None,
+        primary_currency: str = "SGD",
+    ) -> int:
+        cursor = self.conn.execute(
+            """INSERT INTO trips (name, destination, start_date, primary_currency)
+               VALUES (?, ?, ?, ?)""",
+            (name, destination, start_date, primary_currency),
+        )
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def get_trips(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM trips ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_trip(self, trip_id: int) -> Optional[dict]:
+        row = self.conn.execute(
+            "SELECT * FROM trips WHERE id = ?", (trip_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def update_trip(self, trip_id: int, **fields) -> None:
+        allowed = {"name", "destination", "start_date", "end_date", "primary_currency"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return
+        row = self.conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Trip {trip_id} not found")
+        set_clauses = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [trip_id]
+        self.conn.execute(
+            f"UPDATE trips SET {set_clauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            values,
+        )
+        self.conn.commit()
+
+    def delete_trip(self, trip_id: int) -> None:
+        row = self.conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Trip {trip_id} not found")
+        self.conn.execute("DELETE FROM trip_transactions WHERE trip_id = ?", (trip_id,))
+        self.conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
+        self.conn.commit()
+
+    def activate_trip(self, trip_id: int) -> None:
+        row = self.conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Trip {trip_id} not found")
+        self.conn.execute(
+            "UPDATE trips SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id != ?",
+            (trip_id,),
+        )
+        self.conn.execute(
+            "UPDATE trips SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (trip_id,),
+        )
+        self.conn.commit()
+
+    def deactivate_trip(self, trip_id: int) -> None:
+        self.conn.execute(
+            "UPDATE trips SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (trip_id,),
+        )
+        self.conn.commit()
+
+    def get_active_trip(self) -> Optional[dict]:
+        row = self.conn.execute(
+            "SELECT * FROM trips WHERE status = 'active' LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+    def enlist_transaction(self, trip_id: int, tx_id: int, added_by: str = "auto") -> None:
+        """Add a transaction to a trip. Idempotent — does nothing if already enlisted."""
+        self.conn.execute(
+            """INSERT OR IGNORE INTO trip_transactions (trip_id, transaction_id, added_by)
+               VALUES (?, ?, ?)""",
+            (trip_id, tx_id, added_by),
+        )
+        self.conn.commit()
+
+    def delist_transaction(self, trip_id: int, tx_id: int) -> None:
+        """Remove a transaction from a trip. No-op if not enlisted."""
+        self.conn.execute(
+            "DELETE FROM trip_transactions WHERE trip_id = ? AND transaction_id = ?",
+            (trip_id, tx_id),
+        )
+        self.conn.commit()
+
+    def get_trip_transactions(
+        self,
+        trip_id: int,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        rows = self.conn.execute(
+            """SELECT t.*, tt.added_by
+               FROM transactions t
+               JOIN trip_transactions tt ON tt.transaction_id = t.id
+               WHERE tt.trip_id = ?
+               ORDER BY t.transaction_date DESC
+               LIMIT ? OFFSET ?""",
+            (trip_id, limit, offset),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def auto_assign_to_active_trip(self, tx_id: int) -> None:
+        """If trips_enabled and an active trip exists, add tx_id to it. No-op otherwise."""
+        if self.get_setting("trips_enabled", "false") != "true":
+            return
+        active = self.get_active_trip()
+        if not active:
+            return
+        self.enlist_transaction(active["id"], tx_id, added_by="auto")
+
+    def is_in_trip(self, trip_id: int, tx_id: int) -> bool:
+        """Return True if transaction tx_id is enlisted in trip trip_id."""
+        row = self.conn.execute(
+            "SELECT 1 FROM trip_transactions WHERE trip_id = ? AND transaction_id = ?",
+            (trip_id, tx_id),
+        ).fetchone()
+        return row is not None
+
+    def get_trip_summary(self, trip_id: int) -> Optional[dict]:
+        """Full analytics for a trip: total, count, days, daily average, by category, by day."""
+        trip = self.get_trip(trip_id)
+        if not trip:
+            return None
+
+        rows = self.conn.execute(
+            """SELECT t.amount * t.exchange_rate as amt_sgd,
+                      t.category,
+                      DATE(t.transaction_date) as tx_date,
+                      t.currency
+               FROM transactions t
+               JOIN trip_transactions tt ON tt.transaction_id = t.id
+               WHERE tt.trip_id = ? AND (t.type IS NULL OR t.type = 'expense')
+               ORDER BY t.transaction_date ASC""",
+            (trip_id,),
+        ).fetchall()
+
+        total_sgd = sum(r["amt_sgd"] for r in rows)
+        count = len(rows)
+
+        from datetime import datetime as _dt
+        start_dt = _dt.strptime(trip["start_date"], "%Y-%m-%d")
+        end_str = trip.get("end_date") or _dt.now().strftime("%Y-%m-%d")
+        end_dt = _dt.strptime(end_str, "%Y-%m-%d")
+        days = max(1, (end_dt - start_dt).days + 1)
+
+        daily_avg = round(total_sgd / days, 2) if total_sgd > 0 else 0.0
+
+        cat_totals: dict[str, dict] = {}
+        for r in rows:
+            cat = r["category"] or "Other"
+            if cat not in cat_totals:
+                cat_totals[cat] = {"category": cat, "amount_sgd": 0.0, "count": 0}
+            cat_totals[cat]["amount_sgd"] = round(cat_totals[cat]["amount_sgd"] + r["amt_sgd"], 2)
+            cat_totals[cat]["count"] += 1
+        by_category = sorted(cat_totals.values(), key=lambda x: x["amount_sgd"], reverse=True)
+
+        day_totals: dict[str, float] = {}
+        for r in rows:
+            d = r["tx_date"] or "unknown"
+            day_totals[d] = round(day_totals.get(d, 0.0) + r["amt_sgd"], 2)
+        by_day = [{"date": d, "amount_sgd": v} for d, v in sorted(day_totals.items())]
+
+        currencies = list({r["currency"] for r in rows if r["currency"]})
+
+        return {
+            "trip": dict(trip),
+            "total_sgd": round(total_sgd, 2),
+            "transaction_count": count,
+            "days": days,
+            "daily_average_sgd": daily_avg,
+            "currencies_used": currencies,
+            "by_category": by_category,
+            "by_day": by_day,
+        }
