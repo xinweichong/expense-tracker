@@ -44,4 +44,78 @@ body {
     background-position: right 0.5rem center;
     background-size: 1rem;
   }
+
+  /* ── Grid layout utilities ─────────────────────────────────────────────── */
+
+  /* Applied to any grid cell whose content may overflow — scrolls independently */
+  .grid-scroll-panel {
+    overflow-y: auto;
+    min-height: 0; /* Critical: prevents grid child from overflowing its row */
+  }
+
+  /* Grid area name assignments (apply on children of a named-areas grid) */
+  .area-header { grid-area: header; }
+  .area-title  { grid-area: title;  }
+  .area-left   { grid-area: left;   }
+  .area-right  { grid-area: right;  }
+  .area-top    { grid-area: top;    }
+
+  /* Per-page grid templates -------------------------------------------------- */
+
+  /* Overview: period selector header | left=stats+charts | right=transactions */
+  .page-grid-overview {
+    /* mobile: single column, rows sized to content */
+    grid-template-areas: "header" "left" "right";
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  @media (min-width: 768px) {
+    .page-grid-overview {
+      grid-template-areas: "header header" "left right";
+      grid-template-columns: 1fr 1.2fr;
+      grid-template-rows: auto 1fr;
+    }
+  }
+
+  /* Analytics: h1 header | left=health+alerts | right=charts+merchants */
+  .page-grid-analytics {
+    grid-template-areas: "header" "left" "right";
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  @media (min-width: 768px) {
+    .page-grid-analytics {
+      grid-template-areas: "header header" "left right";
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr;
+    }
+  }
+
+  /* Finance: savings strip | left=budgets | right=goals */
+  .page-grid-finance {
+    grid-template-areas: "top" "left" "right";
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  @media (min-width: 768px) {
+    .page-grid-finance {
+      grid-template-areas: "top top" "left right";
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr;
+    }
+  }
+
+  /* Settings: title | left=categories+overrides | right=toggles+thresholds */
+  .page-grid-settings {
+    grid-template-areas: "title" "left" "right";
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  @media (min-width: 768px) {
+    .page-grid-settings {
+      grid-template-areas: "title title" "left right";
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr;
+    }
+  }
 }

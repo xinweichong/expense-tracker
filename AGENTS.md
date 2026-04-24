@@ -278,6 +278,9 @@ Utility classes defined in `src/web/frontend/src/index.css` under `@layer compon
 - **`.input-field`** — use on native `<input>` elements: `px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground`. Replaces the repeated inline string.
 - **`.btn-action`** — use for primary save/submit `<button>` elements outside the Button CVA system: `px-4 py-1.5 text-sm bg-foreground text-background rounded-md hover:opacity-90`.
 - **`.select-field`** — use on all native `<select>` elements. Includes the white SVG chevron via `background-image`. Never use `.input-field` on a `<select>`.
+- **`.grid-scroll-panel`** — use on grid-area children that may contain long content: `overflow-y: auto; min-height: 0`. The `min-height: 0` is critical and must not be removed.
+- **`.area-header`**, **`.area-title`**, **`.area-left`**, **`.area-right`**, **`.area-top`** — `grid-area` assignments for named CSS Grid template areas. No-ops outside a grid parent (safe on mobile).
+- **`.page-grid-overview`**, **`.page-grid-analytics`**, **`.page-grid-finance`**, **`.page-grid-settings`** — per-page grid template definitions with responsive `@media` overrides. Mobile: single-column stack. Desktop (`md+`): multi-column viewport-filling grid.
 - **Radix `<SelectTrigger>` chevron** — always `opacity-50` (`<ChevronDown className="h-4 w-4 opacity-50" />`). Do not change to `text-foreground` or any explicit color. The 50% opacity is intentional and must be preserved across all usages.
 
 ### Navigation Pattern
@@ -285,6 +288,94 @@ Utility classes defined in `src/web/frontend/src/index.css` under `@layer compon
 Sidebar (`hidden md:flex`, `w-56` md / `w-64` lg, `sticky top-0 h-screen`, `bg-card border-r border-border`) + bottom tabs (`md:hidden fixed bottom-0 h-16`, `bg-card border-t border-border`). Main content always has `pb-20 md:pb-0` for bottom-tab clearance.
 
 Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive `text-muted hover:text-foreground hover:bg-foreground/5`. Four routes: Overview `/`, Transactions `/transactions`, Analytics `/analytics`, Settings `/settings`.
+
+### Dashboard Layout Principles
+
+Four rules that govern how all dashboard pages are structured. Introduced to eliminate page-level scrolling on desktop and keep interactive controls always visible.
+
+#### 1. Viewport-Native Grid Layout
+
+On `md+` screens, dashboard pages fill the viewport with CSS Grid — no page-level scrollbar. Each page defines its own `grid-template-areas`. On mobile, pages revert to single-column stacking with normal browser scroll.
+
+**CSS implementation:**
+- Page container: `p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-<name>`
+- Content panels: `area-<name> grid-scroll-panel space-y-4` (for panels with multiple cards)
+- The `.grid-scroll-panel` utility (`overflow-y: auto; min-height: 0`) is required on every grid-area child that may contain long content. `min-height: 0` is critical — it prevents grid children from overflowing their row constraint.
+- On mobile, `area-*` classes are no-ops (no grid parent), children stack via `space-y-4` on the outer container.
+
+**Per-page grid areas (defined in `index.css`):**
+
+| Page | CSS class | Areas | Columns (md+) | Rows (md+) |
+|---|---|---|---|---|
+| Overview | `.page-grid-overview` | `"header header" / "left right"` | `1fr 1.2fr` | `auto 1fr` |
+| Analytics | `.page-grid-analytics` | `"header header" / "left right"` | `1fr 1fr` | `auto 1fr` |
+| Finance | `.page-grid-finance` | `"top top" / "left right"` | `1fr 1fr` | `auto 1fr` |
+| Settings | `.page-grid-settings` | `"title title" / "left right"` | `1fr 1fr` | `auto 1fr` |
+
+**Panel assignments:**
+- **Overview** — Left: stats + health score + budget/goals summaries + charts. Right: transactions (paginated, 20/page).
+- **Analytics** — Left: health score breakdown + alerts. Right: comparison chart + velocity + top merchants + income/expense bar.
+- **Finance** — Top strip: savings overview. Left: budgets. Right: goals.
+- **Settings** — Left: categories + merchant overrides. Right: feature toggles + alert thresholds.
+
+#### 2. Persistent Chrome Rule
+
+Interactive controls that modify content (edit, delete, save, cancel) must always be visible when the content they control is on screen. **Never place action buttons in a footer that can scroll off-screen.**
+
+**Correct pattern for `flex flex-col h-full` panel components:**
+```
+[Header: identity info + close button]              ← shrink-0, outside scroll
+[Action bar: edit/delete  OR  cancel/save]          ← shrink-0, outside scroll
+[Scrollable body: detail fields / content]          ← flex-1 overflow-y-auto
+```
+
+Action bar classes: `shrink-0 border-b border-border` with inner `flex gap-2 px-4 py-2`
+
+**Anti-pattern (never do this):**
+```
+[Header]
+[Scrollable body — long content...]
+[Footer: edit/delete]   ← scrolls off-screen when body is long
+```
+
+**Existing components that implement this pattern:** `TransactionDetail`, `MerchantProfile`.
+
+#### 3. Two-Panel Interaction Pattern
+
+Detail/profile panels follow a split-panel layout: list on left, detail on right. Already established in `TransactionsPage` and `MerchantsPage` — apply to any future list-detail view.
+
+- Left panel: `flex-1 overflow-y-auto`
+- Right panel: `w-full md:w-96 shrink-0 border-l border-border bg-card overflow-hidden`
+- On mobile: right panel takes full screen (left panel `hidden md:block`)
+
+#### 4. Paginated Summary Lists
+
+Summary/overview pages show paginated lists (page size 20), not infinite scroll dumps. Infinite scroll is only for dedicated list pages (e.g. `TransactionsPage`).
+
+Pagination controls go in the `PageCard` header `action` slot. Reset page to 1 whenever the date/period changes.
+
+```tsx
+const PAGE_SIZE = 20;
+const [page, setPage] = useState(1);
+useEffect(() => { setPage(1); }, [start, end]);
+const totalPages = Math.ceil((items?.length ?? 0) / PAGE_SIZE);
+const pageItems = (items ?? []).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+```
+
+Pagination control (only rendered when `totalPages > 1`):
+```tsx
+<div className="flex items-center gap-1">
+  <Button variant="ghost" size="icon" className="h-6 w-6"
+    onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+    <ChevronLeft className="h-3 w-3" />
+  </Button>
+  <span className="text-xs text-muted">{page}/{totalPages}</span>
+  <Button variant="ghost" size="icon" className="h-6 w-6"
+    onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+    <ChevronRight className="h-3 w-3" />
+  </Button>
+</div>
+```
 
 ### Common UI Patterns
 
@@ -369,3 +460,4 @@ Fixtures in `tests/conftest.py` provide pre-initialized DB connections and sampl
 - **Adding a category color:** Add the color to `getCategoryColor()` defaults and the 20-color `PALETTE` array in `src/web/frontend/src/lib/utils.ts`
 - **Adding a new chart component:** Create in `src/components/charts/`. Import all Recharts config from `src/lib/chartTheme.ts`. Wrap in `ChartCard` from `src/components/ui/cards.tsx` if the component owns its card.
 - **Adding a new page section:** Use `PageCard` (content/tables/lists) or `ChartCard` (Recharts charts) from `src/components/ui/cards.tsx`. Avoid bare `Card/CardHeader/CardContent` for standard layouts.
+- **Adding a new full-page view:** Use `p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0` on the outer container. Define a `.page-grid-<name>` template in `index.css` with mobile single-column and `md` two-column variants. Apply `.grid-scroll-panel` to every grid-area child. Panel components inside the grid must follow the Persistent Chrome Rule (header + action bar outside scroll area).
