@@ -88,6 +88,8 @@ def create_webhook_app(
             category=category,
         )
 
+        storage.auto_assign_to_active_trip(tx_id)
+
         if on_transaction:
             on_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
 

@@ -287,6 +287,7 @@ def main():
         categorizer.reload_overrides(storage.get_merchant_overrides())
         category, match_source = categorizer.categorize(result.merchant)
         storage.update_transaction(tx_id, category=category)
+        storage.auto_assign_to_active_trip(tx_id)
         bot.notify_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
 
     poller = GmailPoller(

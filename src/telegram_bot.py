@@ -629,6 +629,7 @@ class TelegramBotService:
             exchange_rate=exchange_rate,
             transaction_date=tx_date,
         )
+        self.storage.auto_assign_to_active_trip(tx_id)
 
         sgd_equivalent = parsed["amount"] * exchange_rate
         icon = self.storage.get_category_icon_map().get(category, "")
@@ -675,6 +676,7 @@ class TelegramBotService:
             category=category,
             transaction_date=tx_date,
         )
+        self.storage.auto_assign_to_active_trip(tx_id)
         icon = self.storage.get_category_icon_map().get(category, "")
         cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
         msg = f"✅ *Cash* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} SGD`"
