@@ -14,6 +14,7 @@ import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
 import { StatCard, PageCard } from '@/components/ui/cards';
+import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -275,6 +276,9 @@ export function OverviewPage() {
           <StatCard label="Spent" value={formatCurrency(expenses)} variant="expense" />
           <StatCard label="Income" value={formatCurrency(income)} variant="income" />
         </div>
+
+        {/* Active trip */}
+        {settings?.trips_enabled && <ActiveTripCard />}
 
         {/* Budget Summary */}
         {settings?.budgets_enabled && budgetProgress.length > 0 && (
