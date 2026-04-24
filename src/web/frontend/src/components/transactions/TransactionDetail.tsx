@@ -132,6 +132,59 @@ export function TransactionDetail({
         </Button>
       </div>
 
+      {/* Action bar — always visible below header */}
+      <div className="shrink-0 border-b border-border">
+        {editing ? (
+          <div className="flex flex-col gap-1 px-4 py-2">
+            {saveError && (
+              <p className="text-sm text-destructive">{saveError}</p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={() => {
+                  setEditing(false);
+                  setSaveError(null);
+                  setMerchant(tx.merchant ?? '');
+                  setCategory(tx.category ?? '');
+                  setDescription(tx.description ?? '');
+                  setExchangeRate(tx.exchange_rate ?? 1.0);
+                }}
+                disabled={updateTx.isPending}
+              >
+                <X className="w-4 h-4 mr-1" />
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSave}
+                disabled={updateTx.isPending}
+              >
+                <Check className="w-4 h-4 mr-1" />
+                {updateTx.isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2 px-4 py-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-destructive"
+              onClick={handleDelete}
+              disabled={deleteTx.isPending}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={handleEdit}>
+              <Pencil className="w-4 h-4 mr-1" />
+              Edit
+            </Button>
+          </div>
+        )}
+      </div>
+
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {/* Amount */}
@@ -241,59 +294,6 @@ export function TransactionDetail({
                 />
               </div>
             )}
-          </div>
-        )}
-      </div>
-
-      {/* Footer actions */}
-      <div className="p-4 border-t border-border">
-        {editing ? (
-          <div className="flex flex-col gap-2">
-            {saveError && (
-              <p className="text-sm text-destructive">{saveError}</p>
-            )}
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                className="flex-1"
-                onClick={() => {
-                  setEditing(false);
-                  setSaveError(null);
-                  setMerchant(tx.merchant ?? '');
-                  setCategory(tx.category ?? '');
-                  setDescription(tx.description ?? '');
-                  setExchangeRate(tx.exchange_rate ?? 1.0);
-                }}
-                disabled={updateTx.isPending}
-              >
-                <X className="w-4 h-4 mr-1" />
-                Cancel
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={handleSave}
-                disabled={updateTx.isPending}
-              >
-                <Check className="w-4 h-4 mr-1" />
-                {updateTx.isPending ? 'Saving…' : 'Save'}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 text-destructive"
-              onClick={handleDelete}
-              disabled={deleteTx.isPending}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" className="flex-1" onClick={handleEdit}>
-              <Pencil className="w-4 h-4 mr-1" />
-              Edit
-            </Button>
           </div>
         )}
       </div>
