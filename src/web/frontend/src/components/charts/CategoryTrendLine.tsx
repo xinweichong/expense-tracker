@@ -18,11 +18,11 @@ export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
   }, [data]);
 
   if (!data || data.length === 0) {
-    return <div className="h-56 flex items-center justify-center text-muted text-sm">No trend data</div>;
+    return <div className="w-full h-full min-h-[160px] flex items-center justify-center text-muted text-sm">No trend data</div>;
   }
 
   return (
-    <div className="w-full h-56">
+    <div className="w-full h-full min-h-[160px]">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <XAxis

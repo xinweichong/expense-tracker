@@ -14,11 +14,11 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
   const gradientId = useId().replace(/:/g, '');
 
   if (!data || data.length === 0) {
-    return <div className="h-48 flex items-center justify-center text-muted text-sm">No trend data</div>;
+    return <div className="w-full h-full min-h-[160px] flex items-center justify-center text-muted text-sm">No trend data</div>;
   }
 
   return (
-    <div className="w-full h-48">
+    <div className="w-full h-full min-h-[160px]">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
