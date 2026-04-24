@@ -138,6 +138,23 @@ def init_db(db_path: str) -> sqlite3.Connection:
             note             TEXT,
             created_at       DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS trips (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            name             TEXT NOT NULL,
+            destination      TEXT,
+            start_date       DATE NOT NULL,
+            end_date         DATE,
+            primary_currency TEXT DEFAULT 'SGD',
+            status           TEXT NOT NULL DEFAULT 'inactive',
+            created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS trip_transactions (
+            trip_id        INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+            transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+            added_by       TEXT DEFAULT 'auto',
+            PRIMARY KEY (trip_id, transaction_id)
+        );
     """)
     # Migrate: add exchange_rate column if missing
     try:
@@ -193,6 +210,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
         ("velocity_alert_threshold", "110"),
         ("budgets_enabled", "false"),
         ("goals_enabled", "false"),
+        ("trips_enabled", "false"),
     ]
     for key, value in defaults:
         conn.execute(
