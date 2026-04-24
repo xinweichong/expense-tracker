@@ -489,8 +489,9 @@ class TelegramBotService:
                 BotCommand("dashboard",        "Open the web dashboard"),
                 BotCommand("menu",             "Quick action buttons"),
                 BotCommand("help",             "Show all commands"),
-                BotCommand("delete",           "Delete a transaction"),
-                BotCommand("edit",             "Edit a transaction field"),
+        BotCommand("delete",           "Delete a transaction"),
+        BotCommand("edit",             "Edit a transaction field"),
+        BotCommand("trip",             "Current trip summary (when trips active)"),
             ])
             await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
@@ -537,6 +538,7 @@ class TelegramBotService:
         self.app.add_handler(edit_conv)
         self.app.add_handler(CommandHandler("delete", self._delete_command))
         self.app.add_handler(CallbackQueryHandler(self._delete_callback, pattern=r"^(confirm_delete_\d+|cancel_delete)$"))
+        self.app.add_handler(CommandHandler("trip", self._trip))
 
         # Catch-all must be last
         self.app.add_handler(MessageHandler(filters.COMMAND, self._unknown))
@@ -958,6 +960,47 @@ class TelegramBotService:
 
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
+    async def _trip(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if self.storage.get_setting("trips_enabled", "false") != "true":
+            await update.message.reply_text("Trips are not enabled. Enable in the dashboard Settings.")
+            return
+
+        active = self.storage.get_active_trip()
+        if not active:
+            await update.message.reply_text("No active trip. Activate one from the dashboard.")
+            return
+
+        summary = self.storage.get_trip_summary(active["id"])
+        if not summary:
+            await update.message.reply_text("Could not load trip summary.")
+            return
+
+        from datetime import datetime as _dt
+        start_dt = _dt.strptime(active["start_date"], "%Y-%m-%d")
+        now = self._local_now()
+        days_elapsed = (now.date() - start_dt.date()).days + 1
+
+        # Today's spend
+        today_str = now.strftime("%Y-%m-%d")
+        today_entry = next(
+            (d for d in summary["by_day"] if d["date"] == today_str), None
+        )
+        today_amount = today_entry["amount_sgd"] if today_entry else 0.0
+
+        dest = f" · {self._escape_md(active['destination'])}" if active.get("destination") else ""
+        lines = [
+            f"✈️ *{self._escape_md(active['name'])}*{dest} \\(Day {days_elapsed}\\)",
+            f"Total: S${summary['total_sgd']:.2f} across {summary['transaction_count']} transactions",
+            f"Daily avg: S${summary['daily_average_sgd']:.2f}",
+            f"Today: S${today_amount:.2f}",
+        ]
+        if summary["by_category"]:
+            lines.append("\nTop categories:")
+            for cat in summary["by_category"][:3]:
+                lines.append(f"  {cat['category']}: S${cat['amount_sgd']:.2f}")
+
+        await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
+
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines = [
             "*Expense Tracker Commands*\n",
@@ -1073,6 +1116,16 @@ class TelegramBotService:
             await self.app.bot.send_message(chat_id=self.chat_id, text="\n".join(lines), parse_mode="Markdown")
         elif category and match_source != "default":
             text = self._format_tx_block(tx, icon_map)
+            # Append trip context if trips are active
+            if self.storage.get_setting("trips_enabled", "false") == "true":
+                active_trip = self.storage.get_active_trip()
+                if active_trip:
+                    summary = self.storage.get_trip_summary(active_trip["id"])
+                    if summary:
+                        from datetime import datetime as _dt
+                        start_dt = _dt.strptime(active_trip["start_date"], "%Y-%m-%d")
+                        day_num = (self._local_now().date() - start_dt.date()).days + 1
+                        text += f"\n\n✈️ {active_trip['name']} · Trip total: S${summary['total_sgd']:.2f} (Day {day_num})"
             await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
         else:
             categories = self.storage.get_categories()
