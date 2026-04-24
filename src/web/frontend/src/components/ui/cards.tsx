@@ -8,16 +8,17 @@ interface PageCardProps {
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  contentClassName?: string;
 }
 
-export function PageCard({ title, action, children, className }: PageCardProps) {
+export function PageCard({ title, action, children, className, contentClassName }: PageCardProps) {
   return (
     <Card className={cn(className)}>
       <div className="flex flex-row items-center justify-between p-4 gap-2">
         <span className="min-w-0 truncate text-base font-semibold text-foreground">{title}</span>
         {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>
-      <CardContent>{children}</CardContent>
+      <CardContent className={cn('p-4 pt-0', contentClassName)}>{children}</CardContent>
     </Card>
   );
 }
@@ -58,13 +59,18 @@ interface StatCardProps {
 }
 
 export function StatCard({ label, value, variant = 'neutral' }: StatCardProps) {
+  const fontSizeClass =
+    value.length >= 10 ? 'text-lg' :
+    value.length >= 8  ? 'text-xl' :
+    'text-2xl';
+
   return (
     <Card>
       <CardHeader className="pb-1">
         <CardTitle className="text-sm font-medium text-muted">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className={cn('text-xl font-bold truncate', VARIANT_CLASS[variant])}>{value}</p>
+        <p className={cn(fontSizeClass, 'font-bold truncate', VARIANT_CLASS[variant])}>{value}</p>
       </CardContent>
     </Card>
   );
