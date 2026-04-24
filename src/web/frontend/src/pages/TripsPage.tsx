@@ -144,48 +144,48 @@ function TripRow({ trip }: { trip: Trip }) {
 
       {/* Expanded section */}
       {expanded && (
-        <div className="mt-3 ml-9 space-y-3">
-          {/* Stats */}
-          {summary && (
-            <p className="text-xs text-muted">
-              S${summary.total_sgd.toFixed(2)} · {summary.transaction_count} transactions ·
-              S${summary.daily_average_sgd.toFixed(2)}/day
-            </p>
-          )}
-
-          {/* Transaction list header */}
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-foreground">Transactions</p>
-            {totalTxPages > 1 && (
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setTxPage((p) => Math.max(1, p - 1))}
-                  disabled={txPage === 1}
-                >
-                  <ChevronLeft className="h-3 w-3" />
-                </Button>
-                <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))}
-                  disabled={txPage === totalTxPages}
-                >
-                  <ChevronRight className="h-3 w-3" />
-                </Button>
-              </div>
+        <>
+          {/* Stats + transaction list header — indented under chevron */}
+          <div className="mt-3 ml-9 space-y-3">
+            {summary && (
+              <p className="text-xs text-muted">
+                S${summary.total_sgd.toFixed(2)} · {summary.transaction_count} transactions ·
+                S${summary.daily_average_sgd.toFixed(2)}/day
+              </p>
             )}
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-foreground">Transactions</p>
+              {totalTxPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setTxPage((p) => Math.max(1, p - 1))}
+                    disabled={txPage === 1}
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                  </Button>
+                  <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))}
+                    disabled={txPage === totalTxPages}
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Transaction rows */}
+          {/* Transaction rows — full card width */}
           {txs.length === 0 ? (
-            <p className="text-xs text-muted">No transactions yet.</p>
+            <p className="ml-9 mt-1 text-xs text-muted">No transactions yet.</p>
           ) : (
-            <div className="-mx-4 border-t border-border">
+            <div className="-mx-4 mt-2 border-t border-border">
               {pageTxs.map((tx) => (
                 <TransactionRow
                   key={tx.id}
@@ -202,7 +202,7 @@ function TripRow({ trip }: { trip: Trip }) {
               ))}
             </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );
