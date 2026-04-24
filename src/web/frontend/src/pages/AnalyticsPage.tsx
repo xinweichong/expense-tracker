@@ -169,61 +169,66 @@ export function AnalyticsPage() {
   );
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-5xl mx-auto space-y-4 md:space-y-6">
-      <h1 className="text-xl font-bold">Analytics</h1>
+    <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-analytics">
 
-      {/* Health Score — always first */}
-      <HealthScoreBreakdown />
-
-      {/* Alerts — bespoke, intentionally not abstracted */}
-      {hasAlerts && (
-        <Card className="p-4 border-warning/30">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="text-xs text-muted mb-2">
-                Unusual = transaction is over 2× the category average (last 30 days, min 3 transactions).
-                New merchant = first appearance this month.
-              </p>
-              {alerts.anomalies?.map((a: any) => (
-                <p key={a.id} className="text-sm">
-                  Unusual: <span className="font-medium">{a.merchant}</span>{' '}
-                  {formatCurrency(a.amount)} in {a.category}
-                </p>
-              ))}
-              {alerts.new_merchants?.slice(0, 3).map((m: any) => (
-                <p key={m.merchant} className="text-sm">
-                  New merchant: <span className="font-medium">{m.merchant}</span>
-                </p>
-              ))}
-            </div>
-          </div>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Period Comparison */}
-        <ChartCard title="Period Comparison" action={comparisonBadge}>
-          <div className="p-4">
-            {comparison?.categories && (
-              <ComparisonBarChart data={comparison.categories} />
-            )}
-          </div>
-        </ChartCard>
-
-        {/* Spending Velocity */}
-        <PageCard title="Spending Velocity">
-          {velocity && <VelocityRing data={velocity} />}
-        </PageCard>
+      {/* ── Header area ── */}
+      <div className="area-header">
+        <h1 className="text-xl font-bold">Analytics</h1>
       </div>
 
-      {/* Top Merchants */}
-      <PageCard title="Top Merchants This Month">
-        <MerchantTable data={merchants?.top ?? []} />
-      </PageCard>
+      {/* ── Left panel: health score + alerts ── */}
+      <div className="area-left grid-scroll-panel space-y-4">
+        <HealthScoreBreakdown />
 
-      {/* Income vs Expenses */}
-      <IncomeExpenseBar />
+        {hasAlerts && (
+          <Card className="p-4 border-warning/30">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-xs text-muted mb-2">
+                  Unusual = transaction is over 2× the category average (last 30 days, min 3 transactions).
+                  New merchant = first appearance this month.
+                </p>
+                {alerts.anomalies?.map((a: any) => (
+                  <p key={a.id} className="text-sm">
+                    Unusual: <span className="font-medium">{a.merchant}</span>{' '}
+                    {formatCurrency(a.amount)} in {a.category}
+                  </p>
+                ))}
+                {alerts.new_merchants?.slice(0, 3).map((m: any) => (
+                  <p key={m.merchant} className="text-sm">
+                    New merchant: <span className="font-medium">{m.merchant}</span>
+                  </p>
+                ))}
+              </div>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* ── Right panel: charts + merchants + income bar ── */}
+      <div className="area-right grid-scroll-panel space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ChartCard title="Period Comparison" action={comparisonBadge}>
+            <div className="p-4">
+              {comparison?.categories && (
+                <ComparisonBarChart data={comparison.categories} />
+              )}
+            </div>
+          </ChartCard>
+
+          <PageCard title="Spending Velocity">
+            {velocity && <VelocityRing data={velocity} />}
+          </PageCard>
+        </div>
+
+        <PageCard title="Top Merchants This Month">
+          <MerchantTable data={merchants?.top ?? []} />
+        </PageCard>
+
+        <IncomeExpenseBar />
+      </div>
+
     </div>
   );
 }
