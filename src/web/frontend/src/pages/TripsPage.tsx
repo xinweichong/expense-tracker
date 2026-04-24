@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Trip } from '../api/client';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { TransactionRow } from '../components/transactions/TransactionRow';
+import { api, type Trip } from '@/api/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { TransactionRow } from '@/components/transactions/TransactionRow';
 
 // ── Active Trip Banner ───────────────────────────────────────────────────────
 
@@ -23,7 +23,7 @@ function ActiveTripBanner({ trip }: { trip: Trip }) {
     mutationFn: () => api.deactivateTrip(trip.id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trips'] });
-      qc.invalidateQueries({ queryKey: ['trips-settings'] });
+      qc.invalidateQueries({ queryKey: ['trips-active'] });
     },
   });
 
@@ -41,13 +41,13 @@ function ActiveTripBanner({ trip }: { trip: Trip }) {
   return (
     <div className="space-y-4">
       {/* Active trip header */}
-      <Card className="border-blue-500/40 bg-blue-500/5">
+      <Card className="border-accent/40 bg-accent/5">
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-base font-semibold text-foreground">✈️ {trip.name}</span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">Active</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent font-medium">Active</span>
               </div>
               {trip.destination && (
                 <p className="text-xs text-muted mt-0.5">{trip.destination}</p>
@@ -101,7 +101,7 @@ function ActiveTripBanner({ trip }: { trip: Trip }) {
                 </div>
                 <button
                   onClick={() => delistMutation.mutate(tx.id)}
-                  className="shrink-0 px-3 py-2 text-xs text-red-400 hover:text-red-300 transition-colors"
+                  className="shrink-0 px-3 py-2 text-xs text-destructive hover:opacity-75 transition-colors"
                   title="Remove from trip"
                 >
                   ×
@@ -156,7 +156,7 @@ function TripCard({ trip }: { trip: Trip }) {
               }
             }}
             className={`relative w-10 h-5 rounded-full transition-colors ${
-              trip.status === 'active' ? 'bg-blue-500' : 'bg-foreground/20'
+              trip.status === 'active' ? 'bg-success' : 'bg-foreground/20'
             }`}
             title={trip.status === 'active' ? 'Active' : 'Activate'}
           >
@@ -170,7 +170,7 @@ function TripCard({ trip }: { trip: Trip }) {
             onClick={() => {
               if (confirm(`Delete trip "${trip.name}"?`)) deleteMutation.mutate();
             }}
-            className="text-xs text-red-400 hover:text-red-300 transition-colors px-1"
+            className="text-xs text-destructive hover:opacity-75 transition-colors px-1"
           >
             ✕
           </button>
@@ -246,7 +246,7 @@ export function TripsPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-4 space-y-4 pb-24">
+    <div className="max-w-2xl mx-auto p-4 space-y-4 pb-20 md:pb-0">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-foreground">Trips</h1>
         <button
@@ -268,13 +268,13 @@ export function TripsPage() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Trip name"
-                className="flex-1 min-w-40 text-sm px-2 py-1.5 bg-background border border-border rounded-md text-foreground placeholder:text-muted"
+                className="input-field flex-1 min-w-40"
               />
               <input
                 type="date"
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
-                className="text-sm px-2 py-1.5 bg-background border border-border rounded-md text-foreground"
+                className="input-field"
               />
             </div>
             <div className="flex flex-wrap gap-2">
@@ -283,7 +283,7 @@ export function TripsPage() {
                 value={newDest}
                 onChange={(e) => setNewDest(e.target.value)}
                 placeholder="Destination (optional)"
-                className="flex-1 min-w-32 text-sm px-2 py-1.5 bg-background border border-border rounded-md text-foreground placeholder:text-muted"
+                className="input-field flex-1 min-w-32"
               />
               <input
                 type="text"
@@ -291,7 +291,7 @@ export function TripsPage() {
                 onChange={(e) => setNewCurrency(e.target.value.toUpperCase())}
                 placeholder="Currency"
                 maxLength={3}
-                className="w-24 text-sm px-2 py-1.5 bg-background border border-border rounded-md text-foreground placeholder:text-muted"
+                className="input-field w-24"
               />
             </div>
             <button
