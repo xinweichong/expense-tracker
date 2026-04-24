@@ -3,11 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { Link } from 'react-router-dom';
 import { api } from '@/api/client';
+import type { Transaction } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { ChartCard } from '@/components/ui/cards';
 import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, COLOR_ACCENT } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
+import { formatCurrency } from '@/lib/utils';
 
 const TAG_COLORS: Record<string, string> = {
   online:       'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -42,6 +45,13 @@ export function MerchantProfile({
     queryKey: ['merchant-trend', merchant],
     queryFn: () => api.getMerchantTrend(merchant),
     enabled: !!merchant,
+  });
+
+  const { data: transactions } = useQuery({
+    queryKey: ['merchant-transactions', merchant],
+    queryFn: () => api.getTransactions({ merchant, limit: 100 }),
+    enabled: !!merchant,
+    staleTime: 60_000,
   });
 
   const setTagsMutation = useMutation({
@@ -183,6 +193,34 @@ export function MerchantProfile({
           <p className="text-xs text-success mt-1">Saved</p>
         )}
       </div>
+
+      {/* Transactions */}
+      {transactions && transactions.length > 0 && (
+        <div className="pt-4 border-t border-border">
+          <h3 className="text-sm font-semibold mb-2">Transactions</h3>
+          <div className="space-y-0.5">
+            {transactions.map((tx: Transaction) => (
+              <Link
+                key={tx.id}
+                to={`/transactions/${tx.id}`}
+                className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-foreground/5 transition-colors"
+              >
+                <span className="text-xs text-muted">
+                  {tx.transaction_date.slice(0, 10)}
+                </span>
+                <span
+                  className={`text-xs font-medium ${
+                    tx.type === 'income' ? 'text-success' : 'text-foreground'
+                  }`}
+                >
+                  {tx.type === 'income' ? '+' : '-'}
+                  {formatCurrency(tx.amount, tx.currency)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
