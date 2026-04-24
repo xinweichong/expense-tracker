@@ -37,8 +37,11 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
 
   if (!settings?.trips_enabled || !activeTrip) return null;
 
-  const start = new Date(activeTrip.start_date);
-  const daysElapsed = Math.max(1, Math.floor((Date.now() - start.getTime()) / 86400000) + 1);
+  const [sy, sm, sd] = activeTrip.start_date.split('-').map(Number);
+  const start = new Date(sy, sm - 1, sd); // local midnight, avoids UTC parse
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysElapsed = Math.max(1, Math.floor((today.getTime() - start.getTime()) / 86400000) + 1);
 
   return (
     <Card className="border-accent/40 bg-accent/5">
