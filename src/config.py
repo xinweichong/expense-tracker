@@ -47,7 +47,10 @@ def _config_from_env() -> dict[str, Any]:
 
     poll_interval = int(os.environ.get("GMAIL_POLL_INTERVAL", "120"))
 
-    webhook_base_url = os.environ.get("WEBHOOK_BASE_URL", "")
+    webhook_base_url = (
+        os.environ.get("WEBHOOK_BASE_URL")
+        or (f"https://{d}" if (d := os.environ.get("RAILWAY_PUBLIC_DOMAIN")) else "")
+    )
 
     config: dict[str, Any] = {
         "server": {
@@ -97,5 +100,8 @@ def load_config(config_path: str) -> dict[str, Any]:
         config.setdefault("server", {})["port"] = int(port_env)
     if tz_env := os.environ.get("TIMEZONE"):
         config["timezone"] = tz_env
+    if url := (os.environ.get("WEBHOOK_BASE_URL")
+               or (f"https://{d}" if (d := os.environ.get("RAILWAY_PUBLIC_DOMAIN")) else "")):
+        config.setdefault("server", {})["webhook_base_url"] = url
 
     return config
