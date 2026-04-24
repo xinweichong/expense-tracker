@@ -53,14 +53,18 @@ export function MerchantsPage() {
     staleTime: 30_000,
   });
 
-  const handleRowClick = (m: MerchantSummary) => {
-    setSelectedMerchant(m.merchant);
-    navigate(`/merchants/${encodeURIComponent(m.merchant)}`);
-  };
-
   const handleCloseProfile = () => {
     setSelectedMerchant(null);
     navigate('/merchants');
+  };
+
+  const handleRowClick = (m: MerchantSummary) => {
+    if (selectedMerchant === m.merchant) {
+      handleCloseProfile();
+    } else {
+      setSelectedMerchant(m.merchant);
+      navigate(`/merchants/${encodeURIComponent(m.merchant)}`);
+    }
   };
 
   return (
