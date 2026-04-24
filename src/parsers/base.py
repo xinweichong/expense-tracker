@@ -13,6 +13,7 @@ class ParseResult:
     transaction_date: Optional[str] = None
     raw_data: Optional[str] = None
     currency: str = "SGD"
+    tx_type: str = "expense"
 
 
 class BankParser(ABC):

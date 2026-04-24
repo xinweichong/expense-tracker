@@ -10,7 +10,7 @@ class DbsPaylahParser(BankParser):
     AMOUNT_PATTERN = re.compile(r"Amount:\s+SGD([0-9,]+\.\d{2})")
     MERCHANT_PATTERN = re.compile(r"To:\s+(.+?)(?:\s{2,}|$)", re.MULTILINE)
     REF_PATTERN = re.compile(r"Transaction Ref:\s+(\S+)")
-    DATE_PATTERN = re.compile(r"Date & Time:\s+(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2}:\d{2}")
+    DATE_PATTERN = re.compile(r"Date & Time:\s+(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}):(\d{2})")
 
     def can_parse(self, sender: str, subject: str) -> bool:
         return self.sender_domain in sender.lower()
@@ -36,7 +36,9 @@ class DbsPaylahParser(BankParser):
             month_str = date_match.group(2)
             month = datetime.strptime(month_str, "%b").month
             year = datetime.now().year
-            transaction_date = f"{year}-{month:02d}-{day:02d}T00:00:00"
+            hour = int(date_match.group(3))
+            minute = int(date_match.group(4))
+            transaction_date = f"{year}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:00"
 
         return ParseResult(
             source="dbs_paylah",

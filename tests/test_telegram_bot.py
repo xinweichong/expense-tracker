@@ -17,7 +17,7 @@ class TestParseAddCommand:
         assert result["amount"] == 12.50
         assert result["merchant"] == "Toast Box"
         assert result["category"] == "food"
-        assert result["date"] == "2026-04-16"
+        assert result["date"] == "2026-04-16T00:00:00"
 
     def test_parse_add_minimal(self, bot_service):
         result = bot_service.parse_add_command("5.00 Coffee Shop")
@@ -586,3 +586,26 @@ class TestEditValueEnteredDateValidation:
         tx = bot_service.storage.get_transaction(tx_id)
         assert "2026-05-15" in tx["transaction_date"]
 
+
+
+class TestParseAddCommandDatetime:
+    def setup_method(self):
+        from src.telegram_bot import TelegramBotService
+        self.bot = TelegramBotService.__new__(TelegramBotService)
+
+    def test_bare_date_stored_as_midnight(self):
+        result = self.bot.parse_add_command("12.50 Lunch food 2025-04-23")
+        assert result["date"] == "2025-04-23T00:00:00"
+        assert result["merchant"] == "Lunch"
+        assert result["category"] == "food"
+
+    def test_datetime_stored_with_time(self):
+        result = self.bot.parse_add_command("12.50 Lunch food 2025-04-23 14:30")
+        assert result["date"] == "2025-04-23T14:30:00"
+        assert result["merchant"] == "Lunch"
+        assert result["category"] == "food"
+
+    def test_no_date_returns_none(self):
+        result = self.bot.parse_add_command("12.50 Lunch")
+        assert result["date"] is None
+        assert result["merchant"] == "Lunch"

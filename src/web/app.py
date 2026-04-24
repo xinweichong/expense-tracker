@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -26,6 +27,15 @@ from src.analytics import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _normalise_transaction_date(s: str) -> str:
+    """Normalise date strings to full ISO datetime."""
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', s):
+        return s + "T00:00:00"
+    if re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$', s):
+        return s + ":00"
+    return s
 
 SUMMARY_CACHE_DIR = os.environ.get(
     "SUMMARY_CACHE_DIR",
@@ -161,6 +171,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         currency = body.get("currency", "SGD")
         exchange_rate = body.get("exchange_rate", 1.0)
         transaction_date = body.get("transaction_date") or local_now().strftime("%Y-%m-%d %H:%M:%S")
+        transaction_date = _normalise_transaction_date(transaction_date)
 
         try:
             tx_id = storage.insert_transaction(
@@ -188,6 +199,8 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
         body = await request.json()
         allowed = {"merchant", "amount", "currency", "exchange_rate", "category", "description", "transaction_date", "type"}
         fields = {k: v for k, v in body.items() if k in allowed}
+        if "transaction_date" in fields:
+            fields["transaction_date"] = _normalise_transaction_date(fields["transaction_date"])
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
         storage.update_transaction(tx_id, **fields)

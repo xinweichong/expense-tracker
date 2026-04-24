@@ -32,10 +32,23 @@ SOURCE_LABELS: dict[str, str] = {
     "dbs_paylah":   "DBS PayLah!",
     "uob_paynow":   "UOB PayNow",
     "uob_card":     "UOB Card",
+    "uob_transfer": "UOB Transfer",
     "apple_wallet": "Apple Wallet",
     "manual":       "Manual",
     "cash":         "Cash",
 }
+
+
+def _fmt_tx_date(transaction_date) -> str:
+    """Return YYYY-MM-DD for midnight/bare dates, YYYY-MM-DD HH:MM for real times."""
+    s = str(transaction_date or "")
+    if not s:
+        return "—"
+    date_part = s[:10]
+    time_part = s[11:16] if len(s) > 10 else ""
+    if time_part and time_part != "00:00":
+        return f"{date_part} {time_part}"
+    return date_part
 
 
 def get_category_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMarkup:
@@ -128,11 +141,20 @@ class TelegramBotService:
         date = None
         category = None
 
-        # Check if the last token is a valid date
-        if len(remaining) >= 2:
+        # Check last two tokens for "YYYY-MM-DD HH:MM" datetime
+        if len(remaining) >= 3:
+            try:
+                datetime.strptime(f"{remaining[-2]} {remaining[-1]}", "%Y-%m-%d %H:%M")
+                date = f"{remaining[-2]}T{remaining[-1]}:00"
+                remaining = remaining[:-2]
+            except ValueError:
+                pass
+
+        # Fall back: check last token for bare "YYYY-MM-DD" — store as midnight
+        if date is None and len(remaining) >= 2:
             try:
                 datetime.strptime(remaining[-1], "%Y-%m-%d")
-                date = remaining[-1]
+                date = f"{remaining[-1]}T00:00:00"
                 remaining = remaining[:-1]
             except ValueError:
                 pass
@@ -168,7 +190,7 @@ class TelegramBotService:
         amount    = float(tx.get("amount", 0))
         currency  = str(tx.get("currency", "SGD"))
         rate      = float(tx.get("exchange_rate") or 1.0)
-        tx_date   = str(tx.get("transaction_date", ""))[:10]
+        tx_date   = _fmt_tx_date(tx.get("transaction_date"))
         tx_id     = tx.get("id", "?")
         raw_source = str(tx.get("source", "unknown"))
         if raw_source == "apple_wallet" and str(tx.get("description", "")).startswith("Apple Wallet"):
@@ -258,7 +280,7 @@ class TelegramBotService:
             await update.message.reply_text("Transaction not found.")
             return
         amount_sgd = tx["amount"] * tx.get("exchange_rate", 1.0)
-        date_str = (tx.get("transaction_date") or "")[:10]
+        date_str = _fmt_tx_date(tx.get("transaction_date"))
         msg = (
             f"Delete this transaction?\n\n"
             f"*{tx.get('merchant', '—')}* — ${amount_sgd:.2f} SGD\n"
@@ -299,7 +321,7 @@ class TelegramBotService:
             return ConversationHandler.END
         context.user_data["edit_tx_id"] = tx_id
         amount_sgd = tx["amount"] * tx.get("exchange_rate", 1.0)
-        date_str = (tx.get("transaction_date") or "")[:10]
+        date_str = _fmt_tx_date(tx.get("transaction_date"))
         msg = (
             f"*Transaction #{tx_id}*\n"
             f"Merchant: {tx.get('merchant', '—')}\n"
@@ -725,11 +747,20 @@ class TelegramBotService:
         remaining = list(context.args[1:])
         tx_date = None
 
-        # Check if last token is a date
-        if remaining:
+        # Check last two tokens for "YYYY-MM-DD HH:MM"
+        if len(remaining) >= 2:
+            try:
+                datetime.strptime(f"{remaining[-2]} {remaining[-1]}", "%Y-%m-%d %H:%M")
+                tx_date = f"{remaining[-2]}T{remaining[-1]}:00"
+                remaining = remaining[:-2]
+            except ValueError:
+                pass
+
+        # Fall back: bare "YYYY-MM-DD" → midnight
+        if tx_date is None and remaining:
             try:
                 datetime.strptime(remaining[-1], "%Y-%m-%d")
-                tx_date = remaining[-1]
+                tx_date = f"{remaining[-1]}T00:00:00"
                 remaining = remaining[:-1]
             except ValueError:
                 pass
