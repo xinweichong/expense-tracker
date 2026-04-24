@@ -141,6 +141,29 @@ export interface HealthScoreComponent {
   description: string;
 }
 
+export interface Trip {
+  id: number;
+  name: string;
+  destination: string | null;
+  start_date: string;
+  end_date: string | null;
+  primary_currency: string;
+  status: 'active' | 'inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TripSummary {
+  trip: Trip;
+  total_sgd: number;
+  transaction_count: number;
+  days: number;
+  daily_average_sgd: number;
+  currencies_used: string[];
+  by_category: { category: string; amount_sgd: number; count: number }[];
+  by_day: { date: string; amount_sgd: number }[];
+}
+
 export interface HealthScore {
   score: number | null;
   grade: string | null;
@@ -341,6 +364,7 @@ export const api = {
       velocity_alert_threshold: number;
       budgets_enabled: boolean;
       goals_enabled: boolean;
+      trips_enabled: boolean;
     }>('/api/settings'),
 
   updateSettings: (data: {
@@ -348,12 +372,14 @@ export const api = {
     velocity_alert_threshold?: number;
     budgets_enabled?: boolean;
     goals_enabled?: boolean;
+    trips_enabled?: boolean;
   }) =>
     request<{
       anomaly_multiplier: number;
       velocity_alert_threshold: number;
       budgets_enabled: boolean;
       goals_enabled: boolean;
+      trips_enabled: boolean;
     }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -399,4 +425,49 @@ export const api = {
 
   getSavingsOverview: () =>
     request<SavingsOverview>('/api/savings/overview'),
+
+  // Trips
+  getTrips: () => request<Trip[]>('/api/trips'),
+
+  createTrip: (data: { name: string; start_date: string; destination?: string; primary_currency?: string }) =>
+    request<Trip>('/api/trips', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateTrip: (id: number, data: Partial<Pick<Trip, 'name' | 'destination' | 'start_date' | 'end_date' | 'primary_currency'>>) =>
+    request<Trip>(`/api/trips/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  activateTrip: (id: number) =>
+    request<Trip>(`/api/trips/${id}/activate`, { method: 'POST' }),
+
+  deactivateTrip: (id: number) =>
+    request<Trip>(`/api/trips/${id}/deactivate`, { method: 'POST' }),
+
+  deleteTrip: (id: number) =>
+    request<{ status: string }>(`/api/trips/${id}`, { method: 'DELETE' }),
+
+  getActiveTrip: () => request<Trip>('/api/trips/active'),
+
+  getTripSummary: (id: number) => request<TripSummary>(`/api/trips/${id}/summary`),
+
+  getTripTransactions: (id: number, limit?: number, offset?: number) =>
+    request<Transaction[]>(`/api/trips/${id}/transactions?limit=${limit ?? 50}&offset=${offset ?? 0}`),
+
+  enlistTransaction: (tripId: number, txId: number) =>
+    request<{ status: string }>(`/api/trips/${tripId}/transactions`, {
+      method: 'POST',
+      body: JSON.stringify({ transaction_id: txId }),
+    }),
+
+  delistTransaction: (tripId: number, txId: number) =>
+    request<{ status: string }>(`/api/trips/${tripId}/transactions/${txId}`, {
+      method: 'DELETE',
+    }),
+
+  checkTripMembership: (tripId: number, txId: number) =>
+    request<{ in_trip: boolean }>(`/api/trips/${tripId}/transactions/${txId}/membership`),
 };

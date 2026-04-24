@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock } from 'lucide-react';
+import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock, Plane } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 
@@ -10,6 +10,7 @@ export function Sidebar() {
     staleTime: 30_000,
   });
   const financeEnabled = settings?.budgets_enabled || settings?.goals_enabled;
+  const tripsEnabled = settings?.trips_enabled;
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -57,6 +58,24 @@ export function Sidebar() {
           <span className="hidden lg:flex items-center gap-1">
             Finance
             {!financeEnabled && <Lock className="w-3 h-3 ml-1 inline" />}
+          </span>
+        </NavLink>
+
+        {/* Trips — always visible; dimmed when toggle is off */}
+        <NavLink
+          to="/trips"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive
+                ? 'bg-foreground/10 text-foreground font-medium'
+                : 'text-muted hover:text-foreground hover:bg-foreground/5'
+            } ${!tripsEnabled ? 'opacity-40' : ''}`
+          }
+        >
+          <Plane className="w-5 h-5 shrink-0" />
+          <span className="hidden lg:flex items-center gap-1">
+            Trips
+            {!tripsEnabled && <Lock className="w-3 h-3 ml-1 inline" />}
           </span>
         </NavLink>
 
