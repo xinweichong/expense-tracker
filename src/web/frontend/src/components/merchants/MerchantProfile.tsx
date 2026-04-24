@@ -109,9 +109,9 @@ export function MerchantProfile({
   }));
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-4">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+    <div className="flex flex-col h-full">
+      {/* Header — pinned above scroll area */}
+      <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
         <div>
           <h2 className="text-lg font-bold text-foreground">{profile.merchant}</h2>
           {profile.category && (
@@ -123,6 +123,8 @@ export function MerchantProfile({
         </button>
       </div>
 
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-2">
         {[
@@ -221,6 +223,7 @@ export function MerchantProfile({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
