@@ -88,6 +88,11 @@ def create_webhook_app(
             category=category,
         )
 
+        try:
+            storage.auto_assign_to_active_trip(tx_id)
+        except Exception as e:
+            logger.warning("auto_assign_to_active_trip failed (best-effort): %s", e)
+
         if on_transaction:
             on_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
 

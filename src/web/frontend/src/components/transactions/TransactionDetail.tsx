@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { type Transaction, api } from '@/api/client';
 import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
@@ -231,6 +231,7 @@ export function TransactionDetail({
                 </Button>
               </div>
             )}
+            <TripMembershipRow txId={tx.id} />
             {/* Meta */}
             <div className="pt-2 border-t border-border space-y-2">
               <DetailRow label="Source ID" value={tx.source_id} muted />
@@ -315,6 +316,76 @@ function DetailRow({
       <span className={`text-xs text-right break-all ${muted ? 'text-muted' : 'text-foreground'}`}>
         {value}
       </span>
+    </div>
+  );
+}
+
+function TripMembershipRow({ txId }: { txId: number }) {
+  const qc = useQueryClient();
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.getSettings(),
+    staleTime: 30_000,
+  });
+
+  const { data: activeTrip } = useQuery({
+    queryKey: ['trips-active'],
+    queryFn: () => api.getActiveTrip().catch(() => null),
+    enabled: settings?.trips_enabled === true,
+    staleTime: 30_000,
+  });
+
+  const { data: membership } = useQuery({
+    queryKey: ['trip-membership', activeTrip?.id, txId],
+    queryFn: () => api.checkTripMembership(activeTrip!.id, txId),
+    enabled: activeTrip != null,
+    staleTime: 30_000,
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['trip-membership', activeTrip?.id, txId] });
+    qc.invalidateQueries({ queryKey: ['trip-transactions', activeTrip?.id] });
+    qc.invalidateQueries({ queryKey: ['trip-summary', activeTrip?.id] });
+  };
+
+  const enlist = useMutation({
+    mutationFn: () => api.enlistTransaction(activeTrip!.id, txId),
+    onSuccess: invalidate,
+  });
+
+  const delist = useMutation({
+    mutationFn: () => api.delistTransaction(activeTrip!.id, txId),
+    onSuccess: invalidate,
+  });
+
+  if (!settings?.trips_enabled || !activeTrip) return null;
+
+  const inTrip = membership?.in_trip ?? false;
+
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-muted shrink-0">Trip</span>
+      {inTrip ? (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-accent">✓ {activeTrip.name}</span>
+          <button
+            onClick={() => delist.mutate()}
+            disabled={delist.isPending}
+            className="text-xs text-muted hover:text-destructive transition-colors"
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => enlist.mutate()}
+          disabled={enlist.isPending}
+          className="text-xs text-accent hover:opacity-80 transition-opacity"
+        >
+          {enlist.isPending ? 'Adding…' : `+ Add to ${activeTrip.name}`}
+        </button>
+      )}
     </div>
   );
 }

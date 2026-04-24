@@ -9,6 +9,7 @@ import { AnalyticsPage } from '@/pages/AnalyticsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { MerchantsPage } from '@/pages/MerchantsPage';
 import { FinancePage } from '@/pages/FinancePage';
+import { TripsPage } from '@/pages/TripsPage';
 import { api } from '@/api/client';
 import { setCategoryColors } from '@/lib/utils';
 
@@ -56,6 +57,7 @@ function AppContent() {
           <Route path="merchants" element={<MerchantsPage />} />
           <Route path="merchants/:merchantName" element={<MerchantsPage />} />
           <Route path="finance" element={<FinancePage />} />
+          <Route path="trips" element={<TripsPage />} />
         </Route>
       </Routes>
     </>

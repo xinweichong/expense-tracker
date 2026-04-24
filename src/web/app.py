@@ -465,6 +465,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
             "budgets_enabled": storage.get_setting("budgets_enabled", "false") == "true",
             "goals_enabled": storage.get_setting("goals_enabled", "false") == "true",
+            "trips_enabled": storage.get_setting("trips_enabled", "false") == "true",
         }
 
     @app.put("/api/settings")
@@ -514,6 +515,13 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             else:
                 storage.set_setting("goals_enabled", "true" if val else "false")
 
+        if "trips_enabled" in body:
+            val = body["trips_enabled"]
+            if not isinstance(val, bool):
+                errors["trips_enabled"] = "must be a boolean"
+            else:
+                storage.set_setting("trips_enabled", "true" if val else "false")
+
         if errors:
             raise HTTPException(status_code=422, detail=errors)
 
@@ -526,6 +534,7 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
             "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
             "budgets_enabled": storage.get_setting("budgets_enabled", "false") == "true",
             "goals_enabled": storage.get_setting("goals_enabled", "false") == "true",
+            "trips_enabled": storage.get_setting("trips_enabled", "false") == "true",
         }
 
     # ── Budgets ──────────────────────────────────────────────────────────
@@ -695,6 +704,112 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
     async def savings_overview(_auth=Depends(require_auth)):
         month = local_now().strftime("%Y-%m")
         return storage.get_savings_overview(month)
+
+    # ── Trips ───────────────────────────────────────────────────────────────
+
+    @app.get("/api/trips")
+    async def list_trips(_auth=Depends(require_auth)):
+        return storage.get_trips()
+
+    # IMPORTANT: /api/trips/active must be registered before /api/trips/{trip_id}
+    # routes. FastAPI resolves top-to-bottom; without this ordering, "active"
+    # would be treated as a trip_id and fail int conversion with a 422.
+    @app.get("/api/trips/active")
+    async def get_active_trip(_auth=Depends(require_auth)):
+        active = storage.get_active_trip()
+        if not active:
+            raise HTTPException(status_code=404, detail="No active trip")
+        return active
+
+    @app.post("/api/trips")
+    async def create_trip(request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        name = body.get("name", "").strip()
+        start_date = body.get("start_date", "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name is required")
+        if not start_date:
+            raise HTTPException(status_code=400, detail="start_date is required")
+        trip_id = storage.create_trip(
+            name=name,
+            start_date=start_date,
+            destination=body.get("destination"),
+            primary_currency=body.get("primary_currency", "SGD"),
+        )
+        return storage.get_trip(trip_id)
+
+    @app.put("/api/trips/{trip_id}")
+    async def update_trip(trip_id: int, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        try:
+            storage.update_trip(trip_id, **{k: v for k, v in body.items()})
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return storage.get_trip(trip_id)
+
+    @app.post("/api/trips/{trip_id}/activate")
+    async def activate_trip(trip_id: int, _auth=Depends(require_auth)):
+        try:
+            storage.activate_trip(trip_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return storage.get_trip(trip_id)
+
+    @app.post("/api/trips/{trip_id}/deactivate")
+    async def deactivate_trip(trip_id: int, _auth=Depends(require_auth)):
+        try:
+            storage.deactivate_trip(trip_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return storage.get_trip(trip_id)
+
+    @app.delete("/api/trips/{trip_id}")
+    async def delete_trip(trip_id: int, _auth=Depends(require_auth)):
+        try:
+            storage.delete_trip(trip_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok"}
+
+    @app.get("/api/trips/{trip_id}/summary")
+    async def trip_summary(trip_id: int, _auth=Depends(require_auth)):
+        summary = storage.get_trip_summary(trip_id)
+        if summary is None:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        return summary
+
+    @app.get("/api/trips/{trip_id}/transactions")
+    async def trip_transactions(
+        trip_id: int,
+        limit: int = 50,
+        offset: int = 0,
+        _auth=Depends(require_auth),
+    ):
+        if not storage.get_trip(trip_id):
+            raise HTTPException(status_code=404, detail="Trip not found")
+        return storage.get_trip_transactions(trip_id, limit=limit, offset=offset)
+
+    @app.post("/api/trips/{trip_id}/transactions")
+    async def enlist_transaction(trip_id: int, request: Request, _auth=Depends(require_auth)):
+        body = await request.json()
+        tx_id = body.get("transaction_id")
+        if tx_id is None:
+            raise HTTPException(status_code=400, detail="transaction_id is required")
+        if not storage.get_trip(trip_id):
+            raise HTTPException(status_code=404, detail="Trip not found")
+        storage.enlist_transaction(trip_id, int(tx_id), added_by="manual")
+        return {"status": "ok"}
+
+    @app.delete("/api/trips/{trip_id}/transactions/{tx_id}")
+    async def delist_transaction(trip_id: int, tx_id: int, _auth=Depends(require_auth)):
+        if not storage.get_trip(trip_id):
+            raise HTTPException(status_code=404, detail="Trip not found")
+        storage.delist_transaction(trip_id, tx_id)
+        return {"status": "ok"}
+
+    @app.get("/api/trips/{trip_id}/transactions/{tx_id}/membership")
+    async def check_trip_membership(trip_id: int, tx_id: int, _auth=Depends(require_auth)):
+        return {"in_trip": storage.is_in_trip(trip_id, tx_id)}
 
     # Serve React SPA
 

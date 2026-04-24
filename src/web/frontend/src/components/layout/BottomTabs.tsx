@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, List, BarChart3, Settings,
-  MoreHorizontal, Store, Wallet, X, Lock,
+  MoreHorizontal, Store, Wallet, X, Lock, Plane,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
@@ -118,6 +118,26 @@ export function BottomTabs() {
                 <Lock className="w-3 h-3 ml-auto shrink-0" />
               </button>
               )}
+            {/* Trips — always visible, locked when disabled (same pattern as Finance) */}
+            {settings?.trips_enabled ? (
+              <button
+                onClick={() => handleMoreItemClick('/trips')}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-foreground/5 transition-colors"
+              >
+                <Plane className="w-5 h-5 text-muted" />
+                Trips
+              </button>
+            ) : (
+              <button
+                onClick={() => handleMoreItemClick('/settings#feature-toggles')}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-muted/40 hover:text-muted/60 hover:bg-foreground/5 transition-colors"
+                title="Enable Trips in Settings"
+              >
+                <Plane className="w-5 h-5" />
+                Trips
+                <Lock className="w-3 h-3 ml-auto shrink-0" />
+              </button>
+            )}
               {/* Safe area spacer */}
               <div className="h-[env(safe-area-inset-bottom)]" />
             </div>
