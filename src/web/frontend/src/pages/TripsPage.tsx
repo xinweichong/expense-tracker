@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { api, type Trip } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { PageCard } from '@/components/ui/cards';
@@ -187,26 +187,18 @@ function TripRow({ trip }: { trip: Trip }) {
           ) : (
             <div className="-mx-4 border-t border-border">
               {pageTxs.map((tx) => (
-                <div key={tx.id} className="flex items-center border-b border-border last:border-b-0">
-                  <div className="flex-1 min-w-0">
-                    <TransactionRow tx={tx} readOnly />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive shrink-0 mr-2"
-                    onClick={() => {
-                      setDelistingId(tx.id);
-                      delistMutation.mutate(tx.id, {
-                        onSettled: () => setDelistingId(null),
-                      });
-                    }}
-                    disabled={delistingId === tx.id}
-                    title="Remove from trip"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+                <TransactionRow
+                  key={tx.id}
+                  tx={tx}
+                  readOnly
+                  onRemove={() => {
+                    setDelistingId(tx.id);
+                    delistMutation.mutate(tx.id, {
+                      onSettled: () => setDelistingId(null),
+                    });
+                  }}
+                  removeDisabled={delistingId === tx.id}
+                />
               ))}
             </div>
           )}
@@ -225,7 +217,6 @@ export function TripsPage() {
   const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [newEndDate, setNewEndDate] = useState('');
   const [newDest, setNewDest] = useState('');
-  const [newCurrency, setNewCurrency] = useState('SGD');
 
   const { data: trips = [], isLoading } = useQuery({
     queryKey: ['trips'],
@@ -245,7 +236,6 @@ export function TripsPage() {
         name: newName,
         start_date: newStartDate,
         destination: newDest || undefined,
-        primary_currency: newCurrency,
       });
       if (newEndDate) {
         // best-effort — trip is already created; end_date is optional metadata
@@ -308,12 +298,15 @@ export function TripsPage() {
                 placeholder="Trip name"
                 className="input-field flex-1 min-w-40"
               />
-              <input
-                type="date"
-                value={newStartDate}
-                onChange={(e) => setNewStartDate(e.target.value)}
-                className="input-field"
-              />
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Start date</span>
+                <input
+                  type="date"
+                  value={newStartDate}
+                  onChange={(e) => setNewStartDate(e.target.value)}
+                  className="input-field"
+                />
+              </label>
             </div>
             <div className="flex flex-wrap gap-2">
               <input
@@ -323,23 +316,17 @@ export function TripsPage() {
                 placeholder="Destination (optional)"
                 className="input-field flex-1 min-w-32"
               />
-              <input
-                type="date"
-                value={newEndDate}
-                onChange={(e) => setNewEndDate(e.target.value)}
-                placeholder="End date (optional)"
-                className="input-field"
-              />
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">End date (optional)</span>
+                <input
+                  type="date"
+                  value={newEndDate}
+                  onChange={(e) => setNewEndDate(e.target.value)}
+                  className="input-field"
+                />
+              </label>
             </div>
             <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={newCurrency}
-                onChange={(e) => setNewCurrency(e.target.value.toUpperCase())}
-                placeholder="Currency"
-                maxLength={3}
-                className="input-field w-24"
-              />
               <button
                 onClick={() => createMutation.mutate()}
                 disabled={!newName || !newStartDate || createMutation.isPending}

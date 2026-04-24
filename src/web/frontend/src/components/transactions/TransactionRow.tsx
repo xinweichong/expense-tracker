@@ -3,17 +3,23 @@ import { type Transaction } from '@/api/client';
 import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
 import { useCategories } from '@/hooks/useCategories';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-react';
 
 export function TransactionRow({
   tx,
   readOnly = false,
   onClick,
   selected = false,
+  onRemove,
+  removeDisabled = false,
 }: {
   tx: Transaction;
   readOnly?: boolean;
   onClick?: () => void;
   selected?: boolean;
+  onRemove?: () => void;
+  removeDisabled?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const { data: categories } = useCategories();
@@ -59,6 +65,17 @@ export function TransactionRow({
           {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, tx.currency)}
         </p>
       </div>
+      {onRemove && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 text-destructive"
+          onClick={e => { e.stopPropagation(); onRemove(); }}
+          disabled={removeDisabled}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      )}
     </div>
   );
 }
