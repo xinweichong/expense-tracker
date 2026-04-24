@@ -1155,6 +1155,9 @@ class Storage:
         self.conn.commit()
 
     def deactivate_trip(self, trip_id: int) -> None:
+        row = self.conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Trip {trip_id} not found")
         self.conn.execute(
             "UPDATE trips SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (trip_id,),
@@ -1239,10 +1242,9 @@ class Storage:
         total_sgd = sum(r["amt_sgd"] for r in rows)
         count = len(rows)
 
-        from datetime import datetime as _dt
-        start_dt = _dt.strptime(trip["start_date"], "%Y-%m-%d")
-        end_str = trip.get("end_date") or _dt.now().strftime("%Y-%m-%d")
-        end_dt = _dt.strptime(end_str, "%Y-%m-%d")
+        start_dt = datetime.strptime(trip["start_date"], "%Y-%m-%d")
+        end_str = trip.get("end_date") or datetime.now().strftime("%Y-%m-%d")
+        end_dt = datetime.strptime(end_str, "%Y-%m-%d")
         days = max(1, (end_dt - start_dt).days + 1)
 
         daily_avg = round(total_sgd / days, 2) if total_sgd > 0 else 0.0

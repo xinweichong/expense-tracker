@@ -124,6 +124,11 @@ class TestTripActivation:
         with pytest.raises(ValueError):
             storage.activate_trip(999)
 
+    def test_deactivate_nonexistent_raises(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        with pytest.raises(ValueError):
+            storage.deactivate_trip(999)
+
 
 class TestTripTransactions:
     def test_enlist_transaction(self, in_memory_db):
