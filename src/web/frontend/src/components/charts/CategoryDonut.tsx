@@ -19,7 +19,7 @@ export function CategoryDonut({ data }: { data: CategoryData[] }) {
   const total = data.reduce((sum, d) => sum + d.total, 0);
 
   return (
-    <div className="relative w-full aspect-square">
+    <div className="relative w-full aspect-square max-w-[220px] mx-auto">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie

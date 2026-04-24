@@ -155,7 +155,7 @@ export function OverviewPage() {
   const { start, end } = useMemo(() => getDateRange(date, period), [date, period]);
   const [trendMode, setTrendMode] = useState<'total' | 'category'>('total');
 
-  const TX_PAGE_SIZE = 20;
+  const TX_PAGE_SIZE = 15;
   const [txPage, setTxPage] = useState(1);
 
   const { data: summary } = useSummary(start, end);
@@ -206,11 +206,11 @@ export function OverviewPage() {
   );
 
   const trendToggle = (
-    <div className="flex rounded-md border border-border overflow-hidden flex-shrink-0">
+    <div className="flex rounded-md border border-border overflow-hidden">
       <button
         onClick={() => setTrendMode('total')}
         className={cn(
-          'px-2.5 py-1 text-xs transition-colors whitespace-nowrap flex-shrink-0',
+          'flex-1 px-2.5 py-1 text-xs transition-colors',
           trendMode === 'total'
             ? 'bg-primary text-primary-foreground'
             : 'text-muted hover:text-foreground',
@@ -221,7 +221,7 @@ export function OverviewPage() {
       <button
         onClick={() => setTrendMode('category')}
         className={cn(
-          'px-2.5 py-1 text-xs transition-colors border-l border-border whitespace-nowrap flex-shrink-0',
+          'flex-1 px-2.5 py-1 text-xs transition-colors border-l border-border',
           trendMode === 'category'
             ? 'bg-primary text-primary-foreground'
             : 'text-muted hover:text-foreground',
@@ -372,7 +372,7 @@ export function OverviewPage() {
             {categories.length > 0 ? (
               <>
                 <CategoryDonut data={categories} />
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                <div className="mt-4 space-y-1.5">
                   {categories.map((c: { category: string; total: number }) => (
                     <div key={c.category} className="flex items-center gap-2 text-sm min-w-0">
                       <span
