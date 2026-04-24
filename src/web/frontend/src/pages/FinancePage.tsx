@@ -730,54 +730,71 @@ export function FinancePage() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-2xl mx-auto">
-      <h1 className="text-xl font-bold text-foreground">Finance</h1>
+    <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-finance">
 
-      {/* Budgets section */}
-      {settings.budgets_enabled && (
-      <PageCard
-        title="Budgets"
-        action={
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="text-xs px-2.5 py-1 border border-border rounded-md text-muted hover:text-foreground transition-colors"
+      {/* ── Top area: title ── */}
+      <div className="area-top">
+        <h1 className="text-xl font-bold text-foreground">Finance</h1>
+      </div>
+
+      {/* ── Left panel: budgets ── */}
+      {settings.budgets_enabled ? (
+        <div
+          className="area-left grid-scroll-panel space-y-4"
+          style={!settings.goals_enabled ? { gridColumn: '1 / -1' } : undefined}
+        >
+          <PageCard
+            title="Budgets"
+            action={
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="text-xs px-2.5 py-1 border border-border rounded-md text-muted hover:text-foreground transition-colors"
+              >
+                {showAddForm ? 'Cancel' : '+ Add Budget'}
+              </button>
+            }
           >
-            {showAddForm ? 'Cancel' : '+ Add Budget'}
-          </button>
-        }
-      >
-        {isLoading ? (
-          <p className="text-muted text-sm py-4 text-center">Loading…</p>
-        ) : progress.length === 0 ? (
-          <p className="text-muted text-sm py-4 text-center">
-            No budgets yet. Add one to start tracking.
-          </p>
-        ) : (
-          progress.map((b) => (
-            <BudgetRow
-              key={b.id}
-              b={b}
-              onDelete={(id) => deleteMutation.mutate(id)}
-              onEdit={(id, amount) => editMutation.mutate({ id, amount })}
-            />
-          ))
-        )}
-        {showAddForm && (
-          <AddBudgetForm
-            categories={categories}
-            onAdd={() => setShowAddForm(false)}
-          />
-        )}
-      </PageCard>
+            {isLoading ? (
+              <p className="text-muted text-sm py-4 text-center">Loading…</p>
+            ) : progress.length === 0 ? (
+              <p className="text-muted text-sm py-4 text-center">
+                No budgets yet. Add one to start tracking.
+              </p>
+            ) : (
+              progress.map((b) => (
+                <BudgetRow
+                  key={b.id}
+                  b={b}
+                  onDelete={(id) => deleteMutation.mutate(id)}
+                  onEdit={(id, amount) => editMutation.mutate({ id, amount })}
+                />
+              ))
+            )}
+            {showAddForm && (
+              <AddBudgetForm
+                categories={categories}
+                onAdd={() => setShowAddForm(false)}
+              />
+            )}
+          </PageCard>
+        </div>
+      ) : (
+        <div className="area-left" />
       )}
 
-      {/* Goals section — only when goals_enabled */}
-      {settings.goals_enabled && (
-        <>
+      {/* ── Right panel: savings overview + goals ── */}
+      {settings.goals_enabled ? (
+        <div
+          className="area-right grid-scroll-panel space-y-4"
+          style={!settings.budgets_enabled ? { gridColumn: '1 / -1' } : undefined}
+        >
           <SavingsOverviewCard />
           <GoalsSection />
-        </>
+        </div>
+      ) : (
+        <div className="area-right" />
       )}
+
     </div>
   );
 }
