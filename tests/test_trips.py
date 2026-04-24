@@ -249,3 +249,169 @@ class TestTripSummary:
     def test_summary_unknown_trip_returns_none(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         assert storage.get_trip_summary(999) is None
+
+
+import sqlite3
+import bcrypt
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from src.web.app import create_dashboard_app
+
+
+@pytest.fixture
+def trip_app(in_memory_db):
+    storage = Storage(connection=in_memory_db)
+    pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
+    return create_dashboard_app(storage, pw_hash), storage
+
+
+@pytest_asyncio.fixture
+async def api(trip_app):
+    app, storage = trip_app
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        await ac.post("/api/login", json={"password": "test"})
+        yield ac, storage
+
+
+class TestTripAPI:
+    @pytest.mark.asyncio
+    async def test_list_trips_empty(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/trips")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    @pytest.mark.asyncio
+    async def test_create_trip(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/trips", json={"name": "Tokyo", "start_date": "2026-04-10"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "Tokyo"
+        assert data["status"] == "inactive"
+        assert "id" in data
+
+    @pytest.mark.asyncio
+    async def test_create_trip_requires_name_and_start_date(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/trips", json={"name": "X"})
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_trip(self, api):
+        ac, _ = api
+        create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
+        trip_id = create.json()["id"]
+        resp = await ac.put(f"/api/trips/{trip_id}", json={"name": "Y", "destination": "Japan"})
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Y"
+        assert resp.json()["destination"] == "Japan"
+
+    @pytest.mark.asyncio
+    async def test_activate_trip(self, api):
+        ac, _ = api
+        create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
+        trip_id = create.json()["id"]
+        resp = await ac.post(f"/api/trips/{trip_id}/activate")
+        assert resp.status_code == 200
+        active = (await ac.get("/api/trips/active")).json()
+        assert active["id"] == trip_id
+
+    @pytest.mark.asyncio
+    async def test_activate_deactivates_others(self, api):
+        ac, _ = api
+        id1 = (await ac.post("/api/trips", json={"name": "A", "start_date": "2026-04-01"})).json()["id"]
+        id2 = (await ac.post("/api/trips", json={"name": "B", "start_date": "2026-04-10"})).json()["id"]
+        await ac.post(f"/api/trips/{id1}/activate")
+        await ac.post(f"/api/trips/{id2}/activate")
+        trips = (await ac.get("/api/trips")).json()
+        active_trips = [t for t in trips if t["status"] == "active"]
+        assert len(active_trips) == 1
+        assert active_trips[0]["id"] == id2
+
+    @pytest.mark.asyncio
+    async def test_deactivate_trip(self, api):
+        ac, _ = api
+        create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
+        trip_id = create.json()["id"]
+        await ac.post(f"/api/trips/{trip_id}/activate")
+        resp = await ac.post(f"/api/trips/{trip_id}/deactivate")
+        assert resp.status_code == 200
+        assert (await ac.get("/api/trips/active")).status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_trip(self, api):
+        ac, _ = api
+        create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
+        trip_id = create.json()["id"]
+        resp = await ac.delete(f"/api/trips/{trip_id}")
+        assert resp.status_code == 200
+        assert (await ac.get("/api/trips")).json() == []
+
+    @pytest.mark.asyncio
+    async def test_get_trip_summary(self, api):
+        ac, _ = api
+        create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
+        trip_id = create.json()["id"]
+        resp = await ac.get(f"/api/trips/{trip_id}/summary")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_sgd"] == 0.0
+        assert "by_category" in data
+        assert "by_day" in data
+
+    @pytest.mark.asyncio
+    async def test_enlist_and_delist_transaction(self, api):
+        ac, storage = api
+        db = storage.conn
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type) "
+            "VALUES ('test', 'tx1', 50.0, 'SGD', 1.0, 'GrabFood', 'Dining', '2026-04-10', 'expense')"
+        )
+        db.commit()
+        tx_id = db.execute("SELECT id FROM transactions WHERE source_id='tx1'").fetchone()[0]
+        create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
+        trip_id = create.json()["id"]
+        enlist_resp = await ac.post(f"/api/trips/{trip_id}/transactions", json={"transaction_id": tx_id})
+        assert enlist_resp.status_code == 200
+        txs = (await ac.get(f"/api/trips/{trip_id}/transactions")).json()
+        assert len(txs) == 1
+        delist_resp = await ac.delete(f"/api/trips/{trip_id}/transactions/{tx_id}")
+        assert delist_resp.status_code == 200
+        assert (await ac.get(f"/api/trips/{trip_id}/transactions")).json() == []
+
+    @pytest.mark.asyncio
+    async def test_check_trip_membership(self, api):
+        ac, storage = api
+        db = storage.conn
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type) "
+            "VALUES ('test', 'tx2', 30.0, 'SGD', 1.0, 'FairPrice', 'Groceries', '2026-04-10', 'expense')"
+        )
+        db.commit()
+        tx_id = db.execute("SELECT id FROM transactions WHERE source_id='tx2'").fetchone()[0]
+        create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
+        trip_id = create.json()["id"]
+
+        resp = await ac.get(f"/api/trips/{trip_id}/transactions/{tx_id}/membership")
+        assert resp.status_code == 200
+        assert resp.json()["in_trip"] is False
+
+        await ac.post(f"/api/trips/{trip_id}/transactions", json={"transaction_id": tx_id})
+        resp = await ac.get(f"/api/trips/{trip_id}/transactions/{tx_id}/membership")
+        assert resp.json()["in_trip"] is True
+
+    @pytest.mark.asyncio
+    async def test_settings_include_trips_enabled(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/settings")
+        assert "trips_enabled" in resp.json()
+        assert resp.json()["trips_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_toggle_trips_enabled(self, api):
+        ac, _ = api
+        await ac.put("/api/settings", json={"trips_enabled": True})
+        resp = await ac.get("/api/settings")
+        assert resp.json()["trips_enabled"] is True
