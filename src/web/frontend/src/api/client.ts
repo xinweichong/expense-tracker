@@ -429,7 +429,7 @@ export const api = {
   // Trips
   getTrips: () => request<Trip[]>('/api/trips'),
 
-  createTrip: (data: { name: string; start_date: string; end_date?: string; destination?: string; primary_currency?: string }) =>
+  createTrip: (data: { name: string; start_date: string; destination?: string; primary_currency?: string }) =>
     request<Trip>('/api/trips', {
       method: 'POST',
       body: JSON.stringify(data),

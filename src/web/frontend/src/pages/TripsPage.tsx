@@ -57,6 +57,7 @@ function TripRow({ trip }: { trip: Trip }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-transactions', trip.id] });
       qc.invalidateQueries({ queryKey: ['trip-summary', trip.id] });
+      qc.invalidateQueries({ queryKey: ['trip-membership', trip.id] });
     },
   });
 
