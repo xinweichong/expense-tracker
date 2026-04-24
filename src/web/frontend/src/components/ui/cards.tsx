@@ -13,9 +13,9 @@ interface PageCardProps {
 export function PageCard({ title, action, children, className }: PageCardProps) {
   return (
     <Card className={cn(className)}>
-      <div className="flex flex-row items-center justify-between p-4">
-        <span className="text-base font-semibold text-foreground">{title}</span>
-        {action && <div className="ml-auto">{action}</div>}
+      <div className="flex flex-row items-center justify-between p-4 gap-2">
+        <span className="min-w-0 truncate text-base font-semibold text-foreground">{title}</span>
+        {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>
       <CardContent>{children}</CardContent>
     </Card>
@@ -33,9 +33,9 @@ interface ChartCardProps {
 export function ChartCard({ title, action, children, className }: ChartCardProps) {
   return (
     <Card className={cn(className)}>
-      <div className="flex flex-row items-center justify-between p-4">
-        <span className="text-base font-semibold text-foreground">{title}</span>
-        {action && <div className="ml-auto">{action}</div>}
+      <div className="flex flex-row items-center justify-between p-4 gap-2">
+        <span className="min-w-0 truncate text-base font-semibold text-foreground">{title}</span>
+        {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>
       <CardContent className="p-0">{children}</CardContent>
     </Card>
@@ -64,7 +64,7 @@ export function StatCard({ label, value, variant = 'neutral' }: StatCardProps) {
         <CardTitle className="text-sm font-medium text-muted">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className={cn('text-2xl font-bold', VARIANT_CLASS[variant])}>{value}</p>
+        <p className={cn('text-xl font-bold truncate', VARIANT_CLASS[variant])}>{value}</p>
       </CardContent>
     </Card>
   );

@@ -376,7 +376,7 @@ export function OverviewPage() {
                         className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: getCategoryColor(c.category) }}
                       />
-                      <span className="truncate text-muted">{c.category}</span>
+                       <span className="min-w-0 truncate text-muted">{c.category}</span>
                       <span className="ml-auto font-medium shrink-0">{formatCurrency(c.total)}</span>
                     </div>
                   ))}
