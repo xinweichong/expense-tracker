@@ -203,7 +203,7 @@ export function OverviewPage() {
   const pageTxs = (recentTransactions ?? []).slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE);
 
   const trendToggle = (
-    <div className="flex rounded-md border border-border overflow-hidden">
+    <div className="flex rounded-md border border-border overflow-hidden flex-shrink-0">
       <button
         onClick={() => setTrendMode('total')}
         className={cn(
