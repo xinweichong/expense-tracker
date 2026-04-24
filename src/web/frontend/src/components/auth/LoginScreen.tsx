@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { CasheLogo } from '@/components/ui/CasheLogo';
+import { motion } from 'framer-motion';
+import { fadeUpVariants } from '@/lib/animations';
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -27,7 +29,12 @@ export function LoginScreen() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-accent/5 blur-3xl" />
       </div>
 
-      <div className="relative w-full max-w-sm space-y-8">
+      <motion.div
+        className="relative w-full max-w-sm space-y-8"
+        variants={fadeUpVariants}
+        initial="initial"
+        animate="animate"
+      >
         {/* Branding */}
         <div className="flex flex-col items-center gap-4">
           <CasheLogo size={56} />
@@ -64,7 +71,7 @@ export function LoginScreen() {
             </Button>
           </form>
         </Card>
-      </div>
+      </motion.div>
     </div>
   );
 }
