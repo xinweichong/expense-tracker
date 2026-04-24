@@ -185,7 +185,7 @@ function TripRow({ trip }: { trip: Trip }) {
           {txs.length === 0 ? (
             <p className="ml-9 mt-1 text-xs text-muted">No transactions yet.</p>
           ) : (
-            <div className="-mx-4 mt-2 border-t border-border">
+            <div className="mt-2 border-t border-border">
               {pageTxs.map((tx) => (
                 <TransactionRow
                   key={tx.id}
