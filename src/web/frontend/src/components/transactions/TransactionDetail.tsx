@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { type Transaction, api } from '@/api/client';
+import { type Transaction, type Trip, api } from '@/api/client';
 import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
 import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
@@ -320,72 +320,86 @@ function DetailRow({
   );
 }
 
-function TripMembershipRow({ txId }: { txId: number }) {
+function TripMembershipItem({ trip, txId }: { trip: Trip; txId: number }) {
   const qc = useQueryClient();
 
+  const { data: membership } = useQuery({
+    queryKey: ['trip-membership', trip.id, txId],
+    queryFn: () => api.checkTripMembership(trip.id, txId),
+    staleTime: 30_000,
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['trip-membership', trip.id, txId] });
+    qc.invalidateQueries({ queryKey: ['trip-transactions', trip.id] });
+    qc.invalidateQueries({ queryKey: ['trip-summary', trip.id] });
+  };
+
+  const enlist = useMutation({
+    mutationFn: () => api.enlistTransaction(trip.id, txId),
+    onSuccess: invalidate,
+  });
+
+  const delist = useMutation({
+    mutationFn: () => api.delistTransaction(trip.id, txId),
+    onSuccess: invalidate,
+  });
+
+  const inTrip = membership?.in_trip ?? false;
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      {inTrip ? (
+        <>
+          <span className="text-xs text-accent">✓ {trip.name}</span>
+          <button
+            onClick={() => delist.mutate()}
+            disabled={delist.isPending}
+            className="text-xs text-muted hover:text-destructive transition-colors"
+          >
+            {delist.isPending ? 'Removing…' : 'Remove'}
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="text-xs text-muted">{trip.name}</span>
+          <button
+            onClick={() => enlist.mutate()}
+            disabled={enlist.isPending}
+            className="text-xs text-accent hover:opacity-80 transition-opacity"
+          >
+            {enlist.isPending ? 'Adding…' : '+ Add'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TripMembershipRow({ txId }: { txId: number }) {
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.getSettings(),
     staleTime: 30_000,
   });
 
-  const { data: activeTrip } = useQuery({
-    queryKey: ['trips-active'],
-    queryFn: () => api.getActiveTrip().catch(() => null),
+  const { data: trips = [] } = useQuery({
+    queryKey: ['trips'],
+    queryFn: () => api.getTrips(),
     enabled: settings?.trips_enabled === true,
     staleTime: 30_000,
   });
 
-  const { data: membership } = useQuery({
-    queryKey: ['trip-membership', activeTrip?.id, txId],
-    queryFn: () => api.checkTripMembership(activeTrip!.id, txId),
-    enabled: activeTrip != null,
-    staleTime: 30_000,
-  });
-
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['trip-membership', activeTrip?.id, txId] });
-    qc.invalidateQueries({ queryKey: ['trip-transactions', activeTrip?.id] });
-    qc.invalidateQueries({ queryKey: ['trip-summary', activeTrip?.id] });
-  };
-
-  const enlist = useMutation({
-    mutationFn: () => api.enlistTransaction(activeTrip!.id, txId),
-    onSuccess: invalidate,
-  });
-
-  const delist = useMutation({
-    mutationFn: () => api.delistTransaction(activeTrip!.id, txId),
-    onSuccess: invalidate,
-  });
-
-  if (!settings?.trips_enabled || !activeTrip) return null;
-
-  const inTrip = membership?.in_trip ?? false;
+  if (!settings?.trips_enabled || trips.length === 0) return null;
 
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-muted shrink-0">Trip</span>
-      {inTrip ? (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-accent">✓ {activeTrip.name}</span>
-          <button
-            onClick={() => delist.mutate()}
-            disabled={delist.isPending}
-            className="text-xs text-muted hover:text-destructive transition-colors"
-          >
-            Remove
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => enlist.mutate()}
-          disabled={enlist.isPending}
-          className="text-xs text-accent hover:opacity-80 transition-opacity"
-        >
-          {enlist.isPending ? 'Adding…' : `+ Add to ${activeTrip.name}`}
-        </button>
-      )}
+    <div className="flex justify-between gap-4">
+      <span className="text-xs text-muted shrink-0">Trips</span>
+      <div className="flex flex-col gap-1 items-end flex-1 min-w-0">
+        {trips.map((trip) => (
+          <TripMembershipItem key={trip.id} trip={trip} txId={txId} />
+        ))}
+      </div>
     </div>
   );
 }
