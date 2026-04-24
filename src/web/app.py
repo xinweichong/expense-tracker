@@ -757,7 +757,10 @@ def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
 
     @app.post("/api/trips/{trip_id}/deactivate")
     async def deactivate_trip(trip_id: int, _auth=Depends(require_auth)):
-        storage.deactivate_trip(trip_id)
+        try:
+            storage.deactivate_trip(trip_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
         return storage.get_trip(trip_id)
 
     @app.delete("/api/trips/{trip_id}")
