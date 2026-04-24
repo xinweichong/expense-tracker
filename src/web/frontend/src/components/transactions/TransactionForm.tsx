@@ -65,14 +65,18 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   return (
     <Card className="p-4 bg-card border-border">
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="flex gap-1 bg-background rounded-lg p-1">
-          {TX_TYPES.map((t) => (
+        <div className="flex rounded-md border border-border overflow-hidden">
+          {TX_TYPES.map((t, i) => (
             <Button
               key={t.value}
               type="button"
-              variant={type === t.value ? 'secondary' : 'ghost'}
+              variant="ghost"
               size="sm"
-              className="flex-1"
+              className={`flex-1 rounded-none ${i > 0 ? 'border-l border-border' : ''} ${
+                type === t.value
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                  : 'text-muted hover:text-foreground'
+              }`}
               onClick={() => setType(t.value)}
             >
               {t.label}
