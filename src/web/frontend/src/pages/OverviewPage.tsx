@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -154,11 +154,14 @@ export function OverviewPage() {
   const { start, end } = useMemo(() => getDateRange(date, period), [date, period]);
   const [trendMode, setTrendMode] = useState<'total' | 'category'>('total');
 
+  const TX_PAGE_SIZE = 20;
+  const [txPage, setTxPage] = useState(1);
+
   const { data: summary } = useSummary(start, end);
   const { data: trend } = useTrend(start, end);
   const { data: trendByCategory } = useTrendByCategory(start, end);
   const { data: balance } = useBalance(start, end);
-  const { data: recentTransactions } = useTransactions({ start_date: start, end_date: end, limit: 50 });
+  const { data: recentTransactions } = useTransactions({ start_date: start, end_date: end, limit: 200 });
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -191,6 +194,13 @@ export function OverviewPage() {
   const income = balance?.income ?? 0;
   const expenses = balance?.expenses ?? 0;
 
+  useEffect(() => {
+    setTxPage(1);
+  }, [start, end]);
+
+  const totalTxPages = Math.ceil((recentTransactions?.length ?? 0) / TX_PAGE_SIZE);
+  const pageTxs = (recentTransactions ?? []).slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE);
+
   const trendToggle = (
     <div className="flex rounded-md border border-border overflow-hidden">
       <button
@@ -219,178 +229,214 @@ export function OverviewPage() {
   );
 
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-4xl mx-auto">
-      {/* Period Selector */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Overview</h1>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={goBack}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={goToToday} className="gap-1.5 text-sm">
-            <CalendarDays className="h-3.5 w-3.5" />
-            Today
-          </Button>
-          <Button variant="ghost" size="icon" onClick={goForward}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted min-w-[140px] text-center">{getRangeLabel(date, period)}</span>
-        </div>
-        <div className="flex rounded-lg border border-border overflow-hidden">
-          {PERIOD_OPTIONS.map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              className={cn(
-                'px-3 py-1.5 text-sm capitalize transition-colors',
-                period === p
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted hover:text-foreground hover:bg-accent',
-              )}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-overview">
 
-      {/* Balance Cards */}
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard label="Spent" value={formatCurrency(expenses)} variant="expense" />
-        <StatCard label="Income" value={formatCurrency(income)} variant="income" />
-      </div>
-
-      {/* Budget Summary */}
-      {settings?.budgets_enabled && budgetProgress.length > 0 && (
-        <PageCard
-          title="Budget Summary"
-          action={
-            <Link to="/finance" className="text-xs text-muted hover:text-foreground">
-              Manage Budgets →
-            </Link>
-          }
-        >
-          {budgetProgress.every((b: BudgetProgress) => b.status === 'on_track') ? (
-            <p className="text-sm text-success">All budgets on track.</p>
-          ) : (
-            <div className="space-y-2">
-              {budgetProgress
-                .filter((b: BudgetProgress) => b.status !== 'on_track')
-                .map((b: BudgetProgress) => (
-                  <div key={b.id} className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-foreground">
-                        {b.label}{' '}
-                        <span className="text-muted capitalize">({b.period})</span>
-                      </span>
-                      <span className={b.status === 'over_budget' ? 'text-destructive' : 'text-warning'}>
-                        {b.percent.toFixed(0)}%
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${b.status === 'over_budget' ? 'bg-destructive' : 'bg-warning'}`}
-                        style={{ width: `${Math.min(b.percent, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </PageCard>
-      )}
-
-      {/* Goals Summary */}
-      {settings?.goals_enabled && goalProgress.length > 0 && (
-        <PageCard
-          title="Goals Summary"
-          action={
-            <Link to="/finance" className="text-xs text-muted hover:text-foreground">
-              Manage Goals →
-            </Link>
-          }
-        >
-          <div className="space-y-3">
-            {(goalProgress as GoalProgress[]).slice(0, 5).map((g) => (
-              <div key={g.id} className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-foreground font-medium">{g.name}</span>
-                  <span className={
-                    g.on_track === 'behind'   ? 'text-destructive' :
-                    g.on_track === 'ahead'    ? 'text-success' :
-                    g.on_track === 'on_track' ? 'text-info' :
-                    'text-muted'
-                  }>
-                    {g.percent.toFixed(0)}%
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${g.percent >= 100 ? 'bg-success' : 'bg-primary'}`}
-                    style={{ width: `${Math.min(g.percent, 100)}%` }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs text-muted">
-                  <span>${g.saved_amount.toFixed(0)} of ${g.target_amount.toFixed(0)}</span>
-                  {g.target_date && <span>by {g.target_date}</span>}
-                </div>
-              </div>
+      {/* ── Header area (period selector) ── */}
+      <div className="area-header">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold">Overview</h1>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={goBack}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={goToToday} className="gap-1.5 text-sm">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Today
+            </Button>
+            <Button variant="ghost" size="icon" onClick={goForward}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted min-w-[140px] text-center">{getRangeLabel(date, period)}</span>
+          </div>
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            {PERIOD_OPTIONS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn(
+                  'px-3 py-1.5 text-sm capitalize transition-colors',
+                  period === p
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted hover:text-foreground hover:bg-accent',
+                )}
+              >
+                {p}
+              </button>
             ))}
           </div>
-        </PageCard>
-      )}
-
-      {/* Health Score */}
-      <HealthScoreCard />
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Category Donut */}
-        <PageCard title="Spending by Category">
-          {categories.length > 0 ? (
-            <>
-              <CategoryDonut data={categories} />
-              <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5">
-                {categories.map((c: { category: string; total: number }) => (
-                  <div key={c.category} className="flex items-center gap-2 text-sm">
-                    <span
-                      className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: getCategoryColor(c.category) }}
-                    />
-                    <span className="truncate text-muted">{c.category}</span>
-                    <span className="ml-auto font-medium">{formatCurrency(c.total)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="h-48 flex items-center justify-center text-muted text-sm">
-              No spending data for this period
-            </div>
-          )}
-        </PageCard>
-
-        {/* Trend Line */}
-        <PageCard title="Daily Spending Trend" action={trendToggle}>
-          {trendMode === 'total'
-            ? <TrendLine data={trendData} />
-            : <CategoryTrendLine data={trendByCategoryData} />
-          }
-        </PageCard>
+        </div>
       </div>
 
-      {/* Transactions */}
-      <PageCard title="Transactions">
-        {!recentTransactions || recentTransactions.length === 0 ? (
-          <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
-        ) : (
-          <div className="flex flex-col -mx-4">
-            {recentTransactions.map((tx: Transaction) => (
-              <TransactionRow key={tx.id} tx={tx} readOnly />
-            ))}
-          </div>
+      {/* ── Left panel: stats + health + budget/goals + charts ── */}
+      <div className="area-left grid-scroll-panel space-y-4">
+
+        {/* Balance Cards */}
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard label="Spent" value={formatCurrency(expenses)} variant="expense" />
+          <StatCard label="Income" value={formatCurrency(income)} variant="income" />
+        </div>
+
+        {/* Budget Summary */}
+        {settings?.budgets_enabled && budgetProgress.length > 0 && (
+          <PageCard
+            title="Budget Summary"
+            action={
+              <Link to="/finance" className="text-xs text-muted hover:text-foreground">
+                Manage Budgets →
+              </Link>
+            }
+          >
+            {budgetProgress.every((b: BudgetProgress) => b.status === 'on_track') ? (
+              <p className="text-sm text-success">All budgets on track.</p>
+            ) : (
+              <div className="space-y-2">
+                {budgetProgress
+                  .filter((b: BudgetProgress) => b.status !== 'on_track')
+                  .map((b: BudgetProgress) => (
+                    <div key={b.id} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-foreground">
+                          {b.label}{' '}
+                          <span className="text-muted capitalize">({b.period})</span>
+                        </span>
+                        <span className={b.status === 'over_budget' ? 'text-destructive' : 'text-warning'}>
+                          {b.percent.toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${b.status === 'over_budget' ? 'bg-destructive' : 'bg-warning'}`}
+                          style={{ width: `${Math.min(b.percent, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </PageCard>
         )}
-      </PageCard>
+
+        {/* Goals Summary */}
+        {settings?.goals_enabled && goalProgress.length > 0 && (
+          <PageCard
+            title="Goals Summary"
+            action={
+              <Link to="/finance" className="text-xs text-muted hover:text-foreground">
+                Manage Goals →
+              </Link>
+            }
+          >
+            <div className="space-y-3">
+              {(goalProgress as GoalProgress[]).slice(0, 5).map((g) => (
+                <div key={g.id} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-foreground font-medium">{g.name}</span>
+                    <span className={
+                      g.on_track === 'behind'   ? 'text-destructive' :
+                      g.on_track === 'ahead'    ? 'text-success' :
+                      g.on_track === 'on_track' ? 'text-info' :
+                      'text-muted'
+                    }>
+                      {g.percent.toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${g.percent >= 100 ? 'bg-success' : 'bg-primary'}`}
+                      style={{ width: `${Math.min(g.percent, 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted">
+                    <span>${g.saved_amount.toFixed(0)} of ${g.target_amount.toFixed(0)}</span>
+                    {g.target_date && <span>by {g.target_date}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </PageCard>
+        )}
+
+        {/* Health Score */}
+        <HealthScoreCard />
+
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <PageCard title="Spending by Category">
+            {categories.length > 0 ? (
+              <>
+                <CategoryDonut data={categories} />
+                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  {categories.map((c: { category: string; total: number }) => (
+                    <div key={c.category} className="flex items-center gap-2 text-sm">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: getCategoryColor(c.category) }}
+                      />
+                      <span className="truncate text-muted">{c.category}</span>
+                      <span className="ml-auto font-medium">{formatCurrency(c.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="h-48 flex items-center justify-center text-muted text-sm">
+                No spending data for this period
+              </div>
+            )}
+          </PageCard>
+
+          <PageCard title="Daily Spending Trend" action={trendToggle}>
+            {trendMode === 'total'
+              ? <TrendLine data={trendData} />
+              : <CategoryTrendLine data={trendByCategoryData} />
+            }
+          </PageCard>
+        </div>
+
+      </div>
+
+      {/* ── Right panel: transactions (paginated) ── */}
+      <div className="area-right grid-scroll-panel">
+        <PageCard
+          title="Transactions"
+          action={
+            totalTxPages > 1 ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setTxPage(p => Math.max(1, p - 1))}
+                  disabled={txPage === 1}
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                </Button>
+                <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setTxPage(p => Math.min(totalTxPages, p + 1))}
+                  disabled={txPage === totalTxPages}
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : undefined
+          }
+        >
+          {!recentTransactions || recentTransactions.length === 0 ? (
+            <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
+          ) : (
+            <div className="flex flex-col -mx-4">
+              {pageTxs.map((tx: Transaction) => (
+                <TransactionRow key={tx.id} tx={tx} readOnly />
+              ))}
+            </div>
+          )}
+        </PageCard>
+      </div>
+
     </div>
   );
 }
