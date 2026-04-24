@@ -15,6 +15,7 @@ function TripRow({ trip }: { trip: Trip }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [txPage, setTxPage] = useState(1);
+  const [delistingId, setDelistingId] = useState<number | null>(null);
 
   const { data: summary } = useQuery({
     queryKey: ['trip-summary', trip.id],
@@ -25,7 +26,7 @@ function TripRow({ trip }: { trip: Trip }) {
 
   const { data: txs = [] } = useQuery({
     queryKey: ['trip-transactions', trip.id],
-    queryFn: () => api.getTripTransactions(trip.id),
+    queryFn: () => api.getTripTransactions(trip.id, 1000),
     enabled: expanded,
     staleTime: 30_000,
   });
@@ -193,8 +194,13 @@ function TripRow({ trip }: { trip: Trip }) {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-destructive shrink-0 mr-2"
-                    onClick={() => delistMutation.mutate(tx.id)}
-                    disabled={delistMutation.isPending}
+                    onClick={() => {
+                      setDelistingId(tx.id);
+                      delistMutation.mutate(tx.id, {
+                        onSettled: () => setDelistingId(null),
+                      });
+                    }}
+                    disabled={delistingId === tx.id}
                     title="Remove from trip"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -241,7 +247,8 @@ export function TripsPage() {
         primary_currency: newCurrency,
       });
       if (newEndDate) {
-        await api.updateTrip(trip.id, { end_date: newEndDate });
+        // best-effort — trip is already created; end_date is optional metadata
+        await api.updateTrip(trip.id, { end_date: newEndDate }).catch(() => {});
       }
       return trip;
     },
