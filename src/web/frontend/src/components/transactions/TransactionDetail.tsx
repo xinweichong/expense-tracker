@@ -168,6 +168,9 @@ export function TransactionDetail({
           </div>
         ) : (
           <div className="flex gap-2 px-4 py-2">
+            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleEdit}>
+              <Pencil className="w-4 h-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -176,10 +179,6 @@ export function TransactionDetail({
               disabled={deleteTx.isPending}
             >
               <Trash2 className="w-4 h-4" />
-            </Button>
-            <Button variant="ghost" className="flex-1" onClick={handleEdit}>
-              <Pencil className="w-4 h-4 mr-1" />
-              Edit
             </Button>
           </div>
         )}
