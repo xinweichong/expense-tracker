@@ -588,6 +588,82 @@ class TestEditValueEnteredDateValidation:
 
 
 
+class TestAsyncNotify:
+    def _insert_tx(self, in_memory_db, source="uob_paynow", source_id="notify1",
+                   amount=951.90, merchant="PayNow", tx_type="income",
+                   transaction_date="2026-04-24T14:47:00", category="Income"):
+        in_memory_db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, category, transaction_date, type) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (source, source_id, amount, merchant, category, transaction_date, tx_type),
+        )
+        in_memory_db.commit()
+        return in_memory_db.execute(
+            "SELECT id FROM transactions WHERE source_id=?", (source_id,)
+        ).fetchone()[0]
+
+    def _make_service(self, in_memory_db):
+        service = TelegramBotService(storage=Storage(connection=in_memory_db), bot_token="test-token")
+        service.chat_id = 12345
+        service.app = MagicMock()
+        service.app.bot.send_message = AsyncMock()
+        return service
+
+    @pytest.mark.asyncio
+    async def test_income_shows_received_no_picker(self, in_memory_db):
+        """PayNow received / reversal → 💰 Received message, no category keyboard."""
+        service = self._make_service(in_memory_db)
+        tx_id = self._insert_tx(in_memory_db, tx_type="income", merchant="PayNow",
+                                 source="uob_paynow", amount=951.90)
+        await service._async_notify(tx_id, 951.90, "PayNow", "Income", "default", "uob_paynow")
+
+        service.app.bot.send_message.assert_called_once()
+        kwargs = service.app.bot.send_message.call_args[1]
+        assert kwargs["chat_id"] == 12345
+        assert "Received" in kwargs["text"]
+        assert "951.90" in kwargs["text"]
+        assert "💰" in kwargs["text"]
+        assert kwargs.get("reply_markup") is None  # no category picker for income
+
+    @pytest.mark.asyncio
+    async def test_income_reversal_shows_received(self, in_memory_db):
+        """Card reversal (income tx_type) also shows Received format."""
+        service = self._make_service(in_memory_db)
+        tx_id = self._insert_tx(in_memory_db, tx_type="income", merchant="Gopay-Gojek",
+                                 source="uob_card", source_id="rev1", amount=23.70, category="Other")
+        await service._async_notify(tx_id, 23.70, "Gopay-Gojek", "Other", "default", "uob_card")
+
+        kwargs = service.app.bot.send_message.call_args[1]
+        assert "Received" in kwargs["text"]
+        assert "23.70" in kwargs["text"]
+        assert kwargs.get("reply_markup") is None
+
+    @pytest.mark.asyncio
+    async def test_expense_default_category_shows_picker(self, in_memory_db):
+        """Expense with default match_source → category picker keyboard."""
+        service = self._make_service(in_memory_db)
+        tx_id = self._insert_tx(in_memory_db, tx_type="expense", merchant="Coffee Shop",
+                                 source="uob_card", source_id="exp1", amount=5.50, category="Other")
+        await service._async_notify(tx_id, 5.50, "Coffee Shop", "Other", "default", "uob_card")
+
+        kwargs = service.app.bot.send_message.call_args[1]
+        assert "Pick a category" in kwargs["text"]
+        assert kwargs.get("reply_markup") is not None
+
+    @pytest.mark.asyncio
+    async def test_expense_known_category_shows_tx_block(self, in_memory_db):
+        """Expense with a learned/keyword match_source → formatted tx block, no picker."""
+        service = self._make_service(in_memory_db)
+        tx_id = self._insert_tx(in_memory_db, tx_type="expense", merchant="Grab",
+                                 source="uob_card", source_id="exp2", amount=12.00, category="Transport")
+        await service._async_notify(tx_id, 12.00, "Grab", "Transport", "keyword:grab", "uob_card")
+
+        kwargs = service.app.bot.send_message.call_args[1]
+        assert kwargs.get("reply_markup") is None
+        assert "Grab" in kwargs["text"]
+        assert "12.00" in kwargs["text"]
+
+
 class TestParseAddCommandDatetime:
     def setup_method(self):
         from src.telegram_bot import TelegramBotService

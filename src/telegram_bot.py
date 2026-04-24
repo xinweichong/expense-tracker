@@ -1045,15 +1045,28 @@ class TelegramBotService:
 
     async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
         icon_map = self.storage.get_category_icon_map()
+        tx = self.storage.get_transaction(tx_id)
         # For Apple Wallet, show the card name stored in description
         if source == "apple_wallet":
-            _tx = self.storage.get_transaction(tx_id)
-            _desc = (_tx.get("description") or "") if _tx else ""
+            _desc = (tx.get("description") or "") if tx else ""
             source_label = _desc if _desc.startswith("Apple Wallet") else SOURCE_LABELS.get(source, source)
         else:
             source_label = SOURCE_LABELS.get(source, source)
-        if category and match_source != "default":
-            tx = self.storage.get_transaction(tx_id)
+
+        if tx and tx.get("type") == "income":
+            # Income/credit: distinct "Received" notification, no category picker
+            currency = str(tx.get("currency", "SGD"))
+            rate = float(tx.get("exchange_rate") or 1.0)
+            tx_date = _fmt_tx_date(tx.get("transaction_date"))
+            lines = [f"💰 *Received* · {self._escape_md(merchant)}"]
+            if currency != "SGD" and rate != 1.0:
+                sgd = amount * rate
+                lines.append(f"`+${sgd:.2f} SGD` `({currency} {amount:.2f})` · {self._escape_md(source_label)}")
+            else:
+                lines.append(f"`+${amount:.2f} {currency}` · {self._escape_md(source_label)}")
+            lines.append(f"_{tx_id} · {tx_date}_")
+            await self.app.bot.send_message(chat_id=self.chat_id, text="\n".join(lines), parse_mode="Markdown")
+        elif category and match_source != "default":
             text = self._format_tx_block(tx, icon_map)
             await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
         else:
@@ -1079,14 +1092,13 @@ class TelegramBotService:
                 reply_markup=keyboard,
             )
 
-        # Budget alert check (best-effort — errors must not break the notification)
-        try:
-            _tx_for_budget = self.storage.get_transaction(tx_id)
-            if _tx_for_budget:
-                _sgd = _tx_for_budget["amount"] * (_tx_for_budget.get("exchange_rate") or 1.0)
+        # Budget alert check — income transactions don't trigger budget alerts
+        if tx and tx.get("type") != "income":
+            try:
+                _sgd = tx["amount"] * (tx.get("exchange_rate") or 1.0)
                 await self._check_and_alert_budgets(category, _sgd)
-        except Exception as _e:
-            logger.warning("Budget alert check failed: %s", _e)
+            except Exception as _e:
+                logger.warning("Budget alert check failed: %s", _e)
 
     async def _check_and_alert_budgets(
         self, category: Optional[str], amount_sgd: float

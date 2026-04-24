@@ -391,6 +391,32 @@ class TestUobParser:
         assert result is not None
         assert result.transaction_date == "2026-01-01T12:00:00"
 
+    def test_parse_paynow_received_zero_padded_hour(self):
+        """Actual email format: 02:47PM (zero-padded hour)."""
+        body = (
+            "You have received SGD 951.90 in your PayNow-linked account ending 9000 "
+            "on 24-APR-2026 02:47PM.\nUOB EMAIL DISCLAIMER: ..."
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(951.90)
+        assert result.tx_type == "income"
+        assert result.transaction_date == "2026-04-24T14:47:00"
+
+    def test_parse_card_reversal_actual_email(self):
+        """Actual email format: reversal with Gopay-Gojek."""
+        body = (
+            "A transaction of 23.70 SGD made with your UOB card ending 5440 "
+            "on 20 Mar 26, 5:28PM at Gopay-Gojek has been reversed.\n"
+            "UOB EMAIL DISCLAIMER: ..."
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(23.70)
+        assert result.merchant == "Gopay-Gojek"
+        assert result.tx_type == "income"
+        assert result.transaction_date == "2026-03-20T17:28:00"
+
     # --- No match ---
 
     def test_parse_no_match_returns_none(self):
