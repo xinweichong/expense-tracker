@@ -1,6 +1,11 @@
+import sqlite3
+import bcrypt
 import pytest
+import pytest_asyncio
 from datetime import datetime
+from httpx import AsyncClient, ASGITransport
 from src.storage import Storage
+from src.web.app import create_dashboard_app
 
 
 def _insert_tx(db, source_id, amount=50.0, merchant="TestMerchant", date="2026-04-15"):
@@ -251,13 +256,6 @@ class TestTripSummary:
         assert storage.get_trip_summary(999) is None
 
 
-import sqlite3
-import bcrypt
-import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from src.web.app import create_dashboard_app
-
-
 @pytest.fixture
 def trip_app(in_memory_db):
     storage = Storage(connection=in_memory_db)
@@ -415,3 +413,27 @@ class TestTripAPI:
         await ac.put("/api/settings", json={"trips_enabled": True})
         resp = await ac.get("/api/settings")
         assert resp.json()["trips_enabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_update_unknown_trip_returns_404(self, api):
+        ac, _ = api
+        resp = await ac.put("/api/trips/9999", json={"name": "X"})
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_activate_unknown_trip_returns_404(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/trips/9999/activate")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_deactivate_unknown_trip_returns_404(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/trips/9999/deactivate")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_unknown_trip_returns_404(self, api):
+        ac, _ = api
+        resp = await ac.delete("/api/trips/9999")
+        assert resp.status_code == 404
