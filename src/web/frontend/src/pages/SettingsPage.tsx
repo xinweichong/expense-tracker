@@ -373,59 +373,61 @@ export function SettingsPage() {
         {/* Feature Toggles */}
         <div id="feature-toggles">
           <PageCard title="Feature Toggles">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">Budgets</p>
-                <p className="text-xs text-muted">Set spending limits and track progress</p>
-              </div>
-              <button
-                onClick={() => toggleBudgets(!settings?.budgets_enabled)}
-                className={`relative w-10 h-5 rounded-full transition-colors ${
-                  settings?.budgets_enabled ? 'bg-success' : 'bg-foreground/20'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0'
+            <div className="divide-y divide-border">
+              <div className="flex items-center justify-between py-4">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Budgets</p>
+                  <p className="text-xs text-muted">Set spending limits and track progress</p>
+                </div>
+                <button
+                  onClick={() => toggleBudgets(!settings?.budgets_enabled)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${
+                    settings?.budgets_enabled ? 'bg-success' : 'bg-foreground/20'
                   }`}
-                />
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">Goals</p>
-                <p className="text-xs text-muted">Track savings targets and monthly progress</p>
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                      settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
-              <button
-                onClick={() => toggleGoals(!settings?.goals_enabled)}
-                className={`relative w-10 h-5 rounded-full transition-colors ${
-                  settings?.goals_enabled ? 'bg-success' : 'bg-foreground/20'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    settings?.goals_enabled ? 'translate-x-5' : 'translate-x-0'
+              <div className="flex items-center justify-between py-4">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Goals</p>
+                  <p className="text-xs text-muted">Track savings targets and monthly progress</p>
+                </div>
+                <button
+                  onClick={() => toggleGoals(!settings?.goals_enabled)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${
+                    settings?.goals_enabled ? 'bg-success' : 'bg-foreground/20'
                   }`}
-                />
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">Trips</p>
-                <p className="text-xs text-muted">Group transactions by trip and track travel spend</p>
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                      settings?.goals_enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
-              <button
-                onClick={() => toggleTrips(!settings?.trips_enabled)}
-                className={`relative w-10 h-5 rounded-full transition-colors ${
-                  settings?.trips_enabled ? 'bg-success' : 'bg-foreground/20'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    settings?.trips_enabled ? 'translate-x-5' : 'translate-x-0'
+              <div className="flex items-center justify-between py-4">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Trips</p>
+                  <p className="text-xs text-muted">Group transactions by trip and track travel spend</p>
+                </div>
+                <button
+                  onClick={() => toggleTrips(!settings?.trips_enabled)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${
+                    settings?.trips_enabled ? 'bg-success' : 'bg-foreground/20'
                   }`}
-                />
-              </button>
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                      settings?.trips_enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </PageCard>
         </div>

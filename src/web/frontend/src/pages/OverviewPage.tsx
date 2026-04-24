@@ -207,7 +207,7 @@ export function OverviewPage() {
       <button
         onClick={() => setTrendMode('total')}
         className={cn(
-          'px-2.5 py-1 text-xs transition-colors',
+          'px-2.5 py-1 text-xs transition-colors whitespace-nowrap flex-shrink-0',
           trendMode === 'total'
             ? 'bg-primary text-primary-foreground'
             : 'text-muted hover:text-foreground',
@@ -218,7 +218,7 @@ export function OverviewPage() {
       <button
         onClick={() => setTrendMode('category')}
         className={cn(
-          'px-2.5 py-1 text-xs transition-colors border-l border-border',
+          'px-2.5 py-1 text-xs transition-colors border-l border-border whitespace-nowrap flex-shrink-0',
           trendMode === 'category'
             ? 'bg-primary text-primary-foreground'
             : 'text-muted hover:text-foreground',
@@ -249,13 +249,13 @@ export function OverviewPage() {
             </Button>
             <span className="text-sm text-muted min-w-[140px] text-center">{getRangeLabel(date, period)}</span>
           </div>
-          <div className="flex rounded-lg border border-border overflow-hidden">
+          <div className="flex rounded-lg border border-border overflow-hidden flex-shrink-0">
             {PERIOD_OPTIONS.map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={cn(
-                  'px-3 py-1.5 text-sm capitalize transition-colors',
+                  'px-3 py-1.5 text-sm capitalize transition-colors whitespace-nowrap flex-shrink-0',
                   period === p
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted hover:text-foreground hover:bg-accent',
@@ -369,15 +369,15 @@ export function OverviewPage() {
             {categories.length > 0 ? (
               <>
                 <CategoryDonut data={categories} />
-                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                   {categories.map((c: { category: string; total: number }) => (
-                    <div key={c.category} className="flex items-center gap-2 text-sm">
+                    <div key={c.category} className="flex items-center gap-2 text-sm min-w-0">
                       <span
                         className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: getCategoryColor(c.category) }}
                       />
                       <span className="truncate text-muted">{c.category}</span>
-                      <span className="ml-auto font-medium">{formatCurrency(c.total)}</span>
+                      <span className="ml-auto font-medium shrink-0">{formatCurrency(c.total)}</span>
                     </div>
                   ))}
                 </div>

@@ -39,7 +39,7 @@ export function Sidebar() {
             }
           >
             <Icon className="w-5 h-5 shrink-0" />
-            <span className="hidden lg:inline">{label}</span>
+            <span className="inline">{label}</span>
           </NavLink>
         ))}
 
@@ -55,7 +55,7 @@ export function Sidebar() {
           }
         >
           <Wallet className="w-5 h-5 shrink-0" />
-          <span className="hidden lg:flex items-center gap-1">
+          <span className="flex items-center gap-1">
             Finance
             {!financeEnabled && <Lock className="w-3 h-3 ml-1 inline" />}
           </span>
@@ -73,7 +73,7 @@ export function Sidebar() {
           }
         >
           <Plane className="w-5 h-5 shrink-0" />
-          <span className="hidden lg:flex items-center gap-1">
+          <span className="flex items-center gap-1">
             Trips
             {!tripsEnabled && <Lock className="w-3 h-3 ml-1 inline" />}
           </span>
@@ -91,7 +91,7 @@ export function Sidebar() {
           }
         >
           <Settings className="w-5 h-5 shrink-0" />
-          <span className="hidden lg:inline">Settings</span>
+          <span className="inline">Settings</span>
         </NavLink>
       </nav>
     </aside>

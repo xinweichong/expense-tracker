@@ -13,10 +13,10 @@ interface PageCardProps {
 export function PageCard({ title, action, children, className }: PageCardProps) {
   return (
     <Card className={cn(className)}>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base font-medium">{title}</CardTitle>
-        {action}
-      </CardHeader>
+      <div className="flex flex-row items-center justify-between p-4">
+        <span className="text-base font-semibold text-foreground">{title}</span>
+        {action && <div className="ml-auto">{action}</div>}
+      </div>
       <CardContent>{children}</CardContent>
     </Card>
   );
@@ -33,10 +33,10 @@ interface ChartCardProps {
 export function ChartCard({ title, action, children, className }: ChartCardProps) {
   return (
     <Card className={cn(className)}>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base font-medium">{title}</CardTitle>
-        {action}
-      </CardHeader>
+      <div className="flex flex-row items-center justify-between p-4">
+        <span className="text-base font-semibold text-foreground">{title}</span>
+        {action && <div className="ml-auto">{action}</div>}
+      </div>
       <CardContent className="p-0">{children}</CardContent>
     </Card>
   );
