@@ -7,7 +7,8 @@ interface TransactionListProps {
   onLoadMore: () => void;
   hasMore: boolean;
   isLoading: boolean;
-  onMerchantClick?: (merchant: string) => void;
+  onTransactionClick: (tx: Transaction) => void;
+  selectedTransactionId?: number;
 }
 
 export function TransactionList({
@@ -15,7 +16,8 @@ export function TransactionList({
   onLoadMore,
   hasMore,
   isLoading,
-  onMerchantClick,
+  onTransactionClick,
+  selectedTransactionId,
 }: TransactionListProps) {
   const observerRef = useRef<HTMLDivElement>(null);
 
@@ -25,10 +27,8 @@ export function TransactionList({
     if (!el) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) onLoadMore();
-      },
-      { rootMargin: '200px' }
+      ([entry]) => { if (entry.isIntersecting) onLoadMore(); },
+      { rootMargin: '200px' },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -43,9 +43,14 @@ export function TransactionList({
   }
 
   return (
-    <div className="group">
+    <div>
       {transactions.map((tx) => (
-        <TransactionRow key={tx.id} tx={tx} onMerchantClick={onMerchantClick} />
+        <TransactionRow
+          key={tx.id}
+          tx={tx}
+          onClick={() => onTransactionClick(tx)}
+          selected={tx.id === selectedTransactionId}
+        />
       ))}
       {hasMore && (
         <div ref={observerRef} className="py-4 text-center text-muted text-xs">

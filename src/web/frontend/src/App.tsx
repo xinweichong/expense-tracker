@@ -50,6 +50,7 @@ function AppContent() {
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
+          <Route path="transactions/:transactionId" element={<TransactionsPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="merchants" element={<MerchantsPage />} />

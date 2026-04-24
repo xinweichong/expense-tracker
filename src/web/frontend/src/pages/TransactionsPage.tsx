@@ -1,22 +1,24 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useCallback } from 'react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TransactionList } from '@/components/transactions/TransactionList';
 import { TransactionFilters } from '@/components/transactions/TransactionFilters';
+import { TransactionDetail } from '@/components/transactions/TransactionDetail';
+import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { useCategories } from '@/hooks/useCategories';
 import { api, type Transaction } from '@/api/client';
 import { Plus } from 'lucide-react';
-import { TransactionForm } from '@/components/transactions/TransactionForm';
-import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 
 const PAGE_SIZE = 20;
 
 export function TransactionsPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [drawerMerchant, setDrawerMerchant] = useState<string | null>(null);
+  const { transactionId } = useParams<{ transactionId?: string }>();
+  const parsed = transactionId ? parseInt(transactionId, 10) : NaN;
+  const selectedId = isNaN(parsed) ? undefined : parsed;
+
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [startDate, setStartDate] = useState('');
@@ -24,115 +26,117 @@ export function TransactionsPage() {
   const [showForm, setShowForm] = useState(false);
   const { data: categories } = useCategories();
 
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-  } = useInfiniteQuery({
-    queryKey: ['transactions', search, category, startDate, endDate],
-    queryFn: ({ pageParam = 0 }) => {
-      const params: Record<string, string | number> = {
-        limit: PAGE_SIZE,
-        offset: pageParam as number,
-      };
-      if (search) params.merchant = search;
-      if (category && category !== 'all') params.category = category;
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
-      return api.getTransactions(params);
-    },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage: Transaction[], allPages: Transaction[][]) => {
-      if (lastPage.length < PAGE_SIZE) return undefined;
-      return allPages.length * PAGE_SIZE;
-    },
-  });
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
+    useInfiniteQuery({
+      queryKey: ['transactions', search, category, startDate, endDate],
+      queryFn: ({ pageParam = 0 }) => {
+        const params: Record<string, string | number> = {
+          limit: PAGE_SIZE,
+          offset: pageParam as number,
+        };
+        if (search) params.merchant = search;
+        if (category && category !== 'all') params.category = category;
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        return api.getTransactions(params);
+      },
+      initialPageParam: 0,
+      getNextPageParam: (lastPage: Transaction[], allPages: Transaction[][]) => {
+        if (lastPage.length < PAGE_SIZE) return undefined;
+        return allPages.length * PAGE_SIZE;
+      },
+    });
 
   const txs = data?.pages.flat() ?? [];
 
-  const handleCategoryChange = useCallback((v: string) => {
-    setCategory(v);
-  }, []);
+  // Use list data if available — only hit the single-tx endpoint for deep-links
+  // where the transaction isn't in the loaded pages (e.g. direct URL navigation)
+  const txFromList = selectedId !== undefined
+    ? txs.find((tx) => tx.id === selectedId)
+    : undefined;
 
-  const handleSearchChange = useCallback((v: string) => {
-    setSearch(v);
-  }, []);
+  const { data: txFromQuery } = useQuery({
+    queryKey: ['transaction', selectedId],
+    queryFn: () => api.getTransaction(selectedId!),
+    enabled: selectedId !== undefined && txFromList === undefined,
+    staleTime: 30_000,
+  });
 
+  const selectedTransaction = txFromList ?? txFromQuery ?? null;
+
+  const handleCategoryChange = useCallback((v: string) => setCategory(v), []);
+  const handleSearchChange = useCallback((v: string) => setSearch(v), []);
   const loadMore = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
-    }
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const handleMerchantClick = useCallback((merchant: string) => {
-    if (window.innerWidth >= 768) {
-      setDrawerMerchant(merchant);
-    } else {
-      navigate(`/merchants/${encodeURIComponent(merchant)}`);
-    }
-  }, [navigate]);
-
-  // Deep-link support: ?merchant=X opens the drawer on page load (desktop)
-  useEffect(() => {
-    const m = searchParams.get('merchant');
-    if (m) handleMerchantClick(m);
-  }, [searchParams, handleMerchantClick]);
+  // Toggle: clicking the active row navigates back to /transactions (closes panel)
+  const handleTransactionClick = useCallback(
+    (tx: Transaction) => {
+      if (selectedId === tx.id) {
+        navigate('/transactions');
+      } else {
+        navigate(`/transactions/${tx.id}`);
+      }
+    },
+    [selectedId, navigate],
+  );
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-3xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Transactions</h1>
-        <Button size="sm" onClick={() => setShowForm(!showForm)}>
-          <Plus className="w-4 h-4 mr-1" />
-          Add
-        </Button>
+    <div className="flex h-full overflow-hidden">
+      {/* Left: transaction list — hidden on mobile when detail is open */}
+      <div
+        className={`flex-1 overflow-y-auto p-4 md:p-6 space-y-4 ${
+          selectedTransaction ? 'hidden md:block' : ''
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold">Transactions</h1>
+          <Button size="sm" onClick={() => setShowForm(!showForm)}>
+            <Plus className="w-4 h-4 mr-1" />
+            Add
+          </Button>
+        </div>
+
+        <TransactionFilters
+          search={search}
+          onSearchChange={handleSearchChange}
+          category={category}
+          onCategoryChange={handleCategoryChange}
+          categories={categories ?? []}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+        />
+
+        {showForm && (
+          <TransactionForm
+            categories={categories ?? []}
+            onClose={() => setShowForm(false)}
+          />
+        )}
+
+        <Card className="overflow-hidden">
+          <TransactionList
+            transactions={txs}
+            onLoadMore={loadMore}
+            hasMore={!!hasNextPage}
+            isLoading={isLoading || isFetchingNextPage}
+            onTransactionClick={handleTransactionClick}
+            selectedTransactionId={selectedId}
+          />
+        </Card>
       </div>
 
-      <TransactionFilters
-        search={search}
-        onSearchChange={handleSearchChange}
-        category={category}
-        onCategoryChange={handleCategoryChange}
-        categories={categories ?? []}
-        startDate={startDate}
-        setStartDate={setStartDate}
-        endDate={endDate}
-        setEndDate={setEndDate}
-      />
-
-      {showForm && (
-        <TransactionForm
-          categories={categories ?? []}
-          onClose={() => setShowForm(false)}
-        />
-      )}
-
-      <Card className="overflow-hidden">
-        <TransactionList
-          transactions={txs}
-          onLoadMore={loadMore}
-          hasMore={!!hasNextPage}
-          isLoading={isLoading || isFetchingNextPage}
-          onMerchantClick={handleMerchantClick}
-        />
-      </Card>
-
-      {/* Merchant drawer — desktop only; MerchantProfile handles its own scroll */}
-      {drawerMerchant && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setDrawerMerchant(null)}
+      {/* Right: transaction detail panel */}
+      {selectedTransaction && (
+        <div className="w-full md:w-96 border-l border-border bg-card flex-shrink-0 overflow-hidden">
+          <TransactionDetail
+            transaction={selectedTransaction}
+            onClose={() => navigate('/transactions')}
           />
-          <div className="fixed inset-y-0 right-0 w-96 border-l border-border bg-card shadow-xl z-50 overflow-hidden">
-            <MerchantProfile
-              merchant={drawerMerchant}
-              onClose={() => setDrawerMerchant(null)}
-            />
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
