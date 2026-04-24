@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { AnimatePresence, motion } from 'framer-motion';
 import { api, type MerchantSummary } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
+import { slideInRightVariants } from '@/lib/animations';
 import { Search } from 'lucide-react';
 
 const SORT_OPTIONS = [
@@ -186,14 +188,22 @@ export function MerchantsPage() {
       </div>
 
       {/* Profile panel — slide-over on desktop, full-screen on mobile */}
-      {selectedMerchant && (
-        <div className="w-full md:w-96 border-l border-border bg-card flex-shrink-0 overflow-hidden">
-          <MerchantProfile
-            merchant={selectedMerchant}
-            onClose={handleCloseProfile}
-          />
-        </div>
-      )}
+      <AnimatePresence>
+        {selectedMerchant && (
+          <motion.div
+            className="w-full md:w-96 border-l border-border bg-card flex-shrink-0 overflow-hidden"
+            variants={slideInRightVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            <MerchantProfile
+              merchant={selectedMerchant}
+              onClose={handleCloseProfile}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
