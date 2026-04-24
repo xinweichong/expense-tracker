@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import {
 } from '@/hooks/useCategories';
 import { api, type Category } from '@/api/client';
 import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
+import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
 import { Pencil, Trash2, Plus, X } from 'lucide-react';
 
 const ICON_OPTIONS = [
@@ -203,9 +205,20 @@ export function SettingsPage() {
               Add
             </Button>
           </div>
-          <div className="divide-y divide-border">
-            {categories?.map((cat: Category) => (
-              <div key={cat.name} className="px-4 py-3">
+          <motion.div
+            className="divide-y divide-border"
+            variants={staggerContainerVariants}
+            initial="initial"
+            animate="animate"
+          >
+            <AnimatePresence>
+              {categories?.map((cat: Category) => (
+                <motion.div
+                  key={cat.name}
+                  className="px-4 py-3"
+                  variants={staggerItemVariants}
+                  exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                >
                 {editingCategory === cat.name ? (
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -242,14 +255,17 @@ export function SettingsPage() {
                         {PALETTE.map((c) => {
                           const taken = usedColors.includes(c.toLowerCase()) && (cat.color?.toLowerCase() !== c.toLowerCase());
                           return (
-                            <button
+                            <motion.button
                               key={c}
                               type="button"
                               disabled={taken}
                               title={taken ? 'Already in use' : c}
-                              className={`w-7 h-7 rounded-full border-2 transition-colors ${editColor === c ? 'border-white scale-110' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'hover:scale-105 cursor-pointer'}`}
+                              className={`w-7 h-7 rounded-full border-2 transition-colors ${editColor === c ? 'border-white' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
                               style={{ backgroundColor: c }}
                               onClick={() => setEditColor(c)}
+                              animate={{ scale: editColor === c ? 1.1 : 1 }}
+                              whileHover={taken ? {} : { scale: editColor === c ? 1.1 : 1.05 }}
+                              transition={springs.snappy}
                             />
                           );
                         })}
@@ -325,12 +341,13 @@ export function SettingsPage() {
                     )}
                   </>
                 )}
-              </div>
-            ))}
+                </motion.div>
+              ))}
+            </AnimatePresence>
             {(!categories || categories.length === 0) && (
               <div className="p-6 text-center text-muted text-sm">No categories yet</div>
             )}
-          </div>
+          </motion.div>
         </Card>
 
         {/* Merchant Overrides */}
@@ -526,14 +543,17 @@ export function SettingsPage() {
                 {PALETTE.map((c) => {
                   const taken = usedColors.includes(c.toLowerCase());
                   return (
-                    <button
+                    <motion.button
                       key={c}
                       type="button"
                       disabled={taken}
                       title={taken ? 'Already in use' : c}
-                      className={`w-7 h-7 rounded-full border-2 transition-colors ${newCatColor === c ? 'border-white scale-110' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'hover:scale-105 cursor-pointer'}`}
+                      className={`w-7 h-7 rounded-full border-2 transition-colors ${newCatColor === c ? 'border-white' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
                       style={{ backgroundColor: c }}
                       onClick={() => setNewCatColor(c)}
+                      animate={{ scale: newCatColor === c ? 1.1 : 1 }}
+                      whileHover={taken ? {} : { scale: newCatColor === c ? 1.1 : 1.05 }}
+                      transition={springs.snappy}
                     />
                   );
                 })}

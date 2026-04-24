@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgress, type Category, type GoalProgress } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
 import { Pencil, Trash2, X, Check } from 'lucide-react';
 
 function SavingsOverviewCard() {
@@ -48,9 +50,11 @@ function ProgressBar({ percent, status }: { percent: number; status: string }) {
                                'bg-success';
   return (
     <div className="w-full h-2 bg-foreground/10 rounded-full overflow-hidden">
-      <div
-        className={`h-full rounded-full transition-all ${color}`}
-        style={{ width: `${Math.min(percent, 100)}%` }}
+      <motion.div
+        className={`h-full rounded-full ${color}`}
+        initial={{ width: 0 }}
+        animate={{ width: `${Math.min(percent, 100)}%` }}
+        transition={springs.gentle}
       />
     </div>
   );
@@ -187,16 +191,20 @@ function ProgressRing({ percent }: { percent: number }) {
   const r = 36;
   const circ = 2 * Math.PI * r;
   const filled = (Math.min(percent, 100) / 100) * circ;
+  const strokeDashoffset = circ - filled;
   return (
     <svg width="88" height="88" className="shrink-0">
       <circle cx="44" cy="44" r={r} fill="none" stroke="var(--color-border)" strokeWidth="6" />
-      <circle
+      <motion.circle
         cx="44" cy="44" r={r} fill="none"
         stroke={percent >= 100 ? 'var(--color-success)' : 'var(--color-primary)'}
         strokeWidth="6"
-        strokeDasharray={`${filled} ${circ}`}
+        strokeDasharray={circ}
         strokeLinecap="round"
         transform="rotate(-90 44 44)"
+        initial={{ strokeDashoffset: circ }}
+        animate={{ strokeDashoffset }}
+        transition={springs.gentle}
       />
       <text x="44" y="48" textAnchor="middle" fontSize="14" fontWeight="600" fill="var(--color-foreground)">
         {percent.toFixed(0)}%
@@ -620,15 +628,24 @@ function GoalsSection() {
           No goals yet. Add one to start tracking your savings.
         </p>
       ) : (
-        goals.map((g) => (
-          <GoalCard
-            key={g.id}
-            g={g}
-            onContribute={(id, amount, note) => contribMutation.mutate({ id, amount, note })}
-            onEdit={(id, data) => editMutation.mutate({ id, data })}
-            onDelete={(id) => deleteMutation.mutate(id)}
-          />
-        ))
+        <motion.div variants={staggerContainerVariants} initial="initial" animate="animate">
+          <AnimatePresence>
+            {goals.map((g) => (
+              <motion.div
+                key={g.id}
+                variants={staggerItemVariants}
+                exit={{ opacity: 0, transition: { duration: 0.15 } }}
+              >
+                <GoalCard
+                  g={g}
+                  onContribute={(id, amount, note) => contribMutation.mutate({ id, amount, note })}
+                  onEdit={(id, data) => editMutation.mutate({ id, data })}
+                  onDelete={(id) => deleteMutation.mutate(id)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
       )}
       {showAddForm && (
         <div className="pt-4 border-t border-border space-y-3">
@@ -761,14 +778,23 @@ export function FinancePage() {
                 No budgets yet. Add one to start tracking.
               </p>
             ) : (
-              progress.map((b) => (
-                <BudgetRow
-                  key={b.id}
-                  b={b}
-                  onDelete={(id) => deleteMutation.mutate(id)}
-                  onEdit={(id, amount) => editMutation.mutate({ id, amount })}
-                />
-              ))
+              <motion.div variants={staggerContainerVariants} initial="initial" animate="animate">
+                <AnimatePresence>
+                  {progress.map((b) => (
+                    <motion.div
+                      key={b.id}
+                      variants={staggerItemVariants}
+                      exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                    >
+                      <BudgetRow
+                        b={b}
+                        onDelete={(id) => deleteMutation.mutate(id)}
+                        onEdit={(id, amount) => editMutation.mutate({ id, amount })}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
             )}
             {showAddForm && (
               <AddBudgetForm

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { PageCard, ChartCard } from '@/components/ui/cards';
 import { ComparisonBarChart } from '@/components/charts/ComparisonBarChart';
@@ -10,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/utils';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { springs } from '@/lib/animations';
 
 const PILLAR_ORDER = [
   'savings_rate',
@@ -38,6 +40,7 @@ function HealthScoreBreakdown() {
   const r = 40;
   const circ = 2 * Math.PI * r;
   const filled = score != null ? (score / 100) * circ : 0;
+  const strokeDashoffset = circ - filled;
 
   const monthSelect = (
     <select
@@ -66,13 +69,16 @@ function HealthScoreBreakdown() {
           <div className="flex items-center gap-6">
             <svg width="96" height="96" className="shrink-0">
               <circle cx="48" cy="48" r={r} fill="none" stroke="#2A2A32" strokeWidth="6" />
-              <circle
+              <motion.circle
                 cx="48" cy="48" r={r} fill="none"
                 stroke={ringColor}
                 strokeWidth="6"
-                strokeDasharray={`${filled} ${circ}`}
+                strokeDasharray={circ}
                 strokeLinecap="round"
                 transform="rotate(-90 48 48)"
+                initial={{ strokeDashoffset: circ }}
+                animate={{ strokeDashoffset }}
+                transition={springs.gentle}
               />
               <text x="48" y="52" textAnchor="middle" fontSize="20" fontWeight="700" fill="#E8E8ED">
                 {score}
@@ -120,9 +126,12 @@ function HealthScoreBreakdown() {
                     </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${pct * 100}%`, backgroundColor: barColor }}
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ backgroundColor: barColor }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct * 100}%` }}
+                      transition={springs.gentle}
                     />
                   </div>
                   <p className="text-xs text-muted/70">{comp.description}</p>
