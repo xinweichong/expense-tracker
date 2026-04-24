@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { type Transaction } from '@/api/client';
 import { TransactionRow } from './TransactionRow';
+import { springs } from '@/lib/animations';
+
+const STAGGER_LIMIT = 10;
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -44,14 +48,26 @@ export function TransactionList({
 
   return (
     <div>
-      {transactions.map((tx) => (
-        <TransactionRow
-          key={tx.id}
-          tx={tx}
-          onClick={() => onTransactionClick(tx)}
-          selected={tx.id === selectedTransactionId}
-        />
-      ))}
+      <AnimatePresence>
+        {transactions.map((tx, index) => (
+          <motion.div
+            key={tx.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+            transition={{
+              ...springs.gentle,
+              delay: index < STAGGER_LIMIT ? index * 0.04 : 0,
+            }}
+          >
+            <TransactionRow
+              tx={tx}
+              onClick={() => onTransactionClick(tx)}
+              selected={tx.id === selectedTransactionId}
+            />
+          </motion.div>
+        ))}
+      </AnimatePresence>
       {hasMore && (
         <div ref={observerRef} className="py-4 text-center text-muted text-xs">
           {isLoading ? 'Loading...' : 'Load more'}

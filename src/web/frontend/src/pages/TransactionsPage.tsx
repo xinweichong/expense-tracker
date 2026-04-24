@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TransactionList } from '@/components/transactions/TransactionList';
@@ -9,6 +10,7 @@ import { TransactionDetail } from '@/components/transactions/TransactionDetail';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { useCategories } from '@/hooks/useCategories';
 import { api, type Transaction } from '@/api/client';
+import { slideInRightVariants, fadeUpVariants } from '@/lib/animations';
 import { Plus } from 'lucide-react';
 
 const PAGE_SIZE = 20;
@@ -111,10 +113,19 @@ export function TransactionsPage() {
         />
 
         {showForm && (
-          <TransactionForm
-            categories={categories ?? []}
-            onClose={() => setShowForm(false)}
-          />
+          <AnimatePresence>
+            <motion.div
+              variants={fadeUpVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+            >
+              <TransactionForm
+                categories={categories ?? []}
+                onClose={() => setShowForm(false)}
+              />
+            </motion.div>
+          </AnimatePresence>
         )}
 
         <Card className="overflow-hidden">
@@ -130,14 +141,22 @@ export function TransactionsPage() {
       </div>
 
       {/* Right: transaction detail panel */}
-      {selectedTransaction && (
-        <div className="w-full md:w-96 border-l border-border bg-card flex-shrink-0 overflow-hidden">
-          <TransactionDetail
-            transaction={selectedTransaction}
-            onClose={() => navigate('/transactions')}
-          />
-        </div>
-      )}
+      <AnimatePresence>
+        {selectedTransaction && (
+          <motion.div
+            className="w-full md:w-96 border-l border-border bg-card flex-shrink-0 overflow-hidden"
+            variants={slideInRightVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            <TransactionDetail
+              transaction={selectedTransaction}
+              onClose={() => navigate('/transactions')}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

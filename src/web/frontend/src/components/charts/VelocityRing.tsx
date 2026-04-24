@@ -1,4 +1,6 @@
 import { formatCurrency } from '@/lib/utils';
+import { motion } from 'framer-motion';
+import { springs } from '@/lib/animations';
 
 interface VelocityData {
   current_mtd: number;
@@ -27,11 +29,13 @@ export function VelocityRing({ data }: { data: VelocityData }) {
       <div className="relative w-32 h-32 shrink-0">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 140 140">
           <circle cx="70" cy="70" r={radius} fill="none" stroke="#2A2A32" strokeWidth="8" />
-          <circle
+          <motion.circle
             cx="70" cy="70" r={radius} fill="none"
             stroke={color} strokeWidth="8" strokeLinecap="round"
             strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
+            initial={{ strokeDashoffset: circumference }}
+            animate={{ strokeDashoffset }}
+            transition={springs.gentle}
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">

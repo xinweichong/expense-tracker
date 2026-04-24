@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
@@ -15,6 +16,7 @@ import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
 import { StatCard, PageCard } from '@/components/ui/cards';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
+import { springs, staggerContainerVariants, staggerItemVariants, AnimatedCurrency } from '@/lib/animations';
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -99,7 +101,7 @@ function HealthScoreCard() {
 
   const r = 22;
   const circ = 2 * Math.PI * r;
-  const filled = (score / 100) * circ;
+  const strokeDashoffset = circ - (score / 100) * circ;
 
   const topWeakness = data.components
     ? Object.values(data.components).sort((a, b) => (a.score / a.max) - (b.score / b.max))[0]
@@ -114,13 +116,16 @@ function HealthScoreCard() {
         {/* Score ring */}
         <svg width="56" height="56" className="shrink-0">
           <circle cx="28" cy="28" r={r} fill="none" stroke="#2A2A32" strokeWidth="4" />
-          <circle
+          <motion.circle
             cx="28" cy="28" r={r} fill="none"
             stroke={ringColor}
             strokeWidth="4"
-            strokeDasharray={`${filled} ${circ}`}
+            strokeDasharray={circ}
             strokeLinecap="round"
             transform="rotate(-90 28 28)"
+            initial={{ strokeDashoffset: circ }}
+            animate={{ strokeDashoffset }}
+            transition={springs.gentle}
           />
           <text x="28" y="32" textAnchor="middle" fontSize="11" fontWeight="700" fill="#E8E8ED">
             {score}
@@ -272,142 +277,165 @@ export function OverviewPage() {
       </div>
 
       {/* ── Left panel: stats + health + budget/goals + charts ── */}
-      <div className="area-left grid-scroll-panel space-y-4">
+      <motion.div
+        className="area-left grid-scroll-panel space-y-4"
+        variants={staggerContainerVariants}
+        initial="initial"
+        animate="animate"
+      >
 
         {/* Balance Cards */}
-        <div className="grid grid-cols-2 gap-4">
-          <StatCard label="Spent" value={formatCurrency(expenses)} variant="expense" />
-          <StatCard label="Income" value={formatCurrency(income)} variant="income" />
-        </div>
+        <motion.div variants={staggerItemVariants}>
+          <div className="grid grid-cols-2 gap-4">
+            <StatCard label="Spent" value={<AnimatedCurrency value={expenses} />} variant="expense" />
+            <StatCard label="Income" value={<AnimatedCurrency value={income} />} variant="income" />
+          </div>
+        </motion.div>
 
         {/* Active trip */}
-        {settings?.trips_enabled && <ActiveTripCard />}
+        {settings?.trips_enabled && (
+          <motion.div variants={staggerItemVariants}>
+            <ActiveTripCard />
+          </motion.div>
+        )}
 
         {/* Budget Summary */}
         {settings?.budgets_enabled && budgetProgress.length > 0 && (
-          <PageCard
-            title="Budget Summary"
-            action={
-              <Link to="/finance" className="text-xs text-muted hover:text-foreground">
-                Manage Budgets →
-              </Link>
-            }
-          >
-            {budgetProgress.every((b: BudgetProgress) => b.status === 'on_track') ? (
-              <p className="text-sm text-success">All budgets on track.</p>
-            ) : (
-              <div className="space-y-2">
-                {budgetProgress
-                  .filter((b: BudgetProgress) => b.status !== 'on_track')
-                  .map((b: BudgetProgress) => (
-                    <div key={b.id} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-foreground">
-                          {b.label}{' '}
-                          <span className="text-muted capitalize">({b.period})</span>
-                        </span>
-                        <span className={b.status === 'over_budget' ? 'text-destructive' : 'text-warning'}>
-                          {b.percent.toFixed(0)}%
-                        </span>
+          <motion.div variants={staggerItemVariants}>
+            <PageCard
+              title="Budget Summary"
+              action={
+                <Link to="/finance" className="text-xs text-muted hover:text-foreground">
+                  Manage Budgets →
+                </Link>
+              }
+            >
+              {budgetProgress.every((b: BudgetProgress) => b.status === 'on_track') ? (
+                <p className="text-sm text-success">All budgets on track.</p>
+              ) : (
+                <div className="space-y-2">
+                  {budgetProgress
+                    .filter((b: BudgetProgress) => b.status !== 'on_track')
+                    .map((b: BudgetProgress) => (
+                      <div key={b.id} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-foreground">
+                            {b.label}{' '}
+                            <span className="text-muted capitalize">({b.period})</span>
+                          </span>
+                          <span className={b.status === 'over_budget' ? 'text-destructive' : 'text-warning'}>
+                            {b.percent.toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
+                          <motion.div
+                            className={`h-full rounded-full ${b.status === 'over_budget' ? 'bg-destructive' : 'bg-warning'}`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(b.percent, 100)}%` }}
+                            transition={springs.gentle}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${b.status === 'over_budget' ? 'bg-destructive' : 'bg-warning'}`}
-                          style={{ width: `${Math.min(b.percent, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </PageCard>
+                    ))}
+                </div>
+              )}
+            </PageCard>
+          </motion.div>
         )}
 
         {/* Goals Summary */}
         {settings?.goals_enabled && goalProgress.length > 0 && (
-          <PageCard
-            title="Goals Summary"
-            action={
-              <Link to="/finance" className="text-xs text-muted hover:text-foreground">
-                Manage Goals →
-              </Link>
-            }
-          >
-            <div className="space-y-3">
-              {(goalProgress as GoalProgress[]).slice(0, 5).map((g) => (
-                <div key={g.id} className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-foreground font-medium">{g.name}</span>
-                    <span className={
-                      g.on_track === 'behind'   ? 'text-destructive' :
-                      g.on_track === 'ahead'    ? 'text-success' :
-                      g.on_track === 'on_track' ? 'text-info' :
-                      'text-muted'
-                    }>
-                      {g.percent.toFixed(0)}%
-                    </span>
+          <motion.div variants={staggerItemVariants}>
+            <PageCard
+              title="Goals Summary"
+              action={
+                <Link to="/finance" className="text-xs text-muted hover:text-foreground">
+                  Manage Goals →
+                </Link>
+              }
+            >
+              <div className="space-y-3">
+                {(goalProgress as GoalProgress[]).slice(0, 5).map((g) => (
+                  <div key={g.id} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-foreground font-medium">{g.name}</span>
+                      <span className={
+                        g.on_track === 'behind'   ? 'text-destructive' :
+                        g.on_track === 'ahead'    ? 'text-success' :
+                        g.on_track === 'on_track' ? 'text-info' :
+                        'text-muted'
+                      }>
+                        {g.percent.toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
+                      <motion.div
+                        className={`h-full rounded-full ${g.percent >= 100 ? 'bg-success' : 'bg-primary'}`}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(g.percent, 100)}%` }}
+                        transition={springs.gentle}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted">
+                      <span>${g.saved_amount.toFixed(0)} of ${g.target_amount.toFixed(0)}</span>
+                      {g.target_date && <span>by {g.target_date}</span>}
+                    </div>
                   </div>
-                  <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${g.percent >= 100 ? 'bg-success' : 'bg-primary'}`}
-                      style={{ width: `${Math.min(g.percent, 100)}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs text-muted">
-                    <span>${g.saved_amount.toFixed(0)} of ${g.target_amount.toFixed(0)}</span>
-                    {g.target_date && <span>by {g.target_date}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </PageCard>
+                ))}
+              </div>
+            </PageCard>
+          </motion.div>
         )}
 
         {/* Health Score */}
-        <HealthScoreCard />
+        <motion.div variants={staggerItemVariants}>
+          <HealthScoreCard />
+        </motion.div>
 
         {/* Charts Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PageCard title="Spending by Category" className="flex flex-col">
-            {categories.length > 0 ? (
-              <>
-                <CategoryDonut data={categories} />
-                <div className="mt-4 space-y-1.5">
-                  {categories.map((c: { category: string; total: number }) => (
-                    <div key={c.category} className="flex items-center gap-2 text-sm min-w-0">
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: getCategoryColor(c.category) }}
-                      />
-                       <span className="min-w-0 truncate text-muted">{c.category}</span>
-                      <span className="ml-auto font-medium shrink-0">{formatCurrency(c.total)}</span>
-                    </div>
-                  ))}
+        <motion.div variants={staggerItemVariants}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <PageCard title="Spending by Category" className="flex flex-col">
+              {categories.length > 0 ? (
+                <>
+                  <CategoryDonut data={categories} />
+                  <div className="mt-4 space-y-1.5">
+                    {categories.map((c: { category: string; total: number }) => (
+                      <div key={c.category} className="flex items-center gap-2 text-sm min-w-0">
+                        <span
+                          className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: getCategoryColor(c.category) }}
+                        />
+                         <span className="min-w-0 truncate text-muted">{c.category}</span>
+                        <span className="ml-auto font-medium shrink-0">{formatCurrency(c.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="h-48 flex items-center justify-center text-muted text-sm">
+                  No spending data for this period
                 </div>
-              </>
-            ) : (
-              <div className="h-48 flex items-center justify-center text-muted text-sm">
-                No spending data for this period
+              )}
+            </PageCard>
+
+            <PageCard
+              title="Daily Spending Trend"
+              className="flex flex-col"
+              contentClassName="flex-1 flex flex-col gap-3 min-h-0"
+            >
+              {trendToggle}
+              <div className="flex-1 min-h-0">
+                {trendMode === 'total'
+                  ? <TrendLine data={trendData} />
+                  : <CategoryTrendLine data={trendByCategoryData} />
+                }
               </div>
-            )}
-          </PageCard>
+            </PageCard>
+          </div>
+        </motion.div>
 
-          <PageCard
-            title="Daily Spending Trend"
-            className="flex flex-col"
-            contentClassName="flex-1 flex flex-col gap-3 min-h-0"
-          >
-            {trendToggle}
-            <div className="flex-1 min-h-0">
-              {trendMode === 'total'
-                ? <TrendLine data={trendData} />
-                : <CategoryTrendLine data={trendByCategoryData} />
-              }
-            </div>
-          </PageCard>
-        </div>
-
-      </div>
+      </motion.div>
 
       {/* ── Right panel: transactions ── */}
       <div className="area-right grid-scroll-panel space-y-4">

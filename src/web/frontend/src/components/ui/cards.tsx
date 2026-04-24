@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { motion } from 'framer-motion';
+import { springs } from '@/lib/animations';
 
 // ── PageCard ──────────────────────────────────────────────────────────────────
 interface PageCardProps {
@@ -54,24 +56,26 @@ const VARIANT_CLASS: Record<StatVariant, string> = {
 
 interface StatCardProps {
   label: string;
-  value: string;
+  value: ReactNode;
   variant?: StatVariant;
 }
 
 export function StatCard({ label, value, variant = 'neutral' }: StatCardProps) {
   const fontSizeClass =
-    value.length >= 10 ? 'text-lg' :
-    value.length >= 8  ? 'text-xl' :
+    typeof value === 'string' && value.length >= 10 ? 'text-lg' :
+    typeof value === 'string' && value.length >= 8  ? 'text-xl' :
     'text-2xl';
 
   return (
-    <Card>
-      <CardHeader className="pb-1">
-        <CardTitle className="text-sm font-medium text-muted">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className={cn(fontSizeClass, 'font-bold truncate', VARIANT_CLASS[variant])}>{value}</p>
-      </CardContent>
-    </Card>
+    <motion.div whileHover={{ y: -2 }} transition={springs.snappy}>
+      <Card>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-sm font-medium text-muted">{label}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className={cn(fontSizeClass, 'font-bold truncate', VARIANT_CLASS[variant])}>{value}</p>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
