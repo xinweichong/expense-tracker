@@ -38,7 +38,7 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
           />
           <Tooltip
             contentStyle={CHART_TOOLTIP_STYLE}
-            formatter={(value) => formatCurrency(Number(value ?? 0))}
+            formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Spent'] as [string, string]}
             labelFormatter={(label) =>
               new Date(String(label)).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
             }

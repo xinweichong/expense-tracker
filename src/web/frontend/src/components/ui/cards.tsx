@@ -8,16 +8,17 @@ interface PageCardProps {
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  contentClassName?: string;
 }
 
-export function PageCard({ title, action, children, className }: PageCardProps) {
+export function PageCard({ title, action, children, className, contentClassName }: PageCardProps) {
   return (
     <Card className={cn(className)}>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base font-medium">{title}</CardTitle>
-        {action}
-      </CardHeader>
-      <CardContent>{children}</CardContent>
+      <div className="flex flex-row items-center justify-between p-4 gap-2">
+        <span className="min-w-0 truncate text-base font-semibold text-foreground">{title}</span>
+        {action && <div className="shrink-0 ml-2">{action}</div>}
+      </div>
+      <CardContent className={cn('p-4 pt-0', contentClassName)}>{children}</CardContent>
     </Card>
   );
 }
@@ -33,10 +34,10 @@ interface ChartCardProps {
 export function ChartCard({ title, action, children, className }: ChartCardProps) {
   return (
     <Card className={cn(className)}>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base font-medium">{title}</CardTitle>
-        {action}
-      </CardHeader>
+      <div className="flex flex-row items-center justify-between p-4 gap-2">
+        <span className="min-w-0 truncate text-base font-semibold text-foreground">{title}</span>
+        {action && <div className="shrink-0 ml-2">{action}</div>}
+      </div>
       <CardContent className="p-0">{children}</CardContent>
     </Card>
   );
@@ -58,13 +59,18 @@ interface StatCardProps {
 }
 
 export function StatCard({ label, value, variant = 'neutral' }: StatCardProps) {
+  const fontSizeClass =
+    value.length >= 10 ? 'text-lg' :
+    value.length >= 8  ? 'text-xl' :
+    'text-2xl';
+
   return (
     <Card>
       <CardHeader className="pb-1">
         <CardTitle className="text-sm font-medium text-muted">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className={cn('text-2xl font-bold', VARIANT_CLASS[variant])}>{value}</p>
+        <p className={cn(fontSizeClass, 'font-bold truncate', VARIANT_CLASS[variant])}>{value}</p>
       </CardContent>
     </Card>
   );
