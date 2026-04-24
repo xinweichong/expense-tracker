@@ -19,35 +19,35 @@ export function CategoryDonut({ data }: { data: CategoryData[] }) {
   const total = data.reduce((sum, d) => sum + d.total, 0);
 
   return (
-    <div>
-      <div className="w-full aspect-square max-w-[220px] mx-auto">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="total"
-              nameKey="category"
-              cx="50%"
-              cy="50%"
-              innerRadius="60%"
-              outerRadius="85%"
-              paddingAngle={2}
-              strokeWidth={0}
-            >
-              {data.map((entry, i) => (
-                <Cell key={i} fill={getCategoryColor(entry.category)} />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={CHART_TOOLTIP_STYLE}
-              formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="text-center -mt-6 relative z-10">
-        <p className="text-xl font-bold">{formatCurrency(total)}</p>
-        <p className="text-xs text-muted">Total spent</p>
+    <div className="relative w-full aspect-square">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            dataKey="total"
+            nameKey="category"
+            cx="50%"
+            cy="50%"
+            innerRadius="60%"
+            outerRadius="85%"
+            paddingAngle={2}
+            strokeWidth={0}
+          >
+            {data.map((entry, i) => (
+              <Cell key={i} fill={getCategoryColor(entry.category)} />
+            ))}
+          </Pie>
+          <Tooltip
+            contentStyle={CHART_TOOLTIP_STYLE}
+            formatter={(value, name) => [formatCurrency(Number(value ?? 0)), name]}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="text-center">
+          <p className="text-xl font-bold">{formatCurrency(total)}</p>
+          <p className="text-xs text-muted">Total spent</p>
+        </div>
       </div>
     </div>
   );

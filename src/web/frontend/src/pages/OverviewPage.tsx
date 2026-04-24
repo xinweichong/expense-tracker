@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -157,9 +157,6 @@ export function OverviewPage() {
 
   const TX_PAGE_SIZE = 20;
   const [txPage, setTxPage] = useState(1);
-  const listRef = useRef<HTMLDivElement>(null);
-  const [isDesktop, setIsDesktop] = useState(false);
-  const [desktopPageSize, setDesktopPageSize] = useState(8);
 
   const { data: summary } = useSummary(start, end);
   const { data: trend } = useTrend(start, end);
@@ -202,43 +199,10 @@ export function OverviewPage() {
     setTxPage(1);
   }, [start, end]);
 
-  // Detect md+ breakpoint
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)');
-    setIsDesktop(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  // ResizeObserver: measure available list height → dynamic page size
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    const measure = () => {
-      const firstRow = el.firstElementChild as HTMLElement | null;
-      const rowH = firstRow ? firstRow.getBoundingClientRect().height : 64;
-      if (rowH === 0) return;
-      const available = el.getBoundingClientRect().height;
-      setDesktopPageSize(prev => {
-        const next = Math.max(1, Math.floor(available / rowH));
-        return next !== prev ? next : prev;
-      });
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Reset to page 1 when desktop page size changes
-  useEffect(() => { setTxPage(1); }, [desktopPageSize]);
-
-  const effectivePageSize = isDesktop ? desktopPageSize : TX_PAGE_SIZE;
-  const totalTxPages = Math.ceil((recentTransactions?.length ?? 0) / effectivePageSize);
+  const totalTxPages = Math.ceil((recentTransactions?.length ?? 0) / TX_PAGE_SIZE);
   const pageTxs = (recentTransactions ?? []).slice(
-    (txPage - 1) * effectivePageSize,
-    txPage * effectivePageSize,
+    (txPage - 1) * TX_PAGE_SIZE,
+    txPage * TX_PAGE_SIZE,
   );
 
   const trendToggle = (
@@ -404,7 +368,7 @@ export function OverviewPage() {
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PageCard title="Spending by Category">
+          <PageCard title="Spending by Category" className="flex flex-col">
             {categories.length > 0 ? (
               <>
                 <CategoryDonut data={categories} />
@@ -428,22 +392,27 @@ export function OverviewPage() {
             )}
           </PageCard>
 
-          <PageCard title="Daily Spending Trend" action={trendToggle}>
-            {trendMode === 'total'
-              ? <TrendLine data={trendData} />
-              : <CategoryTrendLine data={trendByCategoryData} />
-            }
+          <PageCard
+            title="Daily Spending Trend"
+            className="flex flex-col"
+            contentClassName="flex-1 flex flex-col gap-3 min-h-0"
+          >
+            {trendToggle}
+            <div className="flex-1 min-h-0">
+              {trendMode === 'total'
+                ? <TrendLine data={trendData} />
+                : <CategoryTrendLine data={trendByCategoryData} />
+              }
+            </div>
           </PageCard>
         </div>
 
       </div>
 
       {/* ── Right panel: transactions ── */}
-      <div className="area-right grid-scroll-panel md:flex md:flex-col">
+      <div className="area-right grid-scroll-panel space-y-4">
         <PageCard
           title="Transactions"
-          className="md:flex-1 md:flex md:flex-col md:overflow-hidden"
-          contentClassName="md:flex-1 md:overflow-hidden md:min-h-0 md:p-0"
           action={
             totalTxPages > 1 ? (
               <div className="flex items-center gap-1">
@@ -473,7 +442,7 @@ export function OverviewPage() {
           {!recentTransactions || recentTransactions.length === 0 ? (
             <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
           ) : (
-            <div ref={listRef} className="flex flex-col -mx-4 md:h-full md:overflow-hidden">
+            <div className="flex flex-col -mx-4">
               {pageTxs.map((tx: Transaction) => (
                 <TransactionRow key={tx.id} tx={tx} readOnly />
               ))}

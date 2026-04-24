@@ -28,7 +28,7 @@ export function Sidebar() {
           Cashe
         </span>
       </div>
-      <nav className="flex-1 px-3 space-y-1">
+      <nav className="flex-1 px-2 lg:px-3 space-y-1">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
