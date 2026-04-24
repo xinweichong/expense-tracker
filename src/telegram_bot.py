@@ -489,9 +489,9 @@ class TelegramBotService:
                 BotCommand("dashboard",        "Open the web dashboard"),
                 BotCommand("menu",             "Quick action buttons"),
                 BotCommand("help",             "Show all commands"),
-        BotCommand("delete",           "Delete a transaction"),
-        BotCommand("edit",             "Edit a transaction field"),
-        BotCommand("trip",             "Current trip summary (when trips active)"),
+                BotCommand("delete",           "Delete a transaction"),
+                BotCommand("edit",             "Edit a transaction field"),
+                BotCommand("trip",             "Current trip summary (when trips active)"),
             ])
             await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
@@ -990,14 +990,16 @@ class TelegramBotService:
         dest = f" · {self._escape_md(active['destination'])}" if active.get("destination") else ""
         lines = [
             f"✈️ *{self._escape_md(active['name'])}*{dest} \\(Day {days_elapsed}\\)",
-            f"Total: S${summary['total_sgd']:.2f} across {summary['transaction_count']} transactions",
-            f"Daily avg: S${summary['daily_average_sgd']:.2f}",
-            f"Today: S${today_amount:.2f}",
+        ]
+        lines += [
+            self._escape_md(f"Total: S${summary['total_sgd']:.2f} across {summary['transaction_count']} transactions"),
+            self._escape_md(f"Daily avg: S${summary['daily_average_sgd']:.2f}"),
+            self._escape_md(f"Today: S${today_amount:.2f}"),
         ]
         if summary["by_category"]:
-            lines.append("\nTop categories:")
+            lines.append(self._escape_md("\nTop categories:"))
             for cat in summary["by_category"][:3]:
-                lines.append(f"  {cat['category']}: S${cat['amount_sgd']:.2f}")
+                lines.append(self._escape_md(f"  {cat['category']}: S${cat['amount_sgd']:.2f}"))
 
         await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
