@@ -1,6 +1,6 @@
 # Setup Guide — Getting Everything Running
 
-This guide walks you through every step to get the expense tracker fully operational: Telegram bot, Gmail email ingestion, Railway cloud deployment, and configuring which emails are crawled.
+This guide walks you through every step to get Cashe fully operational: Telegram bot, Gmail email ingestion, Railway cloud deployment, and configuring which emails are crawled.
 
 ---
 
@@ -393,7 +393,7 @@ Edit `src/parsers/__init__.py` to import and register it:
 
 ```python
 from src.parsers.mybank import MyBankParser
-ALL_PARSERS = [DbsPaylahParser, UobPaynowParser, MyBankParser]
+ALL_PARSERS = [DbsPaylahParser, UobParser, MyBankParser]
 ```
 
 ### 9.3 Add to main.py
@@ -403,7 +403,7 @@ Edit `src/main.py` to instantiate the parser:
 ```python
 from src.parsers.mybank import MyBankParser
 # ...
-parsers = [DbsPaylahParser(), UobPaynowParser(), MyBankParser()]
+parsers = [DbsPaylahParser(), UobParser(), MyBankParser()]
 ```
 
 ### 9.4 Add Sender Filter

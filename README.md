@@ -1,24 +1,110 @@
-# Automatic Expense Tracker
+<div align="center">
 
-A privacy-first expense tracking engine that automatically captures transactions from bank emails (DBS PayLah!, UOB PayNow, UOB Card) and Apple Wallet notifications. Zero manual input for day-to-day tracking — just spend and review via Telegram or the React web dashboard.
+<img src="cashe-telegram-banner.png" alt="Cashe" width="640" />
 
-## Key Features
+# Cashe
 
-- **Gmail Auto-Ingestion** — Polls DBS PayLah!, UOB PayNow, and UOB Card transaction emails automatically, with HTML body fallback
-- **Apple Wallet Capture** — iOS Shortcut pushes Apple Wallet notifications to your server; card name tracked alongside amount
-- **Source-ID Deduplication** — Every transaction carries a unique `source_id`; cross-source duplicates (Gmail + Apple Wallet) are discarded automatically
-- **Telegram Bot** — Real-time transaction alerts with inline categorisation, spending queries, manual entry, analytics commands, and a daily morning digest
-- **React Web Dashboard** — Full SPA with Overview, Transactions, Analytics, and Settings pages; dark fintech theme, fully responsive
-- **Analytics Engine** — Spending velocity, anomaly/unusual-spend detection, period-over-period comparison, merchant trends, and cached weekly/monthly reports
-- **Auto-Categorisation** — Keyword matching with learned merchant overrides that persist across sessions
-- **Category Management** — Full CRUD via the Settings page with keyword editor, icon and color picker, and merchant override cleanup
-- **Multi-Currency** — Tag foreign currency expenses (e.g. `/add 500 THB street food`), auto-converted to SGD using cached exchange rates
-- **Income Tracking** — Record income alongside expenses, see net balance via `/balance`
-- **Recurring Detection** — Automatically detects subscriptions and regular payments (monthly/weekly)
-- **Cash Tracking** — Quick `/cash` command for offline transactions
-- **Scheduled Reports** — Daily morning digest, weekly and monthly summary delivered via Telegram
-- **Railway Deployment** — Multi-stage Docker build (no Node.js in runtime image), one-click cloud hosting
-- **Privacy-First** — All data stays in your own SQLite database. No third-party data sharing
+### Know where every dollar goes.
+
+A privacy-first personal finance app that **automatically captures every transaction** from your bank emails and Apple Wallet — no manual logging, no subscription fees, no data leaving your server.
+
+[![Version](https://img.shields.io/badge/version-1.0.0-00D4AA?style=flat-square)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-416%20passing-30D158?style=flat-square)](tests/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-3572A5?style=flat-square)](https://python.org)
+[![License](https://img.shields.io/badge/license-private-72727E?style=flat-square)](#license)
+
+</div>
+
+---
+
+## Why Cashe?
+
+Most people don't track their spending — not because they don't care, but because it's too much friction. Cashe removes the friction entirely.
+
+**Transactions captured automatically.** Every DBS PayLah!, UOB PayNow, UOB Card payment, and Apple Wallet tap is ingested and categorised the moment it happens. You never open an app to log anything.
+
+**Your data, your server.** Everything lives in a SQLite database you control. No cloud vendor sees your transactions. No subscription. No lock-in.
+
+**Intelligent, not just transactional.** Cashe tracks budgets, goals, health score, merchant patterns, recurring charges, and trips — so you get a complete picture of your finances, not just a list of debits.
+
+---
+
+<!--
+## Screenshots
+
+> Drop images into `docs/screenshots/` to populate this section. Suggested filenames below.
+
+<table>
+  <tr>
+    <td align="center"><b>Overview</b></td>
+    <td align="center"><b>Transactions</b></td>
+    <td align="center"><b>Analytics</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/overview.png" alt="Overview page" width="280" /></td>
+    <td><img src="docs/screenshots/transactions.png" alt="Transactions page" width="280" /></td>
+    <td><img src="docs/screenshots/analytics.png" alt="Analytics page" width="280" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Finance</b></td>
+    <td align="center"><b>Merchants</b></td>
+    <td align="center"><b>Telegram</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/finance.png" alt="Finance page" width="280" /></td>
+    <td><img src="docs/screenshots/merchants.png" alt="Merchants page" width="280" /></td>
+    <td><img src="docs/screenshots/telegram.png" alt="Telegram bot" width="280" /></td>
+  </tr>
+</table>
+-->
+
+---
+
+## Features
+
+### Automatic Capture
+
+| | |
+|---|---|
+| **Gmail Auto-Ingestion** | Polls DBS PayLah!, UOB PayNow, and UOB Card transaction emails automatically, with HTML body fallback and time extraction |
+| **Apple Wallet Capture** | iOS Shortcut fires on every tap — card name, merchant, amount, and timestamp sent to your server instantly |
+| **Source-ID Deduplication** | Every transaction carries a unique `source_id`; cross-source duplicates (Gmail + Apple Wallet arriving for the same transaction) are discarded automatically |
+| **Multi-Currency** | Foreign currency transactions (e.g. `PLN 3.78`, `£12.50`) auto-converted to SGD using cached exchange rates with offline fallbacks |
+
+### Analytics & Intelligence
+
+| | |
+|---|---|
+| **Financial Health Score** | Composite score from savings rate, spending trends, and needs/wants/neutral category breakdown — see it at a glance on Overview and in full on Analytics |
+| **Spending Velocity** | Daily pace indicator and projected month-end total based on current trajectory |
+| **Merchant Intelligence** | Per-merchant profiles with spend trends, tags (subscription, online, foreign, essential, recurring), notes, and full transaction history |
+| **Anomaly Detection** | Unusual spending flagged in yellow with explanatory labels; new merchants highlighted separately |
+| **Recurring Detection** | Automatically identifies subscriptions and regular payments — monthly, weekly, biweekly |
+| **Period Comparison** | Current vs previous period charts, category-level breakdown, and change percentages |
+
+### Planning
+
+| | |
+|---|---|
+| **Budgets** | Monthly per-category budgets with animated progress bars; Telegram alerts at 80% and 100% |
+| **Financial Goals** | Savings goals with target amounts and dates, manual contributions, progress rings, and Telegram completion notifications |
+| **Trips** | Group any set of transactions into a trip; all new transactions auto-assigned to the active trip across every ingestion path |
+| **Income Tracking** | Record income alongside expenses; see earned / spent / net via `/balance` |
+
+### Interface
+
+| | |
+|---|---|
+| **Telegram Bot** | Real-time alerts with inline categorisation, 15+ commands, guided `/edit` and `/delete` flows, daily 8 am digest, and a `/menu` button grid |
+| **React Web Dashboard** | Six-page SPA — Overview, Transactions, Analytics, Finance, Merchants, Settings — with viewport-native grid layout, framer-motion spring animations, and full PWA support |
+| **Auto-Categorisation** | Keyword matching with learned merchant overrides that persist and hot-reload without a restart |
+| **Category Management** | Full CRUD with keyword editor, icon and colour picker, needs/wants/neutral type classification |
+| **CSV Export** | Download filtered transactions from the Transactions page |
+| **Scheduled Reports** | Daily morning digest, weekly and monthly summary reports via Telegram |
+| **Railway Deployment** | Multi-stage Docker build (no Node.js in runtime image), persistent volume, one-command deploy |
+| **Privacy-First** | All data stays in your own SQLite database. No third-party data sharing. No telemetry |
+
+---
 
 ## Architecture
 
@@ -29,21 +115,28 @@ Gmail API ──poll──> Parser Engine ──> SQLite <──> Telegram Bot
 iOS Shortcut ──POST──> ┘                │              └── Overview
                                         │              └── Transactions
                                         │              └── Analytics
+                                        │              └── Finance (Budgets + Goals)
+                                        │              └── Merchants
                                         └── Auto-categoriser   └── Settings
                                             └── Merchant Overrides
                                             └── Recurring Detector
                                             └── Exchange Rates
+                                            └── Health Score
 ```
 
-Single Python process. SQLite storage with WAL mode. FastAPI for webhooks and dashboard API. React SPA built with Vite, served from `dist/`.
+Single Python process. SQLite with WAL mode. FastAPI for webhooks and the dashboard API. React SPA built with Vite, served from `dist/`.
+
+---
 
 ## Prerequisites
 
 - **Python 3.11+**
-- **Node.js 22+** (only needed to rebuild the frontend — a pre-built `dist/` is included)
+- **Node.js 22+** (only needed to rebuild the frontend — a pre-built `dist/` is committed)
 - **Gmail account** with API credentials (for email ingestion) — see setup guide
 - **Telegram Bot Token** (from [@BotFather](https://t.me/botfather))
 - **A [Railway](https://railway.app/) account** for cloud deployment
+
+---
 
 ## Quick Start
 
@@ -104,6 +197,8 @@ railway up
 
 See [docs/setup-guide.md](docs/setup-guide.md) for the full Railway walkthrough.
 
+---
+
 ## Configuration
 
 All configuration lives in `config.yaml` (gitignored). A template is provided at `config.example.yaml`.
@@ -163,6 +258,8 @@ All config values can be set via environment variables (for Railway or Docker). 
 | `GMAIL_TOKEN_JSON` | Base64-encoded `token.json` |
 | `EXPENSE_DB_PATH` | Path to SQLite database |
 
+---
+
 ## Telegram Commands
 
 ### Viewing Spending
@@ -176,6 +273,7 @@ All config values can be set via environment variables (for Railway or Docker). 
 | `/balance` | Income vs expenses, net position |
 | `/insights` | Top merchants, average daily spend |
 | `/subscriptions` | Detected recurring transactions |
+| `/trip` | Active trip summary with spend breakdown |
 
 ### Analytics
 
@@ -194,6 +292,8 @@ All config values can be set via environment variables (for Railway or Docker). 
 | `/cash <amount> <merchant> [category]` | Quick cash entry | `/cash 5.50 kopi` |
 | `/income <amount> <description> [date]` | Record income | `/income 5000 salary` |
 | `/add 500 THB street food` | Multi-currency (auto-converted to SGD) | — |
+| `/edit` | Edit a recent transaction via guided conversation | — |
+| `/delete` | Delete a recent transaction via guided conversation | — |
 
 ### Category Management
 
@@ -212,9 +312,11 @@ All config values can be set via environment variables (for Railway or Docker). 
 
 All commands support **inline keyboards** — post-command action buttons appear automatically so you can drill deeper without typing follow-up commands. Transaction notifications include an inline category selection grid for instant recategorisation.
 
+---
+
 ## Web Dashboard
 
-Access at `http://your-server:8080`. The dashboard is a React SPA with four pages:
+Access at `http://your-server:8080`. The dashboard is a React SPA with six pages, all using viewport-native CSS Grid layout on desktop (no page-level scroll) with spring animations powered by framer-motion.
 
 ### Overview
 
@@ -222,32 +324,53 @@ Access at `http://your-server:8080`. The dashboard is a React SPA with four page
 - **Hero total** — spending total for the period with income/expense split
 - **Donut chart** — category breakdown with color-coded legend and tinted rows
 - **Trend chart** — daily spending over time; switchable to per-category trend mode
-- **Insights panel** — top merchants and average daily spend
-- **Recent transactions** — latest entries with source/card badges and category icon pills
+- **Health Score card** — composite financial health score with at-a-glance colour indicator
+- **Budget summary card** — progress bars for each active budget (when budgets enabled)
+- **Goals summary card** — savings goals progress (when goals enabled)
+- **Active trip card** — days elapsed, total spend, and category breakdown for the active trip
+- **Income vs expenses chart** — 6-month paired bar chart
+- **Recent transactions** — paginated (20/page) with source/card badges and category icon pills
 
 ### Transactions
 
-- **Filterable list** — filter by category, merchant, or date; sort by date, amount, or category
+- **Filterable list** — filter by category, source, merchant text, or date range; quick-select chips (Today, This week, This month, Last 30 days, Last 3 months, This year); sort by date, amount, or category
 - **Infinite scroll** — loads more as you scroll, no pagination needed
-- **Inline edit** — edit merchant, amount, category, currency, exchange rate, card/source, and date directly in the row
-- **Add transaction form** — expense, income, cash, or multi-currency entry with merchant alias support
-- **Transaction cards** — show SGD equivalent for foreign-currency transactions, source/card badge
+- **Transaction detail panel** — URL-synced side panel (`/transactions/:id`) with edit form, delete, and merchant profile link; action bar always visible (never scrolls off)
+- **Add transaction form** — expense, income, cash, or multi-currency entry with `datetime-local` input
+- **CSV export** — download all transactions matching current filters
 
 ### Analytics
 
+- **Health Score breakdown** — full score card with needs/wants/neutral category breakdown
 - **Period comparison charts** — current vs previous period, category-level breakdown
 - **Spending velocity ring** — daily pace indicator and projected month-end total
 - **Merchant table** — top merchants ranked by spend with period-over-period trend
 - **Unusual spend alerts** — highlighted in yellow with explanatory labels
 - **New merchant alerts** — flags merchants not seen in the previous period
+- **Income vs expenses bar chart** — 6-month income/expense comparison
+
+### Finance
+
+- **Budgets** — create, edit, and delete monthly per-category budgets; animated progress bars; spend and remaining amounts (requires `budgets_enabled` in Settings)
+- **Goals** — savings goals with target amount and date; manual contribution entry with date picker; contribution history with edit/delete; progress rings; auto-complete when target is reached (requires `goals_enabled` in Settings)
+- **Savings overview** — net monthly savings rate and total saved across all goals
+
+### Merchants
+
+- **Merchant list** — all merchants ranked by total spend with sparkline trend
+- **Merchant profile panel** — tags (subscription, online, foreign, essential, recurring), notes, monthly spend chart, and full transaction history with links to transaction detail
 
 ### Settings
 
-- **Category CRUD** — create, edit, and delete categories with keyword editor, icon picker, and unique color picker
+- **Category CRUD** — create, edit, and delete categories with keyword editor, icon picker, unique color picker, and needs/wants/neutral type classification
 - **Merchant overrides** — view and delete learned merchant-to-category mappings
+- **Feature toggles** — enable/disable budgets, goals, trips
+- **Alert thresholds** — configure unusual-spend and budget alert sensitivity
 - **Live reload** — changes take effect immediately without restarting the server
 
-The dashboard is **fully responsive** (iPhone, iPad, desktop) and **PWA-ready** — "Add to Home Screen" opens fullscreen on iOS.
+The dashboard is **fully responsive** (iPhone, iPad, desktop), **PWA-ready** — "Add to Home Screen" opens fullscreen on iOS — and **animated** with framer-motion spring transitions throughout.
+
+---
 
 ## iOS Shortcut Setup (Apple Wallet Auto-Capture)
 
@@ -312,6 +435,8 @@ The server handles all currency parsing automatically — iOS sends the raw amou
    - Send `/today` to the Telegram bot
 4. Expect to refine over the first few purchases
 
+---
+
 ## Testing
 
 ```bash
@@ -319,7 +444,9 @@ pip install -r requirements-dev.txt
 python3 -m pytest tests/ -v
 ```
 
-All tests use in-memory SQLite — no database files created on disk. 206 tests across all modules.
+All tests use in-memory SQLite — no database files created on disk. 416 tests across all modules.
+
+---
 
 ## Project Structure
 
@@ -328,7 +455,7 @@ expense-tracker/
 ├── src/
 │   ├── main.py              # Entry point — starts all services, runs DB migrations
 │   ├── config.py            # Config loader + env-var fallback
-│   ├── storage.py           # SQLite CRUD, queries, insights, income, overrides
+│   ├── storage.py           # SQLite CRUD, queries, insights, income, overrides, budgets, goals, trips, merchants, health score
 │   ├── categorizer.py       # Keyword matching + merchant overrides
 │   ├── analytics.py         # Velocity, anomaly detection, comparison, merchant trends, reports
 │   ├── gmail_poller.py      # Gmail API polling + HTML extraction
@@ -338,26 +465,37 @@ expense-tracker/
 │   ├── recurring.py         # Recurring transaction detection
 │   ├── parsers/
 │   │   ├── base.py          # BankParser abstract class
-│   │   ├── dbs_paylah.py    # DBS PayLah! email parser
-│   │   ├── uob_paynow.py    # UOB PayNow email parser
-│   │   ├── uob_card.py      # UOB Card email parser (incl. transit transactions)
+│   │   ├── dbs_paylah.py    # DBS PayLah! email parser (with time extraction)
+│   │   ├── uob.py           # UOB PayNow + UOB Card unified parser (5 patterns, time extraction)
 │   │   └── apple_wallet.py  # Apple Wallet webhook parser
 │   └── web/
 │       ├── app.py           # FastAPI routes — dashboard API + SPA serving
 │       ├── auth.py          # bcrypt auth + session cookies
 │       ├── dist/            # Pre-built React SPA (committed, served by FastAPI)
-│       └── frontend/        # React source (Vite + Tailwind + shadcn/ui)
+│       └── frontend/        # React source (Vite + Tailwind + shadcn/ui + framer-motion)
 │           ├── src/
 │           │   ├── pages/
 │           │   │   ├── OverviewPage.tsx
 │           │   │   ├── TransactionsPage.tsx
 │           │   │   ├── AnalyticsPage.tsx
+│           │   │   ├── FinancePage.tsx
+│           │   │   ├── MerchantsPage.tsx
 │           │   │   └── SettingsPage.tsx
-│           │   ├── components/  # Shared UI components
+│           │   ├── components/  # Shared UI components (TransactionDetail, ActiveTripCard, …)
+│           │   ├── lib/         # chartTheme.ts, utils.ts
 │           │   ├── api/         # API client layer
 │           │   └── hooks/       # Data-fetching hooks (React Query)
 │           └── vite.config.ts
-├── tests/                   # 206 tests, all in-memory SQLite
+├── tests/                   # 416 tests, all in-memory SQLite
+│   ├── test_storage.py
+│   ├── test_parsers.py
+│   ├── test_analytics.py
+│   ├── test_health_score.py
+│   ├── test_trips.py
+│   ├── test_budgets.py
+│   ├── test_goals.py
+│   ├── test_merchants.py
+│   └── …
 ├── scripts/
 │   └── gmail_auth.py        # One-time Gmail OAuth flow
 ├── Dockerfile               # Multi-stage build — Node builds frontend, Python runs it
@@ -368,6 +506,8 @@ expense-tracker/
 │   └── setup-guide.md       # Detailed setup + troubleshooting
 └── CHANGELOG.md
 ```
+
+---
 
 ## Troubleshooting
 
@@ -424,6 +564,8 @@ expense-tracker/
 | Gmail not working | Verify `GMAIL_CREDENTIALS_JSON` and `GMAIL_TOKEN_JSON` are base64-encoded correctly: `base64 -i credentials.json` |
 | Database resets on deploy | Add a persistent volume mounted at `/data` and set `EXPENSE_DB_PATH=/data/expense_tracker.db` |
 
+---
+
 ## Git Workflow
 
 ```
@@ -434,11 +576,15 @@ feature/xxx ──merge --no-ff──> develop ──test──> main (tagged re
 - **develop** — integration testing branch, merge commits required (`--no-ff`)
 - **main** — production releases only, each tagged with a version number
 
+---
+
 ## Documentation
 
 - **[docs/setup-guide.md](docs/setup-guide.md)** — Full setup walkthrough with Telegram, Gmail, Railway, and troubleshooting
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history
 - **[AGENTS.md](AGENTS.md)** — AI agent context and architecture notes
+
+---
 
 ## License
 

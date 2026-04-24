@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-04-25
+
+### Added
+
+- **Budget system** — `budgets` table with CRUD, per-category spend-progress calculation, and `budgets_enabled` feature toggle; Finance tab in the dashboard with a dedicated budgets section and an Overview budget summary card; Telegram alerts at 80% and 100% threshold crossings
+- **Financial goals** — `goals` and `goal_contributions` tables; goal CRUD with target amount, target date, and status; manual contributions with `contributed_date` and full edit/delete history; monthly savings auto-contribute scheduler with Telegram completion notification; progress rings and savings overview in the Finance tab; goals summary card on Overview; `goals_enabled` feature toggle
+- **Financial Health Score** — composite score computed from savings rate, spending trends, and needs/wants/neutral category classification; `get_health_score()` storage method; `GET /api/health-score` endpoint; compact score card on Overview; full breakdown panel on Analytics; category type editor (needs / wants / neutral) in Settings; `categories.type` column
+- **Trips** — `trips` and `trip_transactions` tables; trip CRUD with activate/deactivate, end-date, and daily elapsed tracking; transactions auto-assigned to the active trip across all ingestion paths (Gmail, Apple Wallet, Telegram, web); `trips_enabled` feature toggle; `/trip` Telegram command shows active trip summary with spend breakdown; trip context injected into transaction notifications; `TripsPage` with `TripRow` list, bidirectional toggle, pagination, and end-date field; `ActiveTripCard` on Overview left panel; trip membership shown in `TransactionDetail`
+- **Merchant Intelligence** — `merchant_tags` table; merchant storage methods for list, profile, tags, notes, and monthly trend; merchant intelligence API (`/api/merchant-intelligence/*`); `MerchantsPage` with split-panel profile view, transaction history, and sparkline chart; merchant link in `TransactionRow`; merchant tags: subscription, online, foreign, essential, recurring
+- **Transaction Detail panel** — `TransactionDetail` side panel with URL-synced routing (`/transactions/:transactionId`); persistent action bar (edit/delete) pinned above the scrollable body; `MerchantProfile` panel with full transaction history and navigation links; clicking an active merchant row toggles the panel closed
+- **Timestamp completeness** — time extracted from DBS PayLah! `Date & Time` field and UOB emails; `datetime-local` input in the web transaction form; transaction time displayed in the UI and Telegram notifications; bare `YYYY-MM-DD` dates normalised to `T00:00:00`; `/add`, `/cash`, and `/income` accept `YYYY-MM-DD HH:MM` format
+- **Frontend design system** — centralised `chartTheme.ts` (tooltip, axis, cursor, legend, colour constants); three-tier card system (`Card`, `PageCard`/`ChartCard`/`StatCard` in `cards.tsx`); CSS utility classes: `.input-field`, `.btn-action`, `.select-field`, `.grid-scroll-panel`, `.area-*`, `.page-grid-*`
+- **Viewport-native grid layout** — all four dashboard pages use viewport-filling CSS Grid on `md+` screens with no page-level scroll; per-page `.page-grid-*` templates defined in `index.css`; Persistent Chrome Rule enforced — action bars pinned outside scroll areas in `TransactionDetail` and `MerchantProfile`; `.grid-scroll-panel` utility (`overflow-y: auto; min-height: 0`) applied to all scrollable grid children; paginated transaction list on Overview (page size 20)
+- **Cashe rebrand** — app renamed to Cashe with abstract SVG mark logo; redesigned login screen with branding and slogan; full favicon and PWA icon coverage for all platforms (16×16 to 512×512, maskable, apple-touch-icon)
+- **framer-motion animations** — spring SVG rings and progress bars in the Health Score card; count-up stats with spring easing; staggered list entry in `TransactionList`; spring slide-in for detail panels; page transitions; BottomTabs drawer spring; hover-lift on interactive cards; `LoginScreen` entrance animation; `ColorPicker` spring
+- **Phase 1 enhancements** — `/delete` and `/edit` conversation handlers in the Telegram bot; CSV export endpoint (`GET /api/transactions/export`) and Export CSV button on the Transactions page; date range filter with quick-select chips (Today, This week, This month, Last 30 days, Last 3 months, This year) on the Transactions page; configurable alert thresholds stored in `app_settings` with a Settings page UI; `app_settings` table with `get_setting`/`set_setting` storage methods; income vs expenses 6-month bar chart on Overview; biweekly recurring transaction detection (13–17 day intervals)
+- **Income vs expense chart** — `IncomeExpenseBar` component on the Analytics page showing a 6-month paired bar chart with income/expense colour coding
+
+### Changed
+
+- **UOB parsers consolidated** — `uob_paynow.py` and `uob_card.py` merged into a single `src/parsers/uob.py` (`UobParser`) with 5 email patterns and a `can_parse` collision bug fixed
+- **Overview layout** — removed `ResizeObserver` and nested flex/overflow chains; replaced with clean CSS grid; `StatCard` font size scales dynamically; transaction panel fills grid height with dynamic pagination
+- **Transaction list** — `TransactionRow` simplified to remove inline edit, source/FX badges, and merchant click; all editing moved to the `TransactionDetail` panel
+- **Income in Telegram summaries** — income transactions marked distinctly in all summary views (`/today`, `/week`, `/month`); UOB income transactions trigger a "Received" notification
+- **Railway URL auto-config** — dashboard URL auto-derived from `RAILWAY_PUBLIC_DOMAIN` env var; `/dashboard` command and help text updated automatically
+- **Merchant tags** — replaced with a curated set: subscription, online, foreign, essential, recurring
+- **Daily digest timing** — corrected to 8 am SGT via explicit APScheduler timezone configuration
+- **Finance tab navigation** — locked state in Sidebar and mobile More drawer redirects to Settings `#feature-toggles` with smooth scroll when budgets/goals are disabled
+
+### Fixed
+
+- Segmented toggle styling applied consistently to transaction type selector
+- 7 narrow/mobile viewport bugs (sidebar icon rail at `md`, card header flex constraints, `StatCard` font size, category legend truncation, and more)
+- Toggle thumb positioning in `TripCard` matching the `SettingsPage` pattern
+- Trip transaction rows: symmetric side padding and full card width
+- MarkdownV2 reserved character escaping in `/trip` output
+- `auto_assign_to_active_trip` wrapped as best-effort in the webhook path so a trip error never loses a transaction
+- `daysElapsed` in `ActiveTripCard` uses local date arithmetic
+- Donut container uses explicit `h-[220px]` for reliable centre text alignment on mobile
+- `deactivate_trip` API returns 404 on unknown trip ID
+- `uob_transfer` added to Telegram `SOURCE_LABELS`
+- `MerchantProfile` header pinned outside scroll area (Persistent Chrome Rule)
+- `IncomeExpenseBar` colours aligned to design tokens (`#30D158` income, `#FF453A` expense)
+- Timezone-aware date queries using `local_now()` throughout — fixes wrong-day results for SGT users on Railway (UTC)
+- Gmail poller skips insert when a cross-source duplicate already exists (Apple Wallet arrives before email)
+- Safe area insets for bottom navigation on devices with curved corners
+
+### Tests
+
+- 416 tests passing (up from 206 in v0.3.0)
+- New test files: `test_health_score.py`, `test_trips.py`, `test_budgets.py`, `test_goals.py`, `test_merchants.py`
+
 ## [0.3.0] - 2026-04-23
 
 ### Added
