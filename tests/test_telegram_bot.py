@@ -31,6 +31,41 @@ class TestParseAddCommand:
         assert result is None
 
 
+class TestFormatTxBlock:
+    def test_expense_no_prefix(self, bot_service):
+        tx = {
+            "id": 1, "merchant": "Toast Box", "category": "Food",
+            "amount": 12.50, "currency": "SGD", "exchange_rate": 1.0,
+            "transaction_date": "2026-04-16T12:00:00", "source": "uob_card",
+            "description": None, "type": "expense",
+        }
+        text = bot_service._format_tx_block(tx)
+        assert "💰" not in text
+        assert "`$12.50 SGD`" in text
+
+    def test_income_shows_money_icon_and_plus(self, bot_service):
+        tx = {
+            "id": 2, "merchant": "PayNow", "category": "Income",
+            "amount": 951.90, "currency": "SGD", "exchange_rate": 1.0,
+            "transaction_date": "2026-04-24T14:47:00", "source": "uob_paynow",
+            "description": None, "type": "income",
+        }
+        text = bot_service._format_tx_block(tx)
+        assert "💰" in text
+        assert "`+$951.90 SGD`" in text
+
+    def test_income_foreign_currency_shows_plus(self, bot_service):
+        tx = {
+            "id": 3, "merchant": "Gopay-Gojek", "category": "Other",
+            "amount": 23.70, "currency": "IDR", "exchange_rate": 0.0001,
+            "transaction_date": "2026-03-20T17:28:00", "source": "uob_card",
+            "description": None, "type": "income",
+        }
+        text = bot_service._format_tx_block(tx)
+        assert "💰" in text
+        assert "`+$" in text
+
+
 class TestFormatSummary:
     def test_format_daily_summary(self, bot_service, in_memory_db):
         in_memory_db.execute(

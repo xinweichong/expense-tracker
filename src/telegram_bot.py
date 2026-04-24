@@ -192,18 +192,21 @@ class TelegramBotService:
         rate      = float(tx.get("exchange_rate") or 1.0)
         tx_date   = _fmt_tx_date(tx.get("transaction_date"))
         tx_id     = tx.get("id", "?")
+        is_income = tx.get("type") == "income"
         raw_source = str(tx.get("source", "unknown"))
         if raw_source == "apple_wallet" and str(tx.get("description", "")).startswith("Apple Wallet"):
             source_label = self._escape_md(str(tx.get("description", "Apple Wallet")))
         else:
             source_label = self._escape_md(SOURCE_LABELS.get(raw_source, raw_source))
 
-        lines = [f"*{merchant}* · {cat_display}"]
+        row_prefix = "💰 " if is_income else ""
+        amt_prefix = "+" if is_income else ""
+        lines = [f"{row_prefix}*{merchant}* · {cat_display}"]
         if currency != "SGD" and rate != 1.0:
             sgd = amount * rate
-            lines.append(f"`${sgd:.2f} SGD` `({currency} {amount:.2f})` · {source_label}")
+            lines.append(f"`{amt_prefix}${sgd:.2f} SGD` `({currency} {amount:.2f})` · {source_label}")
         else:
-            lines.append(f"`${amount:.2f} {currency}` · {source_label}")
+            lines.append(f"`{amt_prefix}${amount:.2f} {currency}` · {source_label}")
         lines.append(f"_{tx_id} · {tx_date}_")
         return "\n".join(lines)
 
