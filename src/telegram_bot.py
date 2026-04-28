@@ -1376,7 +1376,7 @@ class TelegramBotService:
         today = _now.strftime("%Y-%m-%d")
 
         # Yesterday's total
-        yesterday_txs = self.storage.query_transactions(start_date=yesterday, end_date=yesterday)
+        yesterday_txs = self.storage.query_transactions(start_date=yesterday, end_date=yesterday, limit=10_000)
         yesterday_total = sum(
             tx["amount"] * (tx.get("exchange_rate") or 1)
             for tx in yesterday_txs if tx["type"] == "expense"
@@ -1384,7 +1384,7 @@ class TelegramBotService:
 
         # Month to date
         month_start = _now.replace(day=1).strftime("%Y-%m-%d")
-        month_txs = self.storage.query_transactions(start_date=month_start, end_date=today)
+        month_txs = self.storage.query_transactions(start_date=month_start, end_date=today, limit=10_000)
         month_total = sum(
             tx["amount"] * (tx.get("exchange_rate") or 1)
             for tx in month_txs if tx["type"] == "expense"
