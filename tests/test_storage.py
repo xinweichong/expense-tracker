@@ -678,3 +678,28 @@ class TestAppSettings:
         storage.set_setting("velocity_alert_threshold", "110")
         storage.set_setting("velocity_alert_threshold", "125")
         assert storage.get_setting("velocity_alert_threshold") == "125"
+
+
+def test_get_budget_progress_includes_null_type_rows(in_memory_db):
+    """Pre-migration rows (type IS NULL) must count toward budget spend."""
+    from src.storage import Storage
+    s = Storage(in_memory_db)
+
+    # Insert a pre-migration row with NULL type
+    in_memory_db.execute("""
+        INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+            merchant, category, transaction_date, type)
+        VALUES ('manual', 'null-type-1', 50.0, 'SGD', 1.0,
+            'Old Merchant', 'Food', '2026-04-01T10:00:00', NULL)
+    """)
+    in_memory_db.execute("""
+        INSERT INTO budgets (category, period, amount) VALUES ('Food', 'monthly', 200.0)
+    """)
+    in_memory_db.commit()
+
+    progress = s.get_budget_progress()
+    food_budget = next(b for b in progress if b["category"] == "Food")
+    assert food_budget["spent"] == 50.0, (
+        f"Expected 50.0 but got {food_budget['spent']} — NULL-type row was excluded"
+    )
+

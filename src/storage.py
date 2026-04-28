@@ -633,14 +633,15 @@ class Storage:
                 spent_row = self.conn.execute(
                     """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                        FROM transactions
-                       WHERE type = 'expense' AND DATE(transaction_date) BETWEEN ? AND ?""",
+                       WHERE (type IS NULL OR type = 'expense')
+                         AND DATE(transaction_date) BETWEEN ? AND ?""",
                     (start, end),
                 ).fetchone()
             else:
                 spent_row = self.conn.execute(
                     """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                        FROM transactions
-                       WHERE type = 'expense' AND category = ?
+                       WHERE (type IS NULL OR type = 'expense') AND category = ?
                          AND DATE(transaction_date) BETWEEN ? AND ?""",
                     (b["category"], start, end),
                 ).fetchone()
