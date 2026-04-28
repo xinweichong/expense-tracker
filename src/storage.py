@@ -951,7 +951,7 @@ class Storage:
         # ── Total expenses ───────────────────────────────────────────────────
         total_expense = self.conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0.0)
-               FROM transactions WHERE type = 'expense'
+               FROM transactions WHERE (type IS NULL OR type = 'expense')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()[0]

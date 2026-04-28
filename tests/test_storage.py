@@ -703,3 +703,37 @@ def test_get_budget_progress_includes_null_type_rows(in_memory_db):
         f"Expected 50.0 but got {food_budget['spent']} — NULL-type row was excluded"
     )
 
+
+def test_get_health_score_includes_null_type_in_total_expense(in_memory_db):
+    """NULL-type (pre-migration) transactions must be counted as expenses in health score."""
+    from src.storage import Storage
+    s = Storage(in_memory_db)
+
+    # Seed income so the score can compute
+    in_memory_db.execute("""
+        INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+            merchant, category, transaction_date, type)
+        VALUES ('manual', 'income-1', 1000.0, 'SGD', 1.0,
+            'Employer', 'Income', '2026-04-01T10:00:00', 'income')
+    """)
+    # Pre-migration expense row with NULL type
+    in_memory_db.execute("""
+        INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+            merchant, category, transaction_date, type)
+        VALUES ('manual', 'null-exp-1', 800.0, 'SGD', 1.0,
+            'Old Shop', 'Shopping', '2026-04-02T10:00:00', NULL)
+    """)
+    in_memory_db.commit()
+
+    result = s.get_health_score(months=1)
+    assert result["has_income_data"] is True
+    # With income=1000 and expense=800, savings_rate = 0.20 → savings_score = 40
+    # But if NULL row excluded, expenses=0, savings_rate=1.0 → savings_score=40 (same max)
+    # Distinguish by checking the actual component value
+    savings_component = result["components"]["savings_rate"]
+    # savings_rate = (1000 - 800) / 1000 = 0.20 when NULL row is included
+    assert abs(savings_component["value"] - 0.200) < 0.01, (
+        f"Expected savings_rate ≈ 0.20 but got {savings_component['value']} "
+        "— NULL-type expense row was excluded from total_expense"
+    )
+
