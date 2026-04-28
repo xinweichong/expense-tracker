@@ -314,6 +314,8 @@ def main():
         categorizer=categorizer, exchange_service=exchange_service,
         dashboard_url=dashboard_url,
         timezone=config.get("timezone", "Asia/Singapore"),
+        poller=poller,
+        oauth_redirect_uri=os.environ.get("OAUTH_REDIRECT_URI", f"{dashboard_url.rstrip('/')}/oauth/callback"),
     )
 
     # Build combined FastAPI app
@@ -331,7 +333,7 @@ def main():
         app.routes.append(route)
 
     # Mount dashboard
-    dashboard_app = create_dashboard_app(storage, config.get("web", {}).get("password_hash", ""))
+    dashboard_app = create_dashboard_app(storage, config.get("web", {}).get("password_hash", ""), poller=poller)
     app.mount("/", dashboard_app)
 
     host = server_config.get("host", "0.0.0.0")

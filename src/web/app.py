@@ -43,8 +43,26 @@ SUMMARY_CACHE_DIR = os.environ.get(
 )
 
 
-def create_dashboard_app(storage: Storage, password_hash: str) -> FastAPI:
+def create_dashboard_app(storage: Storage, password_hash: str, poller=None) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
+
+    @app.get("/oauth/callback")
+    async def oauth_callback(request: Request):
+        if poller is None:
+            return Response(content="<h2>Gmail not configured.</h2>", media_type="text/html", status_code=404)
+        code = request.query_params.get("code")
+        state = request.query_params.get("state")
+        if not code or not state:
+            return Response(content="<h2>Missing code or state.</h2>", media_type="text/html", status_code=400)
+        try:
+            poller.complete_reauth(code, state)
+            return Response(
+                content="<h2>Gmail re-authenticated successfully. You can close this tab.</h2>",
+                media_type="text/html",
+            )
+        except Exception as e:
+            logger.error(f"OAuth callback failed: {e}")
+            return Response(content=f"<h2>Re-authentication failed: {e}</h2>", media_type="text/html", status_code=400)
 
     @app.post("/api/login")
     async def login(request: Request):

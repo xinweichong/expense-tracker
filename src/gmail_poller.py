@@ -8,6 +8,7 @@ from typing import Callable, Optional
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from src.parsers.base import BankParser, ParseResult
@@ -36,6 +37,8 @@ class GmailPoller:
         self.storage = storage
         self.on_transaction = on_transaction
         self.service = None
+        self._pending_flow = None
+        self._pending_state = None
 
     def authenticate(self) -> None:
         creds = None
@@ -220,8 +223,53 @@ class GmailPoller:
             logger.warning("Recurring detection failed for %s: %s", result.merchant, e)
         return tx_id
 
-    def poll_loop(self, interval_seconds: int = 120) -> None:
+    def start_reauth(self, redirect_uri: str) -> str:
+        """Generate an OAuth authorization URL. Stores the flow for complete_reauth()."""
+        flow = Flow.from_client_secrets_file(
+            self.credentials_path,
+            scopes=SCOPES,
+            redirect_uri=redirect_uri,
+        )
+        auth_url, state = flow.authorization_url(access_type="offline", prompt="consent")
+        self._pending_flow = flow
+        self._pending_state = state
+        return auth_url
+
+    def complete_reauth(self, code: str, state: str) -> None:
+        """Exchange authorization code for tokens, save, and reinitialize the service."""
+        if not self._pending_flow:
+            raise RuntimeError("No pending OAuth flow. Call start_reauth() first.")
+        if state != self._pending_state:
+            raise ValueError("OAuth state mismatch.")
+        self._pending_flow.fetch_token(code=code)
+        creds = self._pending_flow.credentials
+        with open(self.token_path, "w") as f:
+            f.write(creds.to_json())
+        self._pending_flow = None
+        self._pending_state = None
         self.authenticate()
+        logger.info("Gmail re-authenticated via OAuth callback")
+
+    def force_poll(self) -> int:
+        """Run a single poll cycle. Returns the number of new transactions ingested."""
+        results = self.poll_once()
+        count = 0
+        for result in results:
+            try:
+                tx_id = self._save_and_detect(result)
+                if tx_id is not None:
+                    count += 1
+                    if self.on_transaction:
+                        self.on_transaction(result, tx_id)
+            except Exception as e:
+                logger.error(f"Failed to store transaction: {e}")
+        return count
+
+    def poll_loop(self, interval_seconds: int = 120) -> None:
+        try:
+            self.authenticate()
+        except Exception as e:
+            logger.error(f"Gmail initial authentication failed: {e}")
         while True:
             try:
                 results = self.poll_once()

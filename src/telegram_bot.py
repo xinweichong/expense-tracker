@@ -93,13 +93,15 @@ def estimate_next_date(frequency: str, last_seen: str) -> str:
 
 
 class TelegramBotService:
-    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None, exchange_service: Optional[ExchangeRateService] = None, dashboard_url: str = "", timezone: str = "Asia/Singapore"):
+    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None, exchange_service: Optional[ExchangeRateService] = None, dashboard_url: str = "", timezone: str = "Asia/Singapore", poller=None, oauth_redirect_uri: str = ""):
         self.storage = storage
         self.bot_token = bot_token
         self.categorizer = categorizer
         self.exchange_service = exchange_service
         self.dashboard_url = dashboard_url
         self.timezone = timezone
+        self.poller = poller
+        self.oauth_redirect_uri = oauth_redirect_uri
         self.app = None
         self.chat_id: Optional[int] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -492,6 +494,8 @@ class TelegramBotService:
                 BotCommand("delete",           "Delete a transaction"),
                 BotCommand("edit",             "Edit a transaction field"),
                 BotCommand("trip",             "Current trip summary (when trips active)"),
+                BotCommand("reauth",           "Re-authorize Gmail access"),
+                BotCommand("forcepoll",        "Force a Gmail poll for new emails"),
             ])
             await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
 
@@ -539,6 +543,8 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("delete", self._delete_command))
         self.app.add_handler(CallbackQueryHandler(self._delete_callback, pattern=r"^(confirm_delete_\d+|cancel_delete)$"))
         self.app.add_handler(CommandHandler("trip", self._trip))
+        self.app.add_handler(CommandHandler("reauth", self._reauth))
+        self.app.add_handler(CommandHandler("forcepoll", self._forcepoll))
 
         # Catch-all must be last
         self.app.add_handler(MessageHandler(filters.COMMAND, self._unknown))
@@ -1419,6 +1425,36 @@ class TelegramBotService:
             parse_mode="Markdown",
             reply_markup=keyboard,
         )
+
+    async def _reauth(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self.poller or not self.oauth_redirect_uri:
+            await update.message.reply_text("Gmail not configured.")
+            return
+        try:
+            auth_url = self.poller.start_reauth(self.oauth_redirect_uri)
+            await update.message.reply_text(
+                f"Click the link below to re-authorize Gmail:\n{auth_url}",
+                disable_web_page_preview=True,
+            )
+        except Exception as e:
+            await update.message.reply_text(f"Failed to start re-authorization: {e}")
+
+    async def _forcepoll(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self.poller:
+            await update.message.reply_text("Gmail not configured.")
+            return
+        if not self.poller.service:
+            await update.message.reply_text("Gmail not authenticated. Use /reauth first.")
+            return
+        await update.message.reply_text("Polling Gmail for new emails...")
+        try:
+            count = self.poller.force_poll()
+            if count == 0:
+                await update.message.reply_text("No new transactions found.")
+            else:
+                await update.message.reply_text(f"Ingested {count} new transaction(s).")
+        except Exception as e:
+            await update.message.reply_text(f"Poll failed: {e}")
 
     def notify_daily_digest(self) -> None:
         """Schedule daily digest send. Called from APScheduler background thread."""
