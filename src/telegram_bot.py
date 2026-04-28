@@ -995,7 +995,7 @@ class TelegramBotService:
 
         dest = f" · {self._escape_md(active['destination'])}" if active.get("destination") else ""
         lines = [
-            f"✈️ *{self._escape_md(active['name'])}*{dest} \\(Day {days_elapsed}\\)",
+            f"✈️ *{self._escape_md(active['name'])}*{dest} (Day {days_elapsed})",
         ]
         lines += [
             self._escape_md(f"Total: S${summary['total_sgd']:.2f} across {summary['transaction_count']} transactions"),
@@ -1007,7 +1007,7 @@ class TelegramBotService:
             for cat in summary["by_category"][:3]:
                 lines.append(self._escape_md(f"  {cat['category']}: S${cat['amount_sgd']:.2f}"))
 
-        await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines = [

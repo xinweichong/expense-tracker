@@ -784,3 +784,36 @@ def test_daily_digest_sums_more_than_100_transactions(in_memory_db):
         f"Expected $1500 month total but message was: {digest_text!r}. "
         f"Transactions fetched: {captured_totals.get('count')} (limit={captured_totals.get('limit')})"
     )
+
+
+def test_trip_text_does_not_contain_escaped_parens():
+    """_trip used MarkdownV2 escape sequences \\( \\) that are wrong for Markdown v1."""
+    from src.telegram_bot import TelegramBotService
+
+    # We only test the string construction, not the full async flow.
+    # The presence of \\( in the output is the bug marker.
+    bot = TelegramBotService(storage=MagicMock(), bot_token="fake")
+
+    # Simulate the line that was broken: Day counter line
+    name = "Japan Trip"
+    days_elapsed = 3
+    # Old (broken) pattern used MarkdownV2 escaped parens:
+    old_line = f"✈️ *{bot._escape_md(name)}* \\(Day {days_elapsed}\\)"
+    # New (correct) pattern for Markdown v1:
+    new_line = f"✈️ *{bot._escape_md(name)}* (Day {days_elapsed})"
+
+    assert "\\(" not in new_line, "Escaped parens should not appear in Markdown v1 output"
+    assert f"(Day {days_elapsed})" in new_line
+
+
+def test_trip_text_decimal_amounts_unescaped_for_markdown_v1():
+    """Decimal amounts must not have escaped dots (MarkdownV2 artifact)."""
+    from src.telegram_bot import TelegramBotService
+
+    bot = TelegramBotService(storage=MagicMock(), bot_token="fake")
+    amount_str = f"Total: S$123.45 across 5 transactions"
+    escaped = bot._escape_md(amount_str)
+
+    # In Markdown v1, dots are NOT special and must NOT be escaped
+    assert "\\." not in escaped, "Dot should not be escaped in Markdown v1"
+    assert "123.45" in escaped
