@@ -995,7 +995,7 @@ class TelegramBotService:
 
         dest = f" · {self._escape_md(active['destination'])}" if active.get("destination") else ""
         lines = [
-            f"✈️ *{self._escape_md(active['name'])}*{dest} \\(Day {days_elapsed}\\)",
+            f"✈️ *{self._escape_md(active['name'])}*{dest} (Day {days_elapsed})",
         ]
         lines += [
             self._escape_md(f"Total: S${summary['total_sgd']:.2f} across {summary['transaction_count']} transactions"),
@@ -1007,7 +1007,7 @@ class TelegramBotService:
             for cat in summary["by_category"][:3]:
                 lines.append(self._escape_md(f"  {cat['category']}: S${cat['amount_sgd']:.2f}"))
 
-        await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
+        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines = [
@@ -1376,7 +1376,7 @@ class TelegramBotService:
         today = _now.strftime("%Y-%m-%d")
 
         # Yesterday's total
-        yesterday_txs = self.storage.query_transactions(start_date=yesterday, end_date=yesterday)
+        yesterday_txs = self.storage.query_transactions(start_date=yesterday, end_date=yesterday, limit=10_000)
         yesterday_total = sum(
             tx["amount"] * (tx.get("exchange_rate") or 1)
             for tx in yesterday_txs if tx["type"] == "expense"
@@ -1384,7 +1384,7 @@ class TelegramBotService:
 
         # Month to date
         month_start = _now.replace(day=1).strftime("%Y-%m-%d")
-        month_txs = self.storage.query_transactions(start_date=month_start, end_date=today)
+        month_txs = self.storage.query_transactions(start_date=month_start, end_date=today, limit=10_000)
         month_total = sum(
             tx["amount"] * (tx.get("exchange_rate") or 1)
             for tx in month_txs if tx["type"] == "expense"

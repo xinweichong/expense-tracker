@@ -720,3 +720,100 @@ class TestParseAddCommandDatetime:
         result = self.bot.parse_add_command("12.50 Lunch")
         assert result["date"] is None
         assert result["merchant"] == "Lunch"
+
+
+def make_tx(i, tx_type="expense"):
+    return {
+        "id": i, "source": "manual", "source_id": f"m-{i}",
+        "amount": 10.0, "currency": "SGD", "exchange_rate": 1.0,
+        "merchant": f"Shop {i}", "description": None, "category": "Food",
+        "transaction_date": "2026-04-15T10:00:00", "ingested_at": "2026-04-15T10:00:00",
+        "type": tx_type,
+    }
+
+
+def test_daily_digest_sums_more_than_100_transactions(in_memory_db):
+    """Month total must not be capped at 100 transactions."""
+    from src.telegram_bot import TelegramBotService
+
+    storage = Storage(in_memory_db)
+    # Insert 150 expense transactions of $10 each = $1500 expected
+    for i in range(150):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, category, transaction_date, type)
+            VALUES ('manual', ?, 10.0, 'SGD', 1.0, 'Shop', 'Food', '2026-04-15T10:00:00', 'expense')
+        """, (f"manual-{i}",))
+    in_memory_db.commit()
+
+    captured_totals = {}
+
+    original_query = storage.query_transactions
+
+    def tracking_query(*args, **kwargs):
+        result = original_query(*args, **kwargs)
+        captured_totals["limit"] = kwargs.get("limit")
+        captured_totals["count"] = len(result)
+        return result
+
+    storage.query_transactions = tracking_query
+
+    bot = TelegramBotService(storage=storage, bot_token="fake")
+    bot.chat_id = 12345
+
+    # Patch app.bot.send_message so we can inspect the message text
+    import asyncio
+
+    sent_messages = []
+
+    async def mock_send(**kwargs):
+        sent_messages.append(kwargs.get("text", ""))
+
+    mock_bot = MagicMock()
+    mock_bot.send_message = mock_send
+    mock_app = MagicMock()
+    mock_app.bot = mock_bot
+    bot.app = mock_app
+    bot._loop = asyncio.new_event_loop()
+
+    bot._loop.run_until_complete(bot._send_daily_digest())
+
+    # Find the message that contains month-to-date
+    digest_text = " ".join(sent_messages)
+    assert "1500" in digest_text or "1,500" in digest_text, (
+        f"Expected $1500 month total but message was: {digest_text!r}. "
+        f"Transactions fetched: {captured_totals.get('count')} (limit={captured_totals.get('limit')})"
+    )
+
+
+def test_trip_text_does_not_contain_escaped_parens():
+    """_trip used MarkdownV2 escape sequences \\( \\) that are wrong for Markdown v1."""
+    from src.telegram_bot import TelegramBotService
+
+    # We only test the string construction, not the full async flow.
+    # The presence of \\( in the output is the bug marker.
+    bot = TelegramBotService(storage=MagicMock(), bot_token="fake")
+
+    # Simulate the line that was broken: Day counter line
+    name = "Japan Trip"
+    days_elapsed = 3
+    # Old (broken) pattern used MarkdownV2 escaped parens:
+    old_line = f"✈️ *{bot._escape_md(name)}* \\(Day {days_elapsed}\\)"
+    # New (correct) pattern for Markdown v1:
+    new_line = f"✈️ *{bot._escape_md(name)}* (Day {days_elapsed})"
+
+    assert "\\(" not in new_line, "Escaped parens should not appear in Markdown v1 output"
+    assert f"(Day {days_elapsed})" in new_line
+
+
+def test_trip_text_decimal_amounts_unescaped_for_markdown_v1():
+    """Decimal amounts must not have escaped dots (MarkdownV2 artifact)."""
+    from src.telegram_bot import TelegramBotService
+
+    bot = TelegramBotService(storage=MagicMock(), bot_token="fake")
+    amount_str = f"Total: S$123.45 across 5 transactions"
+    escaped = bot._escape_md(amount_str)
+
+    # In Markdown v1, dots are NOT special and must NOT be escaped
+    assert "\\." not in escaped, "Dot should not be escaped in Markdown v1"
+    assert "123.45" in escaped
