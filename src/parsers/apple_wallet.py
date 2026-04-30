@@ -2,10 +2,10 @@ import hashlib
 import re
 from datetime import datetime
 from typing import Optional, Any
-from src.parsers.base import BankParser, ParseResult
+from src.parsers.base import ParseResult
 
 
-class AppleWalletParser(BankParser):
+class AppleWalletParser:
     @property
     def sender_domain(self) -> str:
         return ""  # Not email-based — receives webhook payloads
