@@ -386,11 +386,7 @@ def main():
 
         scheduler = BackgroundScheduler(timezone=config.get("timezone", "Asia/Singapore"))
         scheduler.add_job(lambda: _format_and_send_summary("weekly"), 'cron', day_of_week='sun', hour=9)
-
-        def _monthly_jobs() -> None:
-            _format_and_send_summary("monthly")
-
-        scheduler.add_job(_monthly_jobs, 'cron', day=1, hour=9)
+        scheduler.add_job(lambda: _format_and_send_summary("monthly"), 'cron', day=1, hour=9)
         scheduler.add_job(bot.notify_daily_digest, 'cron', hour=8, minute=0)
         scheduler.start()
         atexit.register(lambda: scheduler.shutdown(wait=False))
