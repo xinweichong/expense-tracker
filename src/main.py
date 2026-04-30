@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 # In Railway/containers, use /data for persistent storage
 _db_env = os.environ.get("EXPENSE_DB_PATH", "")
 DB_PATH = _db_env if _db_env else ("/data/expense_tracker.db" if os.path.isdir("/data") else "expense_tracker.db")
+TOKEN_PATH = "/data/token.json" if os.path.isdir("/data") else "token.json"
 CONFIG_PATH = os.environ.get("EXPENSE_CONFIG_PATH", "config.yaml")
 SUMMARY_CACHE_DIR = os.environ.get(
     "SUMMARY_CACHE_DIR",
@@ -262,7 +263,7 @@ def main():
         logger.info("Decoded Gmail credentials from environment")
 
     if gmail_token_b64 := os.environ.get("GMAIL_TOKEN_JSON"):
-        with open("token.json", "w") as f:
+        with open(TOKEN_PATH, "w") as f:
             f.write(base64.b64decode(gmail_token_b64).decode())
         logger.info("Decoded Gmail token from environment")
     else:
@@ -295,7 +296,7 @@ def main():
 
     poller = GmailPoller(
         credentials_path=gmail_config.get("credentials_file", "credentials.json"),
-        token_path="token.json",
+        token_path=TOKEN_PATH,
         sender_filters=gmail_config.get("sender_filters", []),
         parsers=parsers,
         storage=storage,
@@ -325,9 +326,7 @@ def main():
     def _on_gmail_auth_error(err: str) -> None:
         bot.notify_text(
             "⚠️ *Gmail Authentication Failed*\n\n"
-            "Email polling has stopped. To fix:\n"
-            "1. Re-run `scripts/gmail_auth.py` locally\n"
-            "2. Update `GMAIL_TOKEN_JSON` in Railway environment variables"
+            "Email polling has stopped. Use /reauth to re-authorize."
         )
     poller.on_auth_error = _on_gmail_auth_error
 
