@@ -42,6 +42,7 @@ export function TransactionDetail({
   const [description, setDescription] = useState(tx.description ?? '');
   const [exchangeRate, setExchangeRate] = useState(tx.exchange_rate ?? 1.0);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const isAppleWallet = tx.source === 'apple_wallet';
   const categoryColor = getCategoryColor(tx.category ?? '');
@@ -54,6 +55,7 @@ export function TransactionDetail({
     setExchangeRate(tx.exchange_rate ?? 1.0);
     setEditing(false);
     setSaveError(null);
+    setConfirmingDelete(false);
   }, [tx.id]);
 
   const updateTx = useUpdateTransaction();
@@ -94,9 +96,14 @@ export function TransactionDetail({
   };
 
   const handleDelete = () => {
-    if (confirm('Delete this transaction?')) {
-      deleteTx.mutate(tx.id, { onSuccess: onClose });
-    }
+    setConfirmingDelete(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    deleteTx.mutate(tx.id, {
+      onSuccess: onClose,
+      onError: () => setConfirmingDelete(false),
+    });
   };
 
   const sourceLabel = isAppleWallet && tx.description
@@ -161,6 +168,28 @@ export function TransactionDetail({
               >
                 <Check className="w-4 h-4 mr-1" />
                 {updateTx.isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        ) : confirmingDelete ? (
+          <div className="flex flex-col gap-1 px-4 py-2">
+            <p className="text-sm text-destructive">Delete this transaction?</p>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={deleteTx.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={handleDeleteConfirm}
+                disabled={deleteTx.isPending}
+              >
+                {deleteTx.isPending ? 'Deleting…' : 'Delete'}
               </Button>
             </div>
           </div>
