@@ -1,13 +1,11 @@
 import { useState, useCallback } from 'react';
+import { toDateStr } from '@/lib/utils';
 
 export type Period = 'day' | 'week' | 'month';
 
 export function usePeriod() {
   const [period, setPeriod] = useState<Period>('month');
-  const [date, setDate] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  });
+  const [date, setDate] = useState(() => toDateStr(new Date()));
 
   const goBack = useCallback(() => {
     const [y, mo, dy] = date.split('-').map(Number);
@@ -15,7 +13,7 @@ export function usePeriod() {
     if (period === 'day') d.setDate(d.getDate() - 1);
     else if (period === 'week') d.setDate(d.getDate() - 7);
     else d.setMonth(d.getMonth() - 1);
-    setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    setDate(toDateStr(d));
   }, [date, period]);
 
   const goForward = useCallback(() => {
@@ -24,12 +22,11 @@ export function usePeriod() {
     if (period === 'day') d.setDate(d.getDate() + 1);
     else if (period === 'week') d.setDate(d.getDate() + 7);
     else d.setMonth(d.getMonth() + 1);
-    setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    setDate(toDateStr(d));
   }, [date, period]);
 
   const goToToday = useCallback(() => {
-    const d = new Date();
-    setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    setDate(toDateStr(new Date()));
   }, []);
 
   return { period, setPeriod, date, goBack, goForward, goToToday };
