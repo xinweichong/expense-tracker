@@ -34,7 +34,11 @@ export function TransactionFilters({
     if (category && category !== 'all') params.set('category', category);
     if (startDate) params.set('start_date', startDate);
     if (endDate) params.set('end_date', endDate);
-    window.open(`/api/transactions/export?${params.toString()}`, '_blank');
+    window.open(
+      `/api/transactions/export?${params.toString()}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   };
 
   const quickSelects = useMemo(() => {
