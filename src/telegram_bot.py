@@ -1443,8 +1443,3 @@ class TelegramBotService:
             logger.debug("Cannot send daily digest: bot not started")
             return
         asyncio.run_coroutine_threadsafe(self._send_daily_digest(), self._loop)
-
-    def run(self) -> None:
-        self.setup_handlers()
-        logger.info("Starting Telegram bot")
-        self.app.run_polling()
