@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarDays, ChevronDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,9 @@ import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
 import { StatCard, PageCard } from '@/components/ui/cards';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { springs, staggerContainerVariants, staggerItemVariants, AnimatedCurrency } from '@/lib/animations';
 
@@ -162,6 +165,7 @@ export function OverviewPage() {
 
   const TX_PAGE_SIZE = 15;
   const [txPage, setTxPage] = useState(1);
+  const [txCategoryFilter, setTxCategoryFilter] = useState<string[]>([]);
 
   const { data: summary } = useSummary(start, end);
   const { data: trend } = useTrend(start, end);
@@ -202,10 +206,16 @@ export function OverviewPage() {
 
   useEffect(() => {
     setTxPage(1);
-  }, [start, end]);
+  }, [start, end, txCategoryFilter]);
 
-  const totalTxPages = Math.ceil((recentTransactions?.length ?? 0) / TX_PAGE_SIZE);
-  const pageTxs = (recentTransactions ?? []).slice(
+  const filteredTransactions = useMemo(
+    () => txCategoryFilter.length === 0
+      ? (recentTransactions ?? [])
+      : (recentTransactions ?? []).filter(tx => tx.category != null && txCategoryFilter.includes(tx.category)),
+    [recentTransactions, txCategoryFilter],
+  );
+  const totalTxPages = Math.ceil(filteredTransactions.length / TX_PAGE_SIZE);
+  const pageTxs = filteredTransactions.slice(
     (txPage - 1) * TX_PAGE_SIZE,
     txPage * TX_PAGE_SIZE,
   );
@@ -442,33 +452,71 @@ export function OverviewPage() {
         <PageCard
           title="Transactions"
           action={
-            totalTxPages > 1 ? (
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setTxPage(p => Math.max(1, p - 1))}
-                  disabled={txPage === 1}
-                >
-                  <ChevronLeft className="h-3 w-3" />
-                </Button>
-                <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setTxPage(p => Math.min(totalTxPages, p + 1))}
-                  disabled={txPage === totalTxPages}
-                >
-                  <ChevronRight className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : undefined
+            <div className="flex items-center gap-2">
+              {categories.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
+                      <span className={txCategoryFilter.length > 0 ? 'text-foreground' : 'text-muted'}>
+                        {txCategoryFilter.length === 0
+                          ? 'All categories'
+                          : txCategoryFilter.length === 1
+                          ? txCategoryFilter[0]
+                          : `${txCategoryFilter.length} categories`}
+                      </span>
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {categories.map(({ category }) => (
+                      <DropdownMenuCheckboxItem
+                        key={category}
+                        checked={txCategoryFilter.includes(category)}
+                        onCheckedChange={checked =>
+                          setTxCategoryFilter(prev =>
+                            checked ? [...prev, category] : prev.filter(c => c !== category)
+                          )
+                        }
+                      >
+                        {category}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {totalTxPages > 1 && (
+                <>
+                  {categories.length > 0 && <div className="w-px h-4 bg-border shrink-0" />}
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => setTxPage(p => Math.max(1, p - 1))}
+                      disabled={txPage === 1}
+                    >
+                      <ChevronLeft className="h-3 w-3" />
+                    </Button>
+                    <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => setTxPage(p => Math.min(totalTxPages, p + 1))}
+                      disabled={txPage === totalTxPages}
+                    >
+                      <ChevronRight className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
           }
         >
           {!recentTransactions || recentTransactions.length === 0 ? (
             <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
+          ) : filteredTransactions.length === 0 ? (
+            <p className="text-muted text-sm py-4 text-center">No transactions for selected categories</p>
           ) : (
             <div className="flex flex-col -mx-4">
               {pageTxs.map((tx: Transaction) => (
