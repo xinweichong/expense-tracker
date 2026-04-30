@@ -5,6 +5,8 @@ from typing import Optional
 
 from src.config import local_now
 
+_VALID_TYPES: frozenset[str] = frozenset({"needs", "wants", "neutral"})
+
 
 def _get_budget_period(period: str) -> tuple[str, str]:
     """Return (start_date, end_date) for the current budget period as ISO strings."""
@@ -303,9 +305,8 @@ class Storage:
             clash = self.conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
             if clash:
                 raise ValueError(f"color '{color}' is already used by category '{clash['name']}'")
-        _VALID_TYPES = {"needs", "wants", "neutral"}
         if cat_type not in _VALID_TYPES:
-            raise ValueError(f"cat_type must be one of {_VALID_TYPES}, got '{cat_type}'")
+            raise ValueError(f"cat_type must be one of {set(_VALID_TYPES)}, got '{cat_type}'")
         self.conn.execute("INSERT INTO categories (name, keywords, icon, color, type) VALUES (?, ?, ?, ?, ?)", (name, keywords, icon, color, cat_type))
         self.conn.commit()
 
@@ -329,9 +330,8 @@ class Storage:
             updates.append("color = ?")
             params.append(color)
         if cat_type is not None:
-            _VALID_TYPES = {"needs", "wants", "neutral"}
             if cat_type not in _VALID_TYPES:
-                raise ValueError(f"cat_type must be one of {_VALID_TYPES}, got '{cat_type}'")
+                raise ValueError(f"cat_type must be one of {set(_VALID_TYPES)}, got '{cat_type}'")
             updates.append("type = ?")
             params.append(cat_type)
         if not updates:
