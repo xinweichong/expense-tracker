@@ -122,6 +122,11 @@ def in_memory_db():
         added_by       TEXT DEFAULT 'auto',
         PRIMARY KEY (trip_id, transaction_id)
     );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
     """
     conn.executescript(schema)
     yield conn

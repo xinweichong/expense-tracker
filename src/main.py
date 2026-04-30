@@ -157,6 +157,10 @@ def init_db(db_path: str) -> sqlite3.Connection:
             added_by       TEXT DEFAULT 'auto',
             PRIMARY KEY (trip_id, transaction_id)
         );
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     # Migrate: add exchange_rate column if missing
     try:
@@ -267,6 +271,8 @@ def main():
         logger.info("No Gmail token found — use /reauth in Telegram to authorize")
 
     conn = init_db(DB_PATH)
+    from src.web.auth import init_auth
+    init_auth(conn)
     storage = Storage(connection=conn)
 
     # Load categories from config
