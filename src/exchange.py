@@ -28,6 +28,9 @@ class ExchangeRateService:
         self.cache_hours = cache_hours
         self._rates: dict[str, float] = {}
         self._rates_fetched_at: Optional[datetime] = None
+        # Error state — read by /api/status
+        self.using_fallback: bool = False
+        self.last_fetch_error: Optional[str] = None
 
     def _is_cache_stale(self) -> bool:
         if not self._rates_fetched_at:
@@ -45,9 +48,16 @@ class ExchangeRateService:
             # (i.e. the inverse) so that amount * exchange_rate gives SGD value.
             self._rates = {k: (1.0 / v if v else 1.0) for k, v in rates.items()}
             self._rates_fetched_at = datetime.now()
+            self.using_fallback = False
+            self.last_fetch_error = None
             logger.info("Fetched exchange rates: %d currencies", len(rates))
             return rates
         except Exception as e:
+            # Always update the timestamp on failure so _is_cache_stale() respects
+            # the cache window and we don't retry on every single get_rate() call.
+            self._rates_fetched_at = datetime.now()
+            self.using_fallback = True
+            self.last_fetch_error = str(e)
             logger.warning("Failed to fetch exchange rates: %s. Using fallback.", e)
             return FALLBACK_RATES
 

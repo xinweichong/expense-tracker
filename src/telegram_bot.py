@@ -105,6 +105,9 @@ class TelegramBotService:
         self.app = None
         self.chat_id: Optional[int] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        # Lifecycle state — read by /api/status
+        self.is_running: bool = False
+        self.last_error: Optional[str] = None
         # Restore persisted chat_id
         self._load_chat_id()
 
@@ -1076,7 +1079,7 @@ class TelegramBotService:
     def notify_text(self, text: str) -> None:
         """Send a plain text message. Called from background threads (e.g., APScheduler)."""
         if not self.chat_id:
-            logger.debug("Cannot send text: no chat_id (send /start to the bot)")
+            logger.info("Cannot send notification: no chat_id registered (user must send /start)")
             return
         if not self._loop or not self.app:
             logger.debug("Cannot send text: bot not started yet")
@@ -1089,7 +1092,7 @@ class TelegramBotService:
     def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
         """Send a transaction notification. Called from the Gmail poller thread."""
         if not self.chat_id:
-            logger.debug("Cannot notify: no chat_id (send /start to the bot)")
+            logger.info("Cannot send notification: no chat_id registered (user must send /start)")
             return
         if not self._loop or not self.app:
             logger.debug("Cannot notify: bot not started yet")
@@ -1437,7 +1440,7 @@ class TelegramBotService:
     def notify_daily_digest(self) -> None:
         """Schedule daily digest send. Called from APScheduler background thread."""
         if not self.chat_id:
-            logger.debug("Cannot send daily digest: no chat_id")
+            logger.info("Cannot send daily digest: no chat_id registered (user must send /start)")
             return
         if not self._loop or not self.app:
             logger.debug("Cannot send daily digest: bot not started")

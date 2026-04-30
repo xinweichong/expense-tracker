@@ -14,10 +14,15 @@ from googleapiclient.discovery import build
 from src.parsers.base import BankParser, ParseResult
 from src.storage import Storage
 from src.recurring import RecurringDetector
+from src.config import local_now
 
 logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+
+
+def _now_iso() -> str:
+    return local_now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
 class GmailPoller:
@@ -29,6 +34,7 @@ class GmailPoller:
         parsers: list[BankParser],
         storage: Storage,
         on_transaction: Optional[Callable[[ParseResult], None]] = None,
+        on_auth_error: Optional[Callable[[str], None]] = None,
     ):
         self.credentials_path = credentials_path
         self.token_path = token_path
@@ -36,9 +42,14 @@ class GmailPoller:
         self.parsers = parsers
         self.storage = storage
         self.on_transaction = on_transaction
+        self.on_auth_error = on_auth_error
         self.service = None
         self._pending_flow = None
         self._pending_state = None
+        # Error state — read by /api/status
+        self.last_auth_error: Optional[str] = None
+        self.last_poll_at: Optional[str] = None
+        self._auth_error_notified: bool = False
 
     def authenticate(self) -> None:
         creds = None
@@ -50,15 +61,21 @@ class GmailPoller:
                 creds.refresh(Request())
             else:
                 if not os.path.exists(self.credentials_path):
-                    logger.error("Gmail credentials file not found and no valid token available")
+                    msg = "Gmail credentials file not found and no valid token available"
+                    logger.error(msg)
+                    self.last_auth_error = msg
                     return
-                logger.error("Gmail token is invalid and cannot refresh interactively in headless environment. "
-                             "Re-generate token.json locally and update GMAIL_TOKEN_JSON env var.")
+                msg = ("Gmail token is invalid and cannot refresh interactively in headless environment. "
+                       "Re-generate token.json locally and update GMAIL_TOKEN_JSON env var.")
+                logger.error(msg)
+                self.last_auth_error = msg
                 return
             with open(self.token_path, "w") as f:
                 f.write(creds.to_json())
 
         self.service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        self.last_auth_error = None
+        self._auth_error_notified = False
         logger.info("Gmail authenticated successfully")
 
     def _build_query(self) -> str:
@@ -251,6 +268,8 @@ class GmailPoller:
                     count += 1
                     if self.on_transaction:
                         self.on_transaction(result, tx_id)
+            except ValueError:
+                logger.debug("Duplicate transaction skipped: %s", result.source_id)
             except Exception as e:
                 logger.error(f"Failed to store transaction: {e}")
         return count
@@ -260,16 +279,26 @@ class GmailPoller:
             self.authenticate()
         except Exception as e:
             logger.error(f"Gmail initial authentication failed: {e}")
+            self.last_auth_error = str(e)
         while True:
             try:
                 results = self.poll_once()
+                self.last_poll_at = _now_iso()
                 for result in results:
                     try:
                         tx_id = self._save_and_detect(result)
                         if tx_id is not None and self.on_transaction:
                             self.on_transaction(result, tx_id)
+                    except ValueError:
+                        logger.debug("Duplicate transaction skipped: %s", result.source_id)
                     except Exception as e:
                         logger.error(f"Failed to store transaction: {e}")
             except Exception as e:
                 logger.error(f"Poll error: {e}")
+                self.last_auth_error = str(e)
+                if self.on_auth_error and not self._auth_error_notified:
+                    _AUTH_KEYWORDS = ("invalid_grant", "not authenticated", "token", "expired", "revoked")
+                    if any(kw in str(e).lower() for kw in _AUTH_KEYWORDS):
+                        self._auth_error_notified = True
+                        self.on_auth_error(str(e))
             time.sleep(interval_seconds)

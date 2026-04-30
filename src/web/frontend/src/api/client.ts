@@ -470,4 +470,11 @@ export const api = {
 
   checkTripMembership: (tripId: number, txId: number) =>
     request<{ in_trip: boolean }>(`/api/trips/${tripId}/transactions/${txId}/membership`),
+
+  getStatus: () =>
+    request<{
+      gmail: { authenticated: boolean | null; last_auth_error: string | null; last_poll_at: string | null };
+      telegram: { running: boolean | null; last_error: string | null };
+      exchange: { using_fallback: boolean | null; last_fetch_error: string | null };
+    }>('/api/status'),
 };
