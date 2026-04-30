@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { type Transaction, type Trip, api } from '@/api/client';
@@ -47,16 +47,20 @@ export function TransactionDetail({
   const isAppleWallet = tx.source === 'apple_wallet';
   const categoryColor = getCategoryColor(tx.category ?? '');
 
-  // Reset form + exit edit mode when switching to a different transaction
-  useEffect(() => {
+  const resetFields = useCallback(() => {
     setMerchant(tx.merchant ?? '');
     setCategory(tx.category ?? '');
     setDescription(tx.description ?? '');
     setExchangeRate(tx.exchange_rate ?? 1.0);
+  }, [tx.merchant, tx.category, tx.description, tx.exchange_rate]);
+
+  // Reset form + exit edit mode when switching to a different transaction
+  useEffect(() => {
+    resetFields();
     setEditing(false);
     setSaveError(null);
     setConfirmingDelete(false);
-  }, [tx.id]);
+  }, [tx.id, resetFields]);
 
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
@@ -74,10 +78,7 @@ export function TransactionDetail({
 
   const handleEdit = () => {
     setSaveError(null);
-    setMerchant(tx.merchant ?? '');
-    setCategory(tx.category ?? '');
-    setDescription(tx.description ?? '');
-    setExchangeRate(tx.exchange_rate ?? 1.0);
+    resetFields();
     setEditing(true);
   };
 
@@ -151,10 +152,7 @@ export function TransactionDetail({
                 onClick={() => {
                   setEditing(false);
                   setSaveError(null);
-                  setMerchant(tx.merchant ?? '');
-                  setCategory(tx.category ?? '');
-                  setDescription(tx.description ?? '');
-                  setExchangeRate(tx.exchange_rate ?? 1.0);
+                  resetFields();
                 }}
                 disabled={updateTx.isPending}
               >
