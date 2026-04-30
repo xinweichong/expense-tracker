@@ -362,7 +362,7 @@ class TestTripAPI:
     @pytest.mark.asyncio
     async def test_enlist_and_delist_transaction(self, api):
         ac, storage = api
-        db = storage.conn
+        db = storage._conn
         db.execute(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type) "
             "VALUES ('test', 'tx1', 50.0, 'SGD', 1.0, 'GrabFood', 'Dining', '2026-04-10', 'expense')"
@@ -382,7 +382,7 @@ class TestTripAPI:
     @pytest.mark.asyncio
     async def test_check_trip_membership(self, api):
         ac, storage = api
-        db = storage.conn
+        db = storage._conn
         db.execute(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type) "
             "VALUES ('test', 'tx2', 30.0, 'SGD', 1.0, 'FairPrice', 'Groceries', '2026-04-10', 'expense')"

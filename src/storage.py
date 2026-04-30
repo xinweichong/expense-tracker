@@ -21,8 +21,8 @@ def _get_budget_period(period: str) -> tuple[str, str]:
 
 class Storage:
     def __init__(self, connection: sqlite3.Connection):
-        self.conn = connection
-        self.conn.row_factory = sqlite3.Row
+        self._conn = connection
+        self._conn.row_factory = sqlite3.Row
 
     def insert_transaction(
         self,
@@ -39,7 +39,7 @@ class Storage:
         tx_type: str = "expense",
     ) -> int:
         try:
-            cursor = self.conn.execute(
+            cursor = self._conn.execute(
                 """INSERT INTO transactions
                    (source, source_id, amount, currency, exchange_rate, merchant, description,
                     category, transaction_date, raw_data, type)
@@ -47,13 +47,13 @@ class Storage:
                 (source, source_id, amount, currency, exchange_rate, merchant, description,
                  category, transaction_date, raw_data, tx_type),
             )
-            self.conn.commit()
+            self._conn.commit()
             return cursor.lastrowid
         except sqlite3.IntegrityError:
             raise ValueError(f"duplicate source_id: {source_id}")
 
     def get_transaction(self, tx_id: int) -> Optional[dict]:
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT * FROM transactions WHERE id = ?", (tx_id,)
         ).fetchone()
         return dict(row) if row else None
@@ -65,16 +65,16 @@ class Storage:
             raise ValueError(f"transaction {tx_id} not found")
         set_clauses = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [tx_id]
-        self.conn.execute(
+        self._conn.execute(
             f"UPDATE transactions SET {set_clauses} WHERE id = ?", values
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def delete_transaction(self, tx_id: int) -> None:
         if self.get_transaction(tx_id) is None:
             raise ValueError(f"transaction {tx_id} not found")
-        self.conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
-        self.conn.commit()
+        self._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+        self._conn.commit()
 
     def query_transactions(
         self,
@@ -104,7 +104,7 @@ class Storage:
             conditions.append("merchant LIKE ?")
             params.append(f"%{merchant_search}%")
         where = " AND ".join(conditions) if conditions else "1=1"
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             f"SELECT * FROM transactions WHERE {where} "
             f"ORDER BY transaction_date DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
@@ -114,7 +114,7 @@ class Storage:
     def get_spending_summary(
         self, start_date: str, end_date: str
     ) -> dict:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT category, SUM(amount * exchange_rate) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -130,7 +130,7 @@ class Storage:
 
     def load_categories(self, categories: list[dict]) -> None:
         for cat in categories:
-            self.conn.execute(
+            self._conn.execute(
                 """INSERT INTO categories (name, keywords, icon, color)
                    VALUES (?, ?, ?, ?)
                    ON CONFLICT(name) DO UPDATE SET
@@ -139,10 +139,10 @@ class Storage:
                      color    = excluded.color""",
                 (cat["name"], cat["keywords"], cat["icon"], cat.get("color")),
             )
-        self.conn.commit()
+        self._conn.commit()
 
     def get_income_summary(self, start_date: str, end_date: str) -> dict:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT category, SUM(amount * exchange_rate) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -159,7 +159,7 @@ class Storage:
         return {"income": income, "expenses": expenses, "net": income - expenses}
 
     def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT merchant, COUNT(*) as visits, SUM(amount * exchange_rate) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -170,7 +170,7 @@ class Storage:
         return [{"merchant": r["merchant"], "visits": r["visits"], "total": r["total"]} for r in rows]
 
     def get_average_daily(self, start_date: str, end_date: str) -> float:
-        row = self.conn.execute(
+        row = self._conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -184,7 +184,7 @@ class Storage:
         return total / days
 
     def get_trend(self, start_date: str, end_date: str) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT DATE(transaction_date) as date, SUM(amount * exchange_rate) as amount
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -195,7 +195,7 @@ class Storage:
         return [{"date": r["date"], "amount": r["amount"]} for r in rows]
 
     def get_trend_by_category(self, start_date: str, end_date: str) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT DATE(transaction_date) as date,
                       COALESCE(category, 'Other') as category,
                       SUM(amount * exchange_rate) as amount
@@ -225,13 +225,13 @@ class Storage:
         return list(by_date.values())
 
     def get_period_comparison(self, current_start: str, current_end: str, prev_start: str, prev_end: str) -> dict:
-        curr_rows = self.conn.execute(
+        curr_rows = self._conn.execute(
             """SELECT category, SUM(amount * exchange_rate) as total FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense') GROUP BY category""",
             (current_start, current_end),
         ).fetchall()
-        prev_rows = self.conn.execute(
+        prev_rows = self._conn.execute(
             """SELECT category, SUM(amount * exchange_rate) as total FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense') GROUP BY category""",
@@ -245,18 +245,18 @@ class Storage:
         }
 
     def get_categories(self) -> list[dict]:
-        rows = self.conn.execute("SELECT * FROM categories ORDER BY ROWID").fetchall()
+        rows = self._conn.execute("SELECT * FROM categories ORDER BY ROWID").fetchall()
         return [dict(r) for r in rows]
 
     def get_category_icon_map(self) -> dict[str, str]:
         """Returns {category_name: icon} for all categories that have an icon."""
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             "SELECT name, icon FROM categories WHERE icon IS NOT NULL"
         ).fetchall()
         return {row["name"]: row["icon"] for row in rows}
 
     def get_ingestion_state(self, source: str) -> Optional[dict]:
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT * FROM ingestion_state WHERE source = ?", (source,)
         ).fetchone()
         return dict(row) if row else None
@@ -264,23 +264,23 @@ class Storage:
     def update_ingestion_state(
         self, source: str, last_id: str, last_at: str
     ) -> None:
-        self.conn.execute(
+        self._conn.execute(
             """INSERT OR REPLACE INTO ingestion_state
                (source, last_processed_id, last_processed_at, updated_at)
                VALUES (?, ?, ?, CURRENT_TIMESTAMP)""",
             (source, last_id, last_at),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def is_duplicate(self, source: str, source_id: str) -> bool:
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT 1 FROM transactions WHERE source = ? AND source_id = ?",
             (source, source_id),
         ).fetchone()
         return row is not None
 
     def source_id_exists(self, source_id: str) -> bool:
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT 1 FROM transactions WHERE source_id = ?", (source_id,)
         ).fetchone()
         return row is not None
@@ -290,7 +290,7 @@ class Storage:
     ) -> bool:
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
         cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-        row = self.conn.execute(
+        row = self._conn.execute(
             """SELECT 1 FROM transactions
                WHERE merchant = ? AND amount = ? AND ingested_at >= ?""",
             (merchant, amount, cutoff_str),
@@ -298,24 +298,24 @@ class Storage:
         return row is not None
 
     def add_category(self, name: str, keywords: str, icon: str = "📌", color: Optional[str] = None, cat_type: str = "neutral") -> None:
-        existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
+        existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if existing:
             raise ValueError(f"category '{name}' already exists")
         if color:
-            clash = self.conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
+            clash = self._conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
             if clash:
                 raise ValueError(f"color '{color}' is already used by category '{clash['name']}'")
         if cat_type not in _VALID_TYPES:
             raise ValueError(f"cat_type must be one of {set(_VALID_TYPES)}, got '{cat_type}'")
-        self.conn.execute("INSERT INTO categories (name, keywords, icon, color, type) VALUES (?, ?, ?, ?, ?)", (name, keywords, icon, color, cat_type))
-        self.conn.commit()
+        self._conn.execute("INSERT INTO categories (name, keywords, icon, color, type) VALUES (?, ?, ?, ?, ?)", (name, keywords, icon, color, cat_type))
+        self._conn.commit()
 
     def update_category(self, name: str, keywords: Optional[str] = None, icon: Optional[str] = None, color: Optional[str] = None, cat_type: Optional[str] = None) -> None:
-        existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
+        existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if not existing:
             raise ValueError(f"category '{name}' not found")
         if color:
-            clash = self.conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
+            clash = self._conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
             if clash:
                 raise ValueError(f"color '{color}' is already used by category '{clash['name']}'")
         updates = []
@@ -337,33 +337,33 @@ class Storage:
         if not updates:
             return
         params.append(name)
-        self.conn.execute(f"UPDATE categories SET {', '.join(updates)} WHERE name = ?", params)
-        self.conn.commit()
+        self._conn.execute(f"UPDATE categories SET {', '.join(updates)} WHERE name = ?", params)
+        self._conn.commit()
 
     def delete_category(self, name: str) -> int:
-        existing = self.conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
+        existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if not existing:
             raise ValueError(f"category '{name}' not found")
-        count = self.conn.execute("UPDATE transactions SET category = 'Other' WHERE category = ?", (name,)).rowcount
-        self.conn.execute("DELETE FROM merchant_overrides WHERE category = ?", (name,))
-        self.conn.execute("DELETE FROM categories WHERE name = ?", (name,))
-        self.conn.commit()
+        count = self._conn.execute("UPDATE transactions SET category = 'Other' WHERE category = ?", (name,)).rowcount
+        self._conn.execute("DELETE FROM merchant_overrides WHERE category = ?", (name,))
+        self._conn.execute("DELETE FROM categories WHERE name = ?", (name,))
+        self._conn.commit()
         return count
 
     def set_merchant_override(self, merchant: str, category: str) -> None:
-        self.conn.execute(
+        self._conn.execute(
             "INSERT OR REPLACE INTO merchant_overrides (merchant, category, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
             (merchant, category),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def get_merchant_overrides(self) -> dict[str, str]:
-        rows = self.conn.execute("SELECT merchant, category FROM merchant_overrides").fetchall()
+        rows = self._conn.execute("SELECT merchant, category FROM merchant_overrides").fetchall()
         return {r["merchant"]: r["category"] for r in rows}
 
     def remove_merchant_override(self, merchant: str) -> None:
-        self.conn.execute("DELETE FROM merchant_overrides WHERE merchant = ?", (merchant,))
-        self.conn.commit()
+        self._conn.execute("DELETE FROM merchant_overrides WHERE merchant = ?", (merchant,))
+        self._conn.commit()
 
     def find_cross_source_duplicate(
         self, merchant: str, amount: float, source: str, within_minutes: int = 10
@@ -372,7 +372,7 @@ class Storage:
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=within_minutes)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        row = self.conn.execute(
+        row = self._conn.execute(
             """SELECT * FROM transactions
                WHERE amount = ? AND source != ? AND ingested_at >= ?
                AND LOWER(merchant) = LOWER(?)
@@ -382,7 +382,7 @@ class Storage:
         return dict(row) if row else None
 
     def get_setting(self, key: str, default: str | None = None) -> str | None:
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT value FROM app_settings WHERE key = ?", (key,)
         ).fetchone()
         if row is None:
@@ -390,14 +390,14 @@ class Storage:
         return row["value"]
 
     def set_setting(self, key: str, value: str) -> None:
-        self.conn.execute(
+        self._conn.execute(
             """INSERT INTO app_settings (key, value, updated_at)
                VALUES (?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(key) DO UPDATE SET value = excluded.value,
                updated_at = excluded.updated_at""",
             (key, value),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def get_merchant_list(
         self,
@@ -429,7 +429,7 @@ class Storage:
 
         where = " AND ".join(conditions)
 
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             f"""
             WITH merchant_stats AS (
                 SELECT
@@ -474,7 +474,7 @@ class Storage:
 
     def get_merchant_profile(self, merchant: str) -> dict | None:
         """Return full stats for a single merchant, or None if merchant has no transactions."""
-        row = self.conn.execute(
+        row = self._conn.execute(
             """
             SELECT
                 t.merchant,
@@ -493,7 +493,7 @@ class Storage:
             return None
 
         profile = dict(row)
-        tags_row = self.conn.execute(
+        tags_row = self._conn.execute(
             "SELECT tags, notes FROM merchant_tags WHERE merchant = ?", (merchant,)
         ).fetchone()
         profile["tags"] = []
@@ -505,7 +505,7 @@ class Storage:
 
     def get_merchant_tags(self, merchant: str) -> dict:
         """Return tags and notes for a merchant (empty defaults if not set)."""
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT tags, notes FROM merchant_tags WHERE merchant = ?", (merchant,)
         ).fetchone()
         if not row:
@@ -519,7 +519,7 @@ class Storage:
     def set_merchant_tags(self, merchant: str, tags: list[str]) -> None:
         """Upsert tags for a merchant (does not touch notes)."""
         tags_str = ",".join(tags)
-        self.conn.execute(
+        self._conn.execute(
             """INSERT INTO merchant_tags (merchant, tags, updated_at)
                VALUES (?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(merchant) DO UPDATE SET
@@ -527,11 +527,11 @@ class Storage:
                    updated_at = excluded.updated_at""",
             (merchant, tags_str),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def set_merchant_notes(self, merchant: str, notes: str) -> None:
         """Upsert notes for a merchant (does not touch tags)."""
-        self.conn.execute(
+        self._conn.execute(
             """INSERT INTO merchant_tags (merchant, notes, updated_at)
                VALUES (?, ?, CURRENT_TIMESTAMP)
                ON CONFLICT(merchant) DO UPDATE SET
@@ -539,11 +539,11 @@ class Storage:
                    updated_at = excluded.updated_at""",
             (merchant, notes),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def get_merchant_trend(self, merchant: str, months: int = 6) -> dict:
         """Return monthly spend totals for a merchant over the last N months."""
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """
             SELECT strftime('%Y-%m', transaction_date) as month,
                    ROUND(SUM(amount * exchange_rate), 2) as total,
@@ -582,47 +582,47 @@ class Storage:
             raise ValueError(f"period must be 'monthly' or 'weekly', got '{period}'")
         # SQLite UNIQUE constraint doesn't fire for two NULLs, so check manually
         if category is None:
-            existing = self.conn.execute(
+            existing = self._conn.execute(
                 "SELECT 1 FROM budgets WHERE category IS NULL AND period = ?", (period,)
             ).fetchone()
             if existing:
                 raise ValueError(f"Budget for 'Overall' ({period}) already exists")
         try:
-            cursor = self.conn.execute(
+            cursor = self._conn.execute(
                 """INSERT INTO budgets (category, period, amount)
                    VALUES (?, ?, ?)""",
                 (category, period, amount),
             )
-            self.conn.commit()
+            self._conn.commit()
             return cursor.lastrowid
         except sqlite3.IntegrityError:
             label = category if category else "Overall"
             raise ValueError(f"Budget for '{label}' ({period}) already exists")
 
     def get_budgets(self) -> list[dict]:
-        rows = self.conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
+        rows = self._conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
     def update_budget(self, budget_id: int, amount: float) -> None:
-        row = self.conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
         if not row:
             raise ValueError(f"Budget {budget_id} not found")
-        self.conn.execute(
+        self._conn.execute(
             "UPDATE budgets SET amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (amount, budget_id),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def delete_budget(self, budget_id: int) -> None:
-        row = self.conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
         if not row:
             raise ValueError(f"Budget {budget_id} not found")
-        self.conn.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
-        self.conn.commit()
+        self._conn.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
+        self._conn.commit()
 
     def get_budget_progress(self) -> list[dict]:
         """Return all budgets with current-period spending stats."""
-        budgets = self.conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
+        budgets = self._conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
         results = []
         today = date.today()
 
@@ -630,7 +630,7 @@ class Storage:
             start, end = _get_budget_period(b["period"])
 
             if b["category"] is None:
-                spent_row = self.conn.execute(
+                spent_row = self._conn.execute(
                     """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                        FROM transactions
                        WHERE (type IS NULL OR type = 'expense')
@@ -638,7 +638,7 @@ class Storage:
                     (start, end),
                 ).fetchone()
             else:
-                spent_row = self.conn.execute(
+                spent_row = self._conn.execute(
                     """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                        FROM transactions
                        WHERE (type IS NULL OR type = 'expense') AND category = ?
@@ -688,16 +688,16 @@ class Storage:
         target_amount: float,
         target_date: Optional[str] = None,
     ) -> int:
-        cursor = self.conn.execute(
+        cursor = self._conn.execute(
             """INSERT INTO goals (name, target_amount, target_date)
                VALUES (?, ?, ?)""",
             (name, target_amount, target_date),
         )
-        self.conn.commit()
+        self._conn.commit()
         return cursor.lastrowid
 
     def get_goals(self) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             "SELECT * FROM goals ORDER BY created_at ASC"
         ).fetchall()
         return [dict(r) for r in rows]
@@ -707,24 +707,24 @@ class Storage:
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return
-        row = self.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
             raise ValueError(f"Goal {goal_id} not found")
         set_clauses = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [goal_id]
-        self.conn.execute(
+        self._conn.execute(
             f"UPDATE goals SET {set_clauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             values,
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def delete_goal(self, goal_id: int) -> None:
-        row = self.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
             raise ValueError(f"Goal {goal_id} not found")
         # ON DELETE CASCADE removes contributions automatically
-        self.conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
-        self.conn.commit()
+        self._conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+        self._conn.commit()
 
     def add_contribution(
         self,
@@ -737,33 +737,33 @@ class Storage:
     ) -> int:
         if contributed_date is None:
             contributed_date = local_now().strftime("%Y-%m-%d")
-        row = self.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
             raise ValueError(f"Goal {goal_id} not found")
-        cursor = self.conn.execute(
+        cursor = self._conn.execute(
             """INSERT INTO goal_contributions (goal_id, amount, month, contributed_date, source, note)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (goal_id, amount, month, contributed_date, source, note),
         )
         # Update saved_amount on the goal
-        self.conn.execute(
+        self._conn.execute(
             "UPDATE goals SET saved_amount = saved_amount + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (amount, goal_id),
         )
         # Auto-complete goal when saved_amount reaches or exceeds target_amount
-        updated = self.conn.execute(
+        updated = self._conn.execute(
             "SELECT saved_amount, target_amount, status FROM goals WHERE id = ?", (goal_id,)
         ).fetchone()
         if updated and updated["saved_amount"] >= updated["target_amount"] and updated["status"] == "active":
-            self.conn.execute(
+            self._conn.execute(
                 "UPDATE goals SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (goal_id,),
             )
-        self.conn.commit()
+        self._conn.commit()
         return cursor.lastrowid
 
     def get_contributions(self, goal_id: int) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             "SELECT * FROM goal_contributions WHERE goal_id = ? ORDER BY contributed_date ASC, month ASC",
             (goal_id,),
         ).fetchall()
@@ -774,7 +774,7 @@ class Storage:
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
         ).fetchone()
         if not row:
@@ -782,22 +782,22 @@ class Storage:
         # If amount is changing, adjust the goal's saved_amount by the delta
         if "amount" in updates:
             delta = updates["amount"] - row["amount"]
-            self.conn.execute(
+            self._conn.execute(
                 "UPDATE goals SET saved_amount = saved_amount + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (delta, row["goal_id"]),
             )
             # Re-evaluate completion status
-            goal = self.conn.execute(
+            goal = self._conn.execute(
                 "SELECT saved_amount, target_amount, status FROM goals WHERE id = ?", (row["goal_id"],)
             ).fetchone()
             if goal:
                 if goal["saved_amount"] >= goal["target_amount"] and goal["status"] == "active":
-                    self.conn.execute(
+                    self._conn.execute(
                         "UPDATE goals SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                         (row["goal_id"],),
                     )
                 elif goal["saved_amount"] < goal["target_amount"] and goal["status"] == "completed":
-                    self.conn.execute(
+                    self._conn.execute(
                         "UPDATE goals SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                         (row["goal_id"],),
                     )
@@ -805,36 +805,36 @@ class Storage:
         if "contributed_date" in updates and updates["contributed_date"]:
             updates["month"] = updates["contributed_date"][:7]
         set_clause = ", ".join(f"{k} = ?" for k in updates)
-        self.conn.execute(
+        self._conn.execute(
             f"UPDATE goal_contributions SET {set_clause} WHERE id = ?",
             (*updates.values(), contribution_id),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def delete_contribution(self, contribution_id: int) -> None:
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
         ).fetchone()
         if not row:
             raise ValueError("Contribution not found")
-        self.conn.execute("DELETE FROM goal_contributions WHERE id = ?", (contribution_id,))
-        self.conn.execute(
+        self._conn.execute("DELETE FROM goal_contributions WHERE id = ?", (contribution_id,))
+        self._conn.execute(
             "UPDATE goals SET saved_amount = MAX(0, saved_amount - ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (row["amount"], row["goal_id"]),
         )
         # If goal was completed but saved_amount now falls below target, revert to active
-        goal = self.conn.execute(
+        goal = self._conn.execute(
             "SELECT saved_amount, target_amount, status FROM goals WHERE id = ?", (row["goal_id"],)
         ).fetchone()
         if goal and goal["saved_amount"] < goal["target_amount"] and goal["status"] == "completed":
-            self.conn.execute(
+            self._conn.execute(
                 "UPDATE goals SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (row["goal_id"],),
             )
-        self.conn.commit()
+        self._conn.commit()
 
     def get_goal_progress(self, goal_id: int) -> Optional[dict]:
-        row = self.conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        row = self._conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
             return None
         goal = dict(row)
@@ -879,20 +879,20 @@ class Storage:
         start = f"{month}-01"
         end = f"{month}-{last_day:02d}"
 
-        income = self.conn.execute(
+        income = self._conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                FROM transactions WHERE type = 'income'
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()["total"]
-        expenses = self.conn.execute(
+        expenses = self._conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
                FROM transactions WHERE (type IS NULL OR type = 'expense')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()["total"]
         savings = max(0.0, income - expenses)
-        allocated = self.conn.execute(
+        allocated = self._conn.execute(
             "SELECT COALESCE(SUM(amount), 0) as total FROM goal_contributions WHERE month = ?",
             (month,),
         ).fetchone()["total"]
@@ -932,7 +932,7 @@ class Storage:
         end = now.strftime("%Y-%m-%d")
 
         # ── Income ──────────────────────────────────────────────────────────
-        income = self.conn.execute(
+        income = self._conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0.0)
                FROM transactions WHERE type = 'income'
                AND DATE(transaction_date) BETWEEN ? AND ?""",
@@ -949,7 +949,7 @@ class Storage:
             }
 
         # ── Total expenses ───────────────────────────────────────────────────
-        total_expense = self.conn.execute(
+        total_expense = self._conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0.0)
                FROM transactions WHERE (type IS NULL OR type = 'expense')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
@@ -957,7 +957,7 @@ class Storage:
         ).fetchone()[0]
 
         # ── Needs (expenses in categories with type='needs') ─────────────────
-        needs = self.conn.execute(
+        needs = self._conn.execute(
             """SELECT COALESCE(SUM(t.amount * t.exchange_rate), 0.0)
                FROM transactions t
                LEFT JOIN categories c ON t.category = c.name
@@ -968,7 +968,7 @@ class Storage:
         ).fetchone()[0]
 
         # ── Wants (expenses in categories with type='wants') ─────────────────
-        wants = self.conn.execute(
+        wants = self._conn.execute(
             """SELECT COALESCE(SUM(t.amount * t.exchange_rate), 0.0)
                FROM transactions t
                LEFT JOIN categories c ON t.category = c.name
@@ -1004,7 +1004,7 @@ class Storage:
         # Historical average per merchant (excluding current scoring period)
         merchant_avgs = {
             row["merchant"]: row["avg_amt"]
-            for row in self.conn.execute(
+            for row in self._conn.execute(
                 """SELECT merchant, AVG(amount * exchange_rate) as avg_amt
                    FROM transactions WHERE type = 'expense' AND merchant IS NOT NULL
                    AND DATE(transaction_date) < ?
@@ -1014,7 +1014,7 @@ class Storage:
         }
 
         # Period transactions
-        period_txs = self.conn.execute(
+        period_txs = self._conn.execute(
             """SELECT merchant, amount * exchange_rate as amt_sgd
                FROM transactions WHERE type = 'expense' AND merchant IS NOT NULL
                AND DATE(transaction_date) BETWEEN ? AND ?""",
@@ -1097,22 +1097,22 @@ class Storage:
         destination: Optional[str] = None,
         primary_currency: str = "SGD",
     ) -> int:
-        cursor = self.conn.execute(
+        cursor = self._conn.execute(
             """INSERT INTO trips (name, destination, start_date, primary_currency)
                VALUES (?, ?, ?, ?)""",
             (name, destination, start_date, primary_currency),
         )
-        self.conn.commit()
+        self._conn.commit()
         return cursor.lastrowid
 
     def get_trips(self) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             "SELECT * FROM trips ORDER BY created_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
 
     def get_trip(self, trip_id: int) -> Optional[dict]:
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT * FROM trips WHERE id = ?", (trip_id,)
         ).fetchone()
         return dict(row) if row else None
@@ -1122,71 +1122,71 @@ class Storage:
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return
-        row = self.conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
             raise ValueError(f"Trip {trip_id} not found")
         set_clauses = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [trip_id]
-        self.conn.execute(
+        self._conn.execute(
             f"UPDATE trips SET {set_clauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             values,
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def delete_trip(self, trip_id: int) -> None:
-        row = self.conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
             raise ValueError(f"Trip {trip_id} not found")
-        self.conn.execute("DELETE FROM trip_transactions WHERE trip_id = ?", (trip_id,))
-        self.conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
-        self.conn.commit()
+        self._conn.execute("DELETE FROM trip_transactions WHERE trip_id = ?", (trip_id,))
+        self._conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
+        self._conn.commit()
 
     def activate_trip(self, trip_id: int) -> None:
-        row = self.conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
             raise ValueError(f"Trip {trip_id} not found")
-        self.conn.execute(
+        self._conn.execute(
             "UPDATE trips SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id != ?",
             (trip_id,),
         )
-        self.conn.execute(
+        self._conn.execute(
             "UPDATE trips SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (trip_id,),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def deactivate_trip(self, trip_id: int) -> None:
-        row = self.conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
+        row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
             raise ValueError(f"Trip {trip_id} not found")
-        self.conn.execute(
+        self._conn.execute(
             "UPDATE trips SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (trip_id,),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def get_active_trip(self) -> Optional[dict]:
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT * FROM trips WHERE status = 'active' LIMIT 1"
         ).fetchone()
         return dict(row) if row else None
 
     def enlist_transaction(self, trip_id: int, tx_id: int, added_by: str = "auto") -> None:
         """Add a transaction to a trip. Idempotent — does nothing if already enlisted."""
-        self.conn.execute(
+        self._conn.execute(
             """INSERT OR IGNORE INTO trip_transactions (trip_id, transaction_id, added_by)
                VALUES (?, ?, ?)""",
             (trip_id, tx_id, added_by),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def delist_transaction(self, trip_id: int, tx_id: int) -> None:
         """Remove a transaction from a trip. No-op if not enlisted."""
-        self.conn.execute(
+        self._conn.execute(
             "DELETE FROM trip_transactions WHERE trip_id = ? AND transaction_id = ?",
             (trip_id, tx_id),
         )
-        self.conn.commit()
+        self._conn.commit()
 
     def get_trip_transactions(
         self,
@@ -1194,7 +1194,7 @@ class Storage:
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT t.*, tt.added_by
                FROM transactions t
                JOIN trip_transactions tt ON tt.transaction_id = t.id
@@ -1216,7 +1216,7 @@ class Storage:
 
     def is_in_trip(self, trip_id: int, tx_id: int) -> bool:
         """Return True if transaction tx_id is enlisted in trip trip_id."""
-        row = self.conn.execute(
+        row = self._conn.execute(
             "SELECT 1 FROM trip_transactions WHERE trip_id = ? AND transaction_id = ?",
             (trip_id, tx_id),
         ).fetchone()
@@ -1228,7 +1228,7 @@ class Storage:
         if not trip:
             return None
 
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT t.amount * t.exchange_rate as amt_sgd,
                       t.category,
                       DATE(t.transaction_date) as tx_date,
@@ -1282,7 +1282,7 @@ class Storage:
 
     def get_merchant_history(self, merchant: str, days: int = 90) -> list[dict]:
         """Return expense transactions for a merchant within the past *days* days."""
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT amount, transaction_date FROM transactions
                WHERE merchant = ? AND transaction_date >= date('now', ? || ' days')
                AND (type IS NULL OR type = 'expense')
@@ -1294,11 +1294,11 @@ class Storage:
     def save_recurring(
         self, merchant: str, avg_amount: float, frequency: str, category: Optional[str] = None
     ) -> None:
-        existing = self.conn.execute(
+        existing = self._conn.execute(
             "SELECT id FROM recurring_transactions WHERE merchant = ?", (merchant,)
         ).fetchone()
         if existing:
-            self.conn.execute(
+            self._conn.execute(
                 """UPDATE recurring_transactions
                    SET avg_amount = ?, frequency = ?, category = ?,
                        last_seen = CURRENT_TIMESTAMP, occurrences = occurrences + 1
@@ -1306,16 +1306,16 @@ class Storage:
                 (avg_amount, frequency, category, merchant),
             )
         else:
-            self.conn.execute(
+            self._conn.execute(
                 """INSERT INTO recurring_transactions
                    (merchant, avg_amount, frequency, category, first_seen, last_seen, occurrences)
                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 2)""",
                 (merchant, avg_amount, frequency, category),
             )
-        self.conn.commit()
+        self._conn.commit()
 
     def get_recurring_transactions(self) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
         ).fetchall()
         return [dict(r) for r in rows]
@@ -1332,7 +1332,7 @@ class Storage:
     # ── Apple Wallet cards ────────────────────────────────────────────────────
 
     def get_apple_wallet_cards(self) -> list[str]:
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT DISTINCT description FROM transactions
                WHERE source = 'apple_wallet' AND description LIKE 'Apple Wallet - _%'
                ORDER BY description"""
@@ -1343,7 +1343,7 @@ class Storage:
 
     def get_merchants_in_range(self, start: str, end: str) -> list[str]:
         """Return distinct merchant names with transactions in [start, end]."""
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             """SELECT DISTINCT merchant FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND merchant IS NOT NULL
@@ -1355,11 +1355,11 @@ class Storage:
     # ── Budget / Goal single-row fetch ────────────────────────────────────────
 
     def get_budget(self, budget_id: int) -> Optional[dict]:
-        row = self.conn.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        row = self._conn.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
         return dict(row) if row else None
 
     def get_goal(self, goal_id: int) -> Optional[dict]:
-        row = self.conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        row = self._conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
         return dict(row) if row else None
 
     # ── Analytics wrappers ────────────────────────────────────────────────────
@@ -1368,32 +1368,32 @@ class Storage:
         """Return overall + per-category period comparison delegating to analytics."""
         from src.analytics import get_period_comparison, get_category_comparison
         return {
-            "overall": get_period_comparison(self.conn, period, date),
-            "categories": get_category_comparison(self.conn, period, date),
+            "overall": get_period_comparison(self._conn, period, date),
+            "categories": get_category_comparison(self._conn, period, date),
         }
 
     def top_merchants_by_period(
         self, limit: int = 10, period: str = "month", date: Optional[str] = None
     ) -> list[dict]:
         from src.analytics import get_top_merchants
-        return get_top_merchants(self.conn, limit, period, date)
+        return get_top_merchants(self._conn, limit, period, date)
 
     def merchant_trend_chart(self, merchant: str) -> dict:
         from src.analytics import get_merchant_trend
-        return get_merchant_trend(self.conn, merchant)
+        return get_merchant_trend(self._conn, merchant)
 
     def spending_velocity(self) -> dict:
         from src.analytics import get_spending_velocity
-        return get_spending_velocity(self.conn)
+        return get_spending_velocity(self._conn)
 
     def spending_anomalies(self, multiplier: float = 2.0) -> list[dict]:
         from src.analytics import get_anomalies
-        return get_anomalies(self.conn, multiplier)
+        return get_anomalies(self._conn, multiplier)
 
     def new_merchants(self) -> list[dict]:
         from src.analytics import check_new_merchants
-        return check_new_merchants(self.conn)
+        return check_new_merchants(self._conn)
 
     def generate_digest(self, report_type: str = "monthly") -> dict:
         from src.analytics import generate_summary
-        return generate_summary(self.conn, report_type)
+        return generate_summary(self._conn, report_type)

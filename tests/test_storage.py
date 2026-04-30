@@ -298,11 +298,11 @@ class TestCrossSourceDedup:
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
         # Override ingested_at to an old timestamp
-        storage.conn.execute(
+        storage._conn.execute(
             "UPDATE transactions SET ingested_at = '2020-01-01 00:00:00' WHERE id = ?",
             (tx_id,),
         )
-        storage.conn.commit()
+        storage._conn.commit()
         result = storage.find_cross_source_duplicate(
             "Ban Mian", 8.20, "dbs_paylah"
         )

@@ -76,7 +76,7 @@ class TestGmailPollerCrossSourceDedup:
 
         assert tx_id is None
         # Only the original Apple Wallet record exists — no duplicate
-        rows = self.storage.conn.execute(
+        rows = self.storage._conn.execute(
             "SELECT * FROM transactions WHERE merchant = 'Toast Box'"
         ).fetchall()
         assert len(rows) == 1
@@ -93,7 +93,7 @@ class TestGmailPollerCrossSourceDedup:
         tx_id = self.poller._save_and_detect(result)
 
         assert tx_id is not None
-        rows = self.storage.conn.execute(
+        rows = self.storage._conn.execute(
             "SELECT * FROM transactions WHERE merchant = 'Toast Box'"
         ).fetchall()
         assert len(rows) == 1

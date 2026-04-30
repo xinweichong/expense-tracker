@@ -840,7 +840,7 @@ def make_query_mock(data: str):
 
 def test_apply_category_update_sets_category(bot_with_storage):
     bot, storage = bot_with_storage
-    tx_id = storage.conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
+    tx_id = storage._conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
     query = make_query_mock(f"cat:{tx_id}:Food")
 
     asyncio.get_event_loop().run_until_complete(
@@ -853,7 +853,7 @@ def test_apply_category_update_sets_category(bot_with_storage):
 
 def test_apply_category_update_learns_merchant_override(bot_with_storage):
     bot, storage = bot_with_storage
-    tx_id = storage.conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
+    tx_id = storage._conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
     query = make_query_mock(f"cat:{tx_id}:Food")
 
     asyncio.get_event_loop().run_until_complete(
