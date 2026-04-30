@@ -1233,62 +1233,40 @@ class TelegramBotService:
                     chat_id=self.chat_id, text=msg, parse_mode="Markdown"
                 )
 
-    async def _category_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        query = update.callback_query
-        await query.answer()
-
-        if not query.data.startswith("cat:"):
-            return
-
-        _, tx_id_str, category = query.data.split(":", 2)
-        tx_id = int(tx_id_str)
+    async def _apply_category_update(self, tx_id: int, category: str, query) -> None:
+        """Shared body for cat: and recat: callbacks — update category, learn override, refresh message."""
         tx = self.storage.get_transaction(tx_id)
         if not tx:
             await query.edit_message_text("Transaction not found.")
             return
-
         self.storage.update_transaction(tx_id, category=category)
         merchant = tx["merchant"]
         if merchant:
             self.storage.set_merchant_override(merchant, category)
             if self.categorizer:
                 self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
-
         icon_map = self.storage.get_category_icon_map()
         updated_tx = self.storage.get_transaction(tx_id)
         await query.edit_message_text(
             self._format_tx_block(updated_tx, icon_map),
             parse_mode="Markdown",
         )
+
+    async def _category_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        await query.answer()
+        if not query.data.startswith("cat:"):
+            return
+        _, tx_id_str, category = query.data.split(":", 2)
+        await self._apply_category_update(int(tx_id_str), category, query)
 
     async def _recat_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         await query.answer()
-
         if not query.data.startswith("recat:"):
             return
-
         _, tx_id_str, category = query.data.split(":", 2)
-        tx_id = int(tx_id_str)
-        tx = self.storage.get_transaction(tx_id)
-        if not tx:
-            await query.edit_message_text("Transaction not found.")
-            return
-
-        old_category = tx["category"]
-        self.storage.update_transaction(tx_id, category=category)
-        merchant = tx["merchant"]
-        if merchant:
-            self.storage.set_merchant_override(merchant, category)
-            if self.categorizer:
-                self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
-
-        icon_map = self.storage.get_category_icon_map()
-        updated_tx = self.storage.get_transaction(tx_id)
-        await query.edit_message_text(
-            self._format_tx_block(updated_tx, icon_map),
-            parse_mode="Markdown",
-        )
+        await self._apply_category_update(int(tx_id_str), category, query)
 
     async def _cmd_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -1465,8 +1443,3 @@ class TelegramBotService:
             logger.debug("Cannot send daily digest: bot not started")
             return
         asyncio.run_coroutine_threadsafe(self._send_daily_digest(), self._loop)
-
-    def run(self) -> None:
-        self.setup_handlers()
-        logger.info("Starting Telegram bot")
-        self.app.run_polling()

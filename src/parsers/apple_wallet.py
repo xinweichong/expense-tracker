@@ -6,7 +6,9 @@ from src.parsers.base import BankParser, ParseResult
 
 
 class AppleWalletParser(BankParser):
-    sender_domain = ""  # Not email-based — receives webhook payloads
+    @property
+    def sender_domain(self) -> str:
+        return ""  # Not email-based — receives webhook payloads
 
     DATE_FORMATS = ["%d/%m/%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]
 

@@ -16,7 +16,9 @@ class UobParser(BankParser):
       5. One-time transfer   (H:MMAM/PM SGT, D Mon YY — expense)
     """
 
-    sender_domain = "uobgroup.com"
+    @property
+    def sender_domain(self) -> str:
+        return "uobgroup.com"
 
     # Pattern 1: SGD card purchase
     CARD_PATTERN = re.compile(

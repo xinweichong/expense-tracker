@@ -73,3 +73,14 @@ class RecurringDetector:
             "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def run(self, merchant: str, amount: float, tx_id: int) -> None:
+        """Detect recurring pattern for merchant/amount and persist if found. Best-effort; logs warnings on error."""
+        try:
+            rec = self.detect(merchant, amount)
+            if rec:
+                tx = self.storage.get_transaction(tx_id)
+                category = tx.get("category") if tx else None
+                self.save_recurring(merchant, rec["avg_amount"], rec["frequency"], category)
+        except Exception as e:
+            logger.warning("Recurring detection failed for %s: %s", merchant, e)

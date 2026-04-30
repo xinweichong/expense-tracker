@@ -737,3 +737,10 @@ def test_get_health_score_includes_null_type_in_total_expense(in_memory_db):
         "— NULL-type expense row was excluded from total_expense"
     )
 
+
+def test_valid_types_constant_exported():
+    """_VALID_TYPES should be a module-level constant in storage."""
+    import src.storage as storage_module
+    assert hasattr(storage_module, "_VALID_TYPES"), "_VALID_TYPES not found at module level"
+    assert storage_module._VALID_TYPES == {"needs", "wants", "neutral"}
+

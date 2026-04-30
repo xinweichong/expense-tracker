@@ -210,17 +210,7 @@ class GmailPoller:
             tx_type=result.tx_type,
         )
         logger.info(f"Stored transaction: {result.merchant} ${result.amount:.2f}")
-        try:
-            detector = RecurringDetector(self.storage)
-            rec = detector.detect(result.merchant, result.amount)
-            if rec:
-                tx = self.storage.get_transaction(tx_id)
-                category = tx.get("category") if tx else None
-                detector.save_recurring(
-                    result.merchant, rec["avg_amount"], rec["frequency"], category
-                )
-        except Exception as e:
-            logger.warning("Recurring detection failed for %s: %s", result.merchant, e)
+        RecurringDetector(self.storage).run(result.merchant, result.amount, tx_id)
         return tx_id
 
     def start_reauth(self, redirect_uri: str) -> str:

@@ -17,7 +17,10 @@ class ParseResult:
 
 
 class BankParser(ABC):
-    sender_domain: str
+    @property
+    @abstractmethod
+    def sender_domain(self) -> str:
+        ...
 
     @abstractmethod
     def can_parse(self, sender: str, subject: str) -> bool:
