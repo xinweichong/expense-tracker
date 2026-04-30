@@ -5,7 +5,9 @@ from src.parsers.base import BankParser, ParseResult
 
 
 class DbsPaylahParser(BankParser):
-    sender_domain = "dbs.com"
+    @property
+    def sender_domain(self) -> str:
+        return "dbs.com"
 
     AMOUNT_PATTERN = re.compile(r"Amount:\s+SGD([0-9,]+\.\d{2})")
     MERCHANT_PATTERN = re.compile(r"To:\s+(.+?)(?:\s{2,}|$)", re.MULTILINE)
