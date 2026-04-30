@@ -477,4 +477,9 @@ export const api = {
       telegram: { running: boolean | null; last_error: string | null };
       exchange: { using_fallback: boolean | null; last_fetch_error: string | null };
     }>('/api/status'),
+
+  ping: () => request<{ status: string }>('/api/ping'),
+
+  logout: () =>
+    request<{ status: string }>('/api/logout', { method: 'POST' }),
 };
