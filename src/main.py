@@ -262,12 +262,8 @@ def main():
             f.write(base64.b64decode(gmail_creds_b64).decode())
         logger.info("Decoded Gmail credentials from environment")
 
-    if gmail_token_b64 := os.environ.get("GMAIL_TOKEN_JSON"):
-        with open(TOKEN_PATH, "w") as f:
-            f.write(base64.b64decode(gmail_token_b64).decode())
-        logger.info("Decoded Gmail token from environment")
-    else:
-        logger.warning("GMAIL_TOKEN_JSON not set — Gmail polling will not work")
+    if not os.path.exists(TOKEN_PATH):
+        logger.info("No Gmail token found — use /reauth in Telegram to authorize")
 
     conn = init_db(DB_PATH)
     storage = Storage(connection=conn)
