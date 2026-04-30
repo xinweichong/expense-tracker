@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
@@ -27,7 +28,9 @@ function CategoryColorLoader() {
     queryKey: ['categories'],
     queryFn: () => api.getCategories(),
   });
-  if (categories) setCategoryColors(categories);
+  useEffect(() => {
+    if (categories) setCategoryColors(categories);
+  }, [categories]);
   return null;
 }
 
