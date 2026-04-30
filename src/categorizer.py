@@ -25,3 +25,10 @@ class Categorizer:
 
     def reload_overrides(self, overrides: dict) -> None:
         self.overrides = overrides
+
+    def learn_merchant(self, merchant: str, category: str, storage=None) -> None:
+        """Update in-memory overrides and optionally persist to storage."""
+        self.overrides[merchant] = category
+        if storage is not None:
+            storage.set_merchant_override(merchant, category)
+            self.overrides = storage.get_merchant_overrides()

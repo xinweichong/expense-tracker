@@ -395,8 +395,8 @@ class TelegramBotService:
             return ConversationHandler.END
 
         self.storage.update_transaction(tx_id, category=category)
-        if tx.get("merchant"):
-            self.storage.set_merchant_override(tx["merchant"], category)
+        if tx.get("merchant") and self.categorizer:
+            self.categorizer.learn_merchant(tx["merchant"], category, self.storage)
 
         await query.edit_message_text(f"Category updated to *{category}*.", parse_mode="Markdown")
         context.user_data.clear()
@@ -706,10 +706,10 @@ class TelegramBotService:
             self.storage.update_transaction(tx_id, category=new_category)
 
             merchant = tx["merchant"]
-            if merchant:
+            if merchant and self.categorizer:
+                self.categorizer.learn_merchant(merchant, new_category, self.storage)
+            elif merchant:
                 self.storage.set_merchant_override(merchant, new_category)
-                if self.categorizer:
-                    self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
 
             await update.message.reply_text(
                 f"Updated #{tx_id}: {old_category} -> {new_category}"
@@ -1227,10 +1227,10 @@ class TelegramBotService:
             return
         self.storage.update_transaction(tx_id, category=category)
         merchant = tx["merchant"]
-        if merchant:
+        if merchant and self.categorizer:
+            self.categorizer.learn_merchant(merchant, category, self.storage)
+        elif merchant:
             self.storage.set_merchant_override(merchant, category)
-            if self.categorizer:
-                self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
         icon_map = self.storage.get_category_icon_map()
         updated_tx = self.storage.get_transaction(tx_id)
         await query.edit_message_text(
