@@ -43,7 +43,7 @@ SUMMARY_CACHE_DIR = os.environ.get(
 )
 
 
-def create_dashboard_app(storage: Storage, password_hash: str, poller=None) -> FastAPI:
+def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=None, exchange_service=None) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
 
     @app.get("/oauth/callback")
@@ -84,6 +84,24 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None) -> F
         session = request.cookies.get("session")
         if not session or not verify_session(session):
             raise HTTPException(status_code=401, detail="Not authenticated")
+
+    @app.get("/api/status")
+    async def get_status(_auth=Depends(require_auth)):
+        return {
+            "gmail": {
+                "authenticated": poller.service is not None if poller else None,
+                "last_auth_error": getattr(poller, "last_auth_error", None),
+                "last_poll_at": getattr(poller, "last_poll_at", None),
+            },
+            "telegram": {
+                "running": bot.is_running if bot else None,
+                "last_error": bot.last_error if bot else None,
+            },
+            "exchange": {
+                "using_fallback": exchange_service.using_fallback if exchange_service else None,
+                "last_fetch_error": exchange_service.last_fetch_error if exchange_service else None,
+            },
+        }
 
     @app.get("/api/summary")
     async def summary(

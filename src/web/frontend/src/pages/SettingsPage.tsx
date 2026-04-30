@@ -24,7 +24,7 @@ import {
 import { api, type Category } from '@/api/client';
 import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
-import { Pencil, Trash2, Plus, X } from 'lucide-react';
+import { Pencil, Trash2, Plus, X, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react';
 
 const ICON_OPTIONS = [
   '🍜', '🚗', '🛒', '📄', '🎬', '📌', '💰', '🏥', '✈️', '🎓',
@@ -81,6 +81,12 @@ export function SettingsPage() {
   const { data: settings, refetch: refetchSettings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.getSettings(),
+  });
+
+  const { data: systemStatus } = useQuery({
+    queryKey: ['status'],
+    queryFn: () => api.getStatus(),
+    refetchInterval: 30_000,
   });
 
   useEffect(() => {
@@ -386,6 +392,87 @@ export function SettingsPage() {
 
       {/* ── Right panel: feature toggles + alert thresholds ── */}
       <div className="area-right grid-scroll-panel space-y-4">
+
+        {/* System Status */}
+        <PageCard title="System Status">
+          <div className="divide-y divide-border">
+            {/* Gmail */}
+            <div className="flex items-start gap-3 py-3">
+              {systemStatus?.gmail.authenticated === false || systemStatus?.gmail.last_auth_error ? (
+                <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+              ) : systemStatus?.gmail.authenticated ? (
+                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 shrink-0" />
+              ) : (
+                <div className="w-4 h-4 rounded-full border border-border mt-0.5 shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Gmail</p>
+                {systemStatus?.gmail.last_auth_error ? (
+                  <>
+                    <p className="text-xs text-destructive">Auth failed — re-authenticate via Railway</p>
+                    <p className="text-xs text-muted mt-0.5 truncate">{systemStatus.gmail.last_auth_error}</p>
+                  </>
+                ) : systemStatus?.gmail.authenticated ? (
+                  <p className="text-xs text-muted">
+                    Connected{systemStatus.gmail.last_poll_at ? ` · Last polled ${systemStatus.gmail.last_poll_at.slice(0, 16).replace('T', ' ')}` : ''}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted">Not configured</p>
+                )}
+              </div>
+            </div>
+            {/* Telegram Bot */}
+            <div className="flex items-start gap-3 py-3">
+              {systemStatus?.telegram.running === false ? (
+                <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+              ) : systemStatus?.telegram.running ? (
+                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 shrink-0" />
+              ) : (
+                <div className="w-4 h-4 rounded-full border border-border mt-0.5 shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Telegram Bot</p>
+                {systemStatus?.telegram.running === false ? (
+                  <>
+                    <p className="text-xs text-destructive">Crashed — check Railway logs</p>
+                    {systemStatus.telegram.last_error && (
+                      <p className="text-xs text-muted mt-0.5 truncate">{systemStatus.telegram.last_error}</p>
+                    )}
+                  </>
+                ) : systemStatus?.telegram.running ? (
+                  <p className="text-xs text-muted">Running</p>
+                ) : (
+                  <p className="text-xs text-muted">Not configured</p>
+                )}
+              </div>
+            </div>
+            {/* Exchange Rates */}
+            <div className="flex items-start gap-3 py-3">
+              {systemStatus?.exchange.using_fallback ? (
+                <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+              ) : systemStatus?.exchange.using_fallback === false ? (
+                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 shrink-0" />
+              ) : (
+                <div className="w-4 h-4 rounded-full border border-border mt-0.5 shrink-0" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Exchange Rates</p>
+                {systemStatus?.exchange.using_fallback ? (
+                  <>
+                    <p className="text-xs text-warning">Using hardcoded fallback rates</p>
+                    {systemStatus.exchange.last_fetch_error && (
+                      <p className="text-xs text-muted mt-0.5 truncate">{systemStatus.exchange.last_fetch_error}</p>
+                    )}
+                  </>
+                ) : systemStatus?.exchange.using_fallback === false ? (
+                  <p className="text-xs text-muted">Live rates</p>
+                ) : (
+                  <p className="text-xs text-muted">Unknown</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </PageCard>
 
         {/* Feature Toggles */}
         <div id="feature-toggles">

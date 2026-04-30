@@ -229,6 +229,7 @@ def _run_bot(bot: TelegramBotService) -> None:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     bot._loop = loop
+    bot.is_running = True
     try:
         loop.run_until_complete(bot.app.initialize())
         loop.run_until_complete(bot.app.start())
@@ -237,6 +238,8 @@ def _run_bot(bot: TelegramBotService) -> None:
         loop.run_forever()
     except Exception as e:
         logger.error(f"Telegram bot error: {e}")
+        bot.is_running = False
+        bot.last_error = str(e)
 
 
 def main():
@@ -318,6 +321,16 @@ def main():
         oauth_redirect_uri=os.environ.get("OAUTH_REDIRECT_URI", f"{dashboard_url.rstrip('/')}/oauth/callback"),
     )
 
+    # Surface Gmail auth failures to the user via Telegram (once per failure, cleared on recovery)
+    def _on_gmail_auth_error(err: str) -> None:
+        bot.notify_text(
+            "⚠️ *Gmail Authentication Failed*\n\n"
+            "Email polling has stopped. To fix:\n"
+            "1. Re-run `scripts/gmail_auth.py` locally\n"
+            "2. Update `GMAIL_TOKEN_JSON` in Railway environment variables"
+        )
+    poller.on_auth_error = _on_gmail_auth_error
+
     # Build combined FastAPI app
     from fastapi import FastAPI
     app = FastAPI()
@@ -333,7 +346,10 @@ def main():
         app.routes.append(route)
 
     # Mount dashboard
-    dashboard_app = create_dashboard_app(storage, config.get("web", {}).get("password_hash", ""), poller=poller)
+    dashboard_app = create_dashboard_app(
+        storage, config.get("web", {}).get("password_hash", ""),
+        poller=poller, bot=bot, exchange_service=exchange_service,
+    )
     app.mount("/", dashboard_app)
 
     host = server_config.get("host", "0.0.0.0")
