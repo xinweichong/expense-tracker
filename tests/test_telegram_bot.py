@@ -817,3 +817,66 @@ def test_trip_text_decimal_amounts_unescaped_for_markdown_v1():
     # In Markdown v1, dots are NOT special and must NOT be escaped
     assert "\\." not in escaped, "Dot should not be escaped in Markdown v1"
     assert "123.45" in escaped
+
+
+import asyncio
+
+
+@pytest.fixture
+def bot_with_storage(in_memory_db):
+    storage = Storage(in_memory_db)
+    in_memory_db.execute("""
+        INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+            merchant, category, transaction_date, type)
+        VALUES ('manual', 'apply-cat-1', 25.0, 'SGD', 1.0,
+            'Kopi Shop', 'Other', '2026-04-15T10:00:00', 'expense')
+    """)
+    in_memory_db.commit()
+    bot = TelegramBotService(storage=storage, bot_token="fake")
+    return bot, storage
+
+
+def make_query_mock(data: str):
+    query = AsyncMock()
+    query.data = data
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    return query
+
+
+def test_apply_category_update_sets_category(bot_with_storage):
+    bot, storage = bot_with_storage
+    tx_id = storage.conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
+    query = make_query_mock(f"cat:{tx_id}:Food")
+
+    asyncio.get_event_loop().run_until_complete(
+        bot._apply_category_update(tx_id, "Food", query)
+    )
+
+    updated = storage.get_transaction(tx_id)
+    assert updated["category"] == "Food"
+
+
+def test_apply_category_update_learns_merchant_override(bot_with_storage):
+    bot, storage = bot_with_storage
+    tx_id = storage.conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
+    query = make_query_mock(f"cat:{tx_id}:Food")
+
+    asyncio.get_event_loop().run_until_complete(
+        bot._apply_category_update(tx_id, "Food", query)
+    )
+
+    overrides = storage.get_merchant_overrides()
+    assert overrides.get("Kopi Shop") == "Food"
+
+
+def test_apply_category_update_notifies_transaction_not_found(bot_with_storage):
+    bot, storage = bot_with_storage
+    query = make_query_mock("cat:99999:Food")
+
+    asyncio.get_event_loop().run_until_complete(
+        bot._apply_category_update(99999, "Food", query)
+    )
+
+    query.edit_message_text.assert_called_once_with("Transaction not found.")
+
