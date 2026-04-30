@@ -5,7 +5,6 @@ from pydantic import BaseModel, field_validator
 
 from src.parsers.apple_wallet import AppleWalletParser
 from src.storage import Storage
-from src.recurring import RecurringDetector
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,8 @@ def create_webhook_app(
     storage: Storage,
     exchange_service=None,
     categorizer=None,
-    on_transaction: Optional[Callable[[int, float, str, Optional[str], str, str], None]] = None,
+    on_transaction: Optional[Callable[[dict], None]] = None,
+    pipeline=None,
 ) -> FastAPI:
     app = FastAPI()
     parser = AppleWalletParser()
@@ -47,8 +47,22 @@ def create_webhook_app(
             logger.error(f"Webhook parse error: {e}")
             raise HTTPException(status_code=400, detail=str(e))
 
-        # Same-source dedup: source_id is a content hash of merchant+amount+date,
-        # so identical re-fires from the iOS Shortcut produce the same source_id.
+        if pipeline is not None:
+            tx_dict = pipeline.ingest(result)
+            if tx_dict is None:
+                # Cross-source dedup: look up whether it matched an existing record
+                dup = storage.find_cross_source_duplicate(
+                    result.merchant, result.amount, "apple_wallet"
+                )
+                dup_id = dup["id"] if dup else None
+                status = "duplicate"
+                return {"status": status, "transaction_id": dup_id}
+            if on_transaction:
+                on_transaction(tx_dict)
+            return {"status": "ok", "transaction_id": tx_dict["id"]}
+
+        # --- Legacy path (no pipeline): kept for backward compat in tests ---
+        # Same-source dedup
         if storage.source_id_exists(result.source_id):
             return {"status": "duplicate", "transaction_id": None}
 
@@ -63,13 +77,12 @@ def create_webhook_app(
             )
             return {"status": "duplicate", "transaction_id": dup["id"]}
 
-        # Exchange rate lookup (1.0 for SGD or when service unavailable)
+        # Exchange rate lookup
         exchange_rate = 1.0
         if exchange_service and result.currency != "SGD":
             exchange_rate = exchange_service.get_rate(result.currency)
 
-        # Categorize merchant — reload overrides fresh from DB so any changes
-        # made via the web dashboard are always reflected on the next transaction.
+        # Categorize
         category, match_source = None, "default"
         if categorizer:
             categorizer.reload_overrides(storage.get_merchant_overrides())
@@ -96,6 +109,7 @@ def create_webhook_app(
         if on_transaction:
             on_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
 
+        from src.recurring import RecurringDetector
         RecurringDetector(storage).run(result.merchant, result.amount, tx_id)
 
         return {"status": "ok", "transaction_id": tx_id}

@@ -13,7 +13,6 @@ from googleapiclient.discovery import build
 
 from src.parsers.base import BankParser, ParseResult
 from src.storage import Storage
-from src.recurring import RecurringDetector
 from src.config import local_now
 
 logger = logging.getLogger(__name__)
@@ -33,8 +32,9 @@ class GmailPoller:
         sender_filters: list[str],
         parsers: list[BankParser],
         storage: Storage,
-        on_transaction: Optional[Callable[[ParseResult], None]] = None,
+        on_transaction: Optional[Callable[[dict], None]] = None,
         on_auth_error: Optional[Callable[[str], None]] = None,
+        pipeline=None,
     ):
         self.credentials_path = credentials_path
         self.token_path = token_path
@@ -43,6 +43,7 @@ class GmailPoller:
         self.storage = storage
         self.on_transaction = on_transaction
         self.on_auth_error = on_auth_error
+        self.pipeline = pipeline
         self.service = None
         self._pending_flow = None
         self._pending_state = None
@@ -202,35 +203,23 @@ class GmailPoller:
         logger.info(f"Processed {len(transactions)} new transactions")
         return transactions
 
-    def _save_and_detect(self, result) -> int | None:
-        """Save a parsed transaction and run recurring detection."""
-        # Cross-source dedup: skip if another source already ingested this transaction
-        # recently (e.g. Apple Wallet push arrived before this email alert).
-        dup = self.storage.find_cross_source_duplicate(
-            result.merchant, result.amount, result.source
-        )
-        if dup:
-            logger.info(
-                "Cross-source duplicate skipped: %s %.2f matches existing %s (id=%s)",
-                result.merchant, result.amount, dup["source"], dup["id"],
-            )
-            return None
-        tx_id = self.storage.insert_transaction(
-            source=result.source,
-            source_id=result.source_id,
-            amount=result.amount,
-            merchant=result.merchant,
-            description=result.description,
-            transaction_date=result.transaction_date,
-            raw_data=result.raw_data,
-            currency=result.currency,
-            tx_type=result.tx_type,
-        )
-        logger.info(f"Stored transaction: {result.merchant} ${result.amount:.2f}")
-        RecurringDetector(self.storage).run(result.merchant, result.amount, tx_id)
-        return tx_id
-
-    def start_reauth(self, redirect_uri: str) -> str:
+    def force_poll(self) -> int:
+        """Run a single poll cycle. Returns the number of new transactions ingested."""
+        results = self.poll_once()
+        count = 0
+        for result in results:
+            try:
+                if self.pipeline is None:
+                    logger.warning("No pipeline configured; transaction not stored: %s", result.source_id)
+                    continue
+                tx_dict = self.pipeline.ingest(result)
+                if tx_dict is not None:
+                    count += 1
+                    if self.on_transaction:
+                        self.on_transaction(tx_dict)
+            except Exception as e:
+                logger.error(f"Failed to store transaction: {e}")
+        return count
         """Generate an OAuth authorization URL. Stores the flow for complete_reauth()."""
         flow = Flow.from_client_secrets_file(
             self.credentials_path,
@@ -257,23 +246,6 @@ class GmailPoller:
         self.authenticate()
         logger.info("Gmail re-authenticated via OAuth callback")
 
-    def force_poll(self) -> int:
-        """Run a single poll cycle. Returns the number of new transactions ingested."""
-        results = self.poll_once()
-        count = 0
-        for result in results:
-            try:
-                tx_id = self._save_and_detect(result)
-                if tx_id is not None:
-                    count += 1
-                    if self.on_transaction:
-                        self.on_transaction(result, tx_id)
-            except ValueError:
-                logger.debug("Duplicate transaction skipped: %s", result.source_id)
-            except Exception as e:
-                logger.error(f"Failed to store transaction: {e}")
-        return count
-
     def poll_loop(self, interval_seconds: int = 120) -> None:
         try:
             self.authenticate()
@@ -286,11 +258,12 @@ class GmailPoller:
                 self.last_poll_at = _now_iso()
                 for result in results:
                     try:
-                        tx_id = self._save_and_detect(result)
-                        if tx_id is not None and self.on_transaction:
-                            self.on_transaction(result, tx_id)
-                    except ValueError:
-                        logger.debug("Duplicate transaction skipped: %s", result.source_id)
+                        if self.pipeline is None:
+                            logger.warning("No pipeline configured; transaction not stored: %s", result.source_id)
+                            continue
+                        tx_dict = self.pipeline.ingest(result)
+                        if tx_dict is not None and self.on_transaction:
+                            self.on_transaction(tx_dict)
                     except Exception as e:
                         logger.error(f"Failed to store transaction: {e}")
             except Exception as e:

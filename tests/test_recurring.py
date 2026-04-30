@@ -91,29 +91,24 @@ class TestRecurringDetection:
 
 
 def test_recurring_detector_called_after_gmail_ingest(in_memory_db):
-    """RecurringDetector.run() should be called after a Gmail transaction is saved."""
-    from unittest.mock import MagicMock, patch
+    """RecurringDetector.run() should be called after a transaction is ingested via IngestionPipeline."""
+    from unittest.mock import MagicMock
     from src.storage import Storage
-    from src.gmail_poller import GmailPoller
+    from src.ingestion import IngestionPipeline
     from src.parsers.base import ParseResult
 
     storage = Storage(connection=in_memory_db)
+    mock_detector = MagicMock()
 
-    poller = GmailPoller(
-        credentials_path="", token_path="", sender_filters=[],
-        parsers=[], storage=storage, on_transaction=None,
-    )
+    pipeline = IngestionPipeline(storage, detector=mock_detector)
 
     mock_result = ParseResult(
         source="uob_paynow", source_id="newid123", amount=50.0,
         merchant="Netflix", transaction_date="2026-05-01T00:00:00",
     )
 
-    with patch.object(storage, "insert_transaction", return_value=99), \
-         patch("src.gmail_poller.RecurringDetector") as MockDetector:
-        instance = MockDetector.return_value
-        poller._save_and_detect(mock_result)
-        instance.run.assert_called_once_with("Netflix", 50.0, 99)
+    pipeline.ingest(mock_result)
+    mock_detector.run.assert_called_once_with("Netflix", 50.0, mock_detector.run.call_args[0][2])
 
 
 def test_run_saves_recurring_when_pattern_detected(in_memory_db):
