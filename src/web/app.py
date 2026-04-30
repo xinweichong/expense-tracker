@@ -15,14 +15,6 @@ from src.config import local_now
 from src.storage import Storage
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
 from src.analytics import (
-    get_period_comparison,
-    get_category_comparison,
-    get_top_merchants as get_top_merchants_analytics,
-    get_merchant_trend,
-    get_spending_velocity,
-    get_anomalies,
-    check_new_merchants,
-    generate_summary,
     load_summary,
 )
 
@@ -275,13 +267,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         'Apple Wallet - <something>' where <something> is non-empty.  Used to
         populate the description dropdown in the transaction edit form.
         """
-        rows = storage.conn.execute(
-            "SELECT DISTINCT description FROM transactions "
-            "WHERE source = 'apple_wallet' "
-            "AND description LIKE 'Apple Wallet - _%' "
-            "ORDER BY description"
-        ).fetchall()
-        return [r["description"] for r in rows]
+        return storage.get_apple_wallet_cards()
 
     @app.get("/api/categories")
     async def categories(_auth=Depends(require_auth)):
@@ -441,11 +427,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
-        rows = storage.conn.execute(
-            "SELECT DISTINCT merchant FROM transactions WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ? AND merchant IS NOT NULL ORDER BY merchant",
-            (start, end),
-        ).fetchall()
-        return [r["merchant"] for r in rows]
+        return storage.get_merchants_in_range(start, end)
 
     @app.get("/api/insights")
     async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
@@ -459,10 +441,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
 
     @app.get("/api/recurring")
     async def recurring(_auth=Depends(require_auth)):
-        rows = storage.conn.execute(
-            "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
+        return storage.get_recurring_transactions()
 
     @app.get("/api/analytics/comparison")
     async def analytics_comparison(
@@ -470,9 +449,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         date: Optional[str] = None,
         _auth=Depends(require_auth),
     ):
-        overall = get_period_comparison(storage.conn, period, date)
-        categories = get_category_comparison(storage.conn, period, date)
-        return {"overall": overall, "categories": categories}
+        return storage.comparison(period=period, date=date)
 
 
     @app.get("/api/analytics/merchants")
@@ -481,21 +458,21 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         merchant: Optional[str] = None,
         _auth=Depends(require_auth),
     ):
-        top = get_top_merchants_analytics(storage.conn, limit)
-        trend = get_merchant_trend(storage.conn, merchant) if merchant else None
+        top = storage.top_merchants_by_period(limit=limit)
+        trend = storage.merchant_trend_chart(merchant) if merchant else None
         return {"top": top, "trend": trend}
 
 
     @app.get("/api/analytics/velocity")
     async def analytics_velocity(_auth=Depends(require_auth)):
-        return get_spending_velocity(storage.conn)
+        return storage.spending_velocity()
 
 
     @app.get("/api/analytics/alerts")
     async def analytics_alerts(_auth=Depends(require_auth)):
         return {
-            "anomalies": get_anomalies(storage.conn, multiplier=float(storage.get_setting("anomaly_multiplier", "2.0"))),
-            "new_merchants": check_new_merchants(storage.conn),
+            "anomalies": storage.spending_anomalies(multiplier=float(storage.get_setting("anomaly_multiplier", "2.0"))),
+            "new_merchants": storage.new_merchants(),
         }
 
 
@@ -609,7 +586,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
             budget_id = storage.create_budget(category=category, amount=amount, period=period)
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
-        row = storage.conn.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        row = storage.get_budget(budget_id)
         return dict(row)
 
     @app.get("/api/budgets/progress")
@@ -630,7 +607,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
             storage.update_budget(budget_id, amount=amount)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        row = storage.conn.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        row = storage.get_budget(budget_id)
         return dict(row)
 
     @app.delete("/api/budgets/{budget_id}")
@@ -719,8 +696,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
 
     @app.get("/api/goals/{goal_id}/contributions")
     async def goal_contributions(goal_id: int, _auth=Depends(require_auth)):
-        row = storage.conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
-        if not row:
+        if not storage.get_goal(goal_id):
             raise HTTPException(status_code=404, detail="Goal not found")
         return storage.get_contributions(goal_id)
 

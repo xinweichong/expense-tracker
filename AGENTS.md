@@ -461,3 +461,17 @@ Fixtures in `tests/conftest.py` provide pre-initialized DB connections and sampl
 - **Adding a new chart component:** Create in `src/components/charts/`. Import all Recharts config from `src/lib/chartTheme.ts`. Wrap in `ChartCard` from `src/components/ui/cards.tsx` if the component owns its card.
 - **Adding a new page section:** Use `PageCard` (content/tables/lists) or `ChartCard` (Recharts charts) from `src/components/ui/cards.tsx`. Avoid bare `Card/CardHeader/CardContent` for standard layouts.
 - **Adding a new full-page view:** Use `p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0` on the outer container. Define a `.page-grid-<name>` template in `index.css` with mobile single-column and `md` two-column variants. Apply `.grid-scroll-panel` to every grid-area child. Panel components inside the grid must follow the Persistent Chrome Rule (header + action bar outside scroll area).
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues at `xinweichong/expense-tracker`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

@@ -744,3 +744,176 @@ def test_valid_types_constant_exported():
     assert hasattr(storage_module, "_VALID_TYPES"), "_VALID_TYPES not found at module level"
     assert storage_module._VALID_TYPES == {"needs", "wants", "neutral"}
 
+
+# ── Task 1: new Storage API methods ──────────────────────────────────────────
+
+class TestGetMerchantHistory:
+    def test_returns_transactions_in_window(self, in_memory_db, storage):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, category, transaction_date, type)
+            VALUES ('manual', 'rh-1', 30.0, 'SGD', 1.0, 'Netflix', 'Entertainment',
+                    date('now', '-10 days') || 'T10:00:00', 'expense')
+        """)
+        in_memory_db.commit()
+        rows = storage.get_merchant_history("Netflix")
+        assert len(rows) == 1
+        assert rows[0]["amount"] == 30.0
+
+    def test_excludes_income_rows(self, in_memory_db, storage):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, category, transaction_date, type)
+            VALUES ('manual', 'rh-income', 30.0, 'SGD', 1.0, 'Netflix', 'Income',
+                    date('now', '-10 days') || 'T10:00:00', 'income')
+        """)
+        in_memory_db.commit()
+        rows = storage.get_merchant_history("Netflix")
+        assert len(rows) == 0
+
+    def test_excludes_transactions_outside_window(self, in_memory_db, storage):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, category, transaction_date, type)
+            VALUES ('manual', 'rh-old', 30.0, 'SGD', 1.0, 'Netflix', 'Entertainment',
+                    '2020-01-01T10:00:00', 'expense')
+        """)
+        in_memory_db.commit()
+        rows = storage.get_merchant_history("Netflix")
+        assert len(rows) == 0
+
+
+class TestSaveAndGetRecurring:
+    def test_save_then_get(self, storage):
+        storage.save_recurring("Netflix", 30.0, "monthly", "Entertainment")
+        rows = storage.get_recurring_transactions()
+        assert len(rows) == 1
+        assert rows[0]["merchant"] == "Netflix"
+        assert rows[0]["frequency"] == "monthly"
+
+    def test_save_updates_existing_row(self, storage):
+        storage.save_recurring("Netflix", 30.0, "monthly", "Entertainment")
+        storage.save_recurring("Netflix", 31.0, "monthly", "Entertainment")
+        rows = storage.get_recurring_transactions()
+        assert len(rows) == 1
+        assert rows[0]["avg_amount"] == 31.0
+
+    def test_get_recurring_empty(self, storage):
+        assert storage.get_recurring_transactions() == []
+
+
+class TestAppleWalletCards:
+    def test_returns_card_descriptions(self, in_memory_db, storage):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, description, category, transaction_date, type)
+            VALUES ('apple_wallet', 'aw-1', 5.0, 'SGD', 1.0, 'Starbucks',
+                    'Apple Wallet - DBS Card', 'Food', '2026-04-01T09:00:00', 'expense')
+        """)
+        in_memory_db.commit()
+        cards = storage.get_apple_wallet_cards()
+        assert "Apple Wallet - DBS Card" in cards
+
+    def test_excludes_non_apple_wallet_sources(self, in_memory_db, storage):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, description, category, transaction_date, type)
+            VALUES ('manual', 'mn-1', 5.0, 'SGD', 1.0, 'Starbucks',
+                    'Apple Wallet - Fake', 'Food', '2026-04-01T09:00:00', 'expense')
+        """)
+        in_memory_db.commit()
+        cards = storage.get_apple_wallet_cards()
+        assert cards == []
+
+
+class TestGetMerchantsInRange:
+    def test_returns_merchants_in_range(self, in_memory_db, storage):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, category, transaction_date, type)
+            VALUES ('manual', 'mr-1', 10.0, 'SGD', 1.0, 'Kopitiam', 'Food',
+                    '2026-04-15T10:00:00', 'expense')
+        """)
+        in_memory_db.commit()
+        merchants = storage.get_merchants_in_range("2026-04-01", "2026-04-30")
+        assert "Kopitiam" in merchants
+
+    def test_excludes_transactions_outside_range(self, in_memory_db, storage):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, category, transaction_date, type)
+            VALUES ('manual', 'mr-2', 10.0, 'SGD', 1.0, 'OldShop', 'Food',
+                    '2025-01-01T10:00:00', 'expense')
+        """)
+        in_memory_db.commit()
+        merchants = storage.get_merchants_in_range("2026-04-01", "2026-04-30")
+        assert "OldShop" not in merchants
+
+
+class TestGetBudget:
+    def test_returns_none_for_missing_id(self, storage):
+        assert storage.get_budget(9999) is None
+
+    def test_returns_row_after_create(self, storage):
+        budget_id = storage.create_budget(category="Food", amount=300.0, period="monthly")
+        row = storage.get_budget(budget_id)
+        assert row is not None
+        assert row["amount"] == 300.0
+        assert row["id"] == budget_id
+
+
+class TestGetGoal:
+    def test_returns_none_for_missing_id(self, storage):
+        assert storage.get_goal(9999) is None
+
+    def test_returns_row_after_create(self, storage):
+        goal_id = storage.create_goal(
+            name="Emergency Fund", target_amount=5000.0,
+            target_date="2026-12-31",
+        )
+        row = storage.get_goal(goal_id)
+        assert row is not None
+        assert row["name"] == "Emergency Fund"
+        assert row["id"] == goal_id
+
+
+# ── Task 2: analytics wrapper methods ────────────────────────────────────────
+
+class TestAnalyticsWrappers:
+    """Thin smoke tests — shape not value, to avoid duplicating analytics tests."""
+
+    def test_comparison_returns_dict(self, storage):
+        result = storage.comparison()
+        assert isinstance(result, dict)
+        assert "overall" in result and "categories" in result
+
+    def test_comparison_accepts_period_and_date(self, storage):
+        result = storage.comparison(period="week", date=None)
+        assert "overall" in result
+
+    def test_top_merchants_returns_list(self, storage):
+        result = storage.top_merchants_by_period()
+        assert isinstance(result, list)
+
+    def test_merchant_trend_chart_returns_dict(self, storage):
+        result = storage.merchant_trend_chart("Starbucks")
+        assert isinstance(result, dict)
+        assert "months" in result
+
+    def test_spending_velocity_returns_dict(self, storage):
+        result = storage.spending_velocity()
+        assert isinstance(result, dict)
+        assert "pace_percent" in result
+
+    def test_spending_anomalies_returns_list(self, storage):
+        result = storage.spending_anomalies()
+        assert isinstance(result, list)
+
+    def test_new_merchants_returns_list(self, storage):
+        result = storage.new_merchants()
+        assert isinstance(result, list)
+
+    def test_generate_digest_returns_dict(self, storage):
+        result = storage.generate_digest()
+        assert isinstance(result, dict)
+

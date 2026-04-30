@@ -9,15 +9,6 @@ from typing import Optional
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonCommands, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ConversationHandler, ContextTypes, MessageHandler, filters
 
-from src.analytics import (
-    get_period_comparison,
-    get_category_comparison,
-    get_top_merchants,
-    get_spending_velocity,
-    generate_summary,
-    get_anomalies,
-    check_new_merchants,
-)
 from src.categorizer import Categorizer
 from src.config import local_now
 from src.exchange import ExchangeRateService
@@ -112,20 +103,13 @@ class TelegramBotService:
         self._load_chat_id()
 
     def _load_chat_id(self) -> None:
-        row = self.storage.conn.execute(
-            "SELECT last_processed_id FROM ingestion_state WHERE source = 'telegram_chat_id'"
-        ).fetchone()
-        if row and row["last_processed_id"]:
-            self.chat_id = int(row["last_processed_id"])
+        chat_id = self.storage.get_telegram_chat_id()
+        if chat_id:
+            self.chat_id = chat_id
             logger.info("Restored Telegram chat_id: %s", self.chat_id)
 
     def _save_chat_id(self, chat_id: int) -> None:
-        self.storage.conn.execute(
-            """INSERT OR REPLACE INTO ingestion_state (source, last_processed_id, last_processed_at, updated_at)
-               VALUES ('telegram_chat_id', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)""",
-            (str(chat_id),),
-        )
-        self.storage.conn.commit()
+        self.storage.set_telegram_chat_id(chat_id)
 
     def _local_now(self) -> datetime:
         """Return current datetime in the configured local timezone."""
@@ -859,9 +843,7 @@ class TelegramBotService:
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
 
     async def _subscriptions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        rows = self.storage.conn.execute(
-            "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
-        ).fetchall()
+        rows = self.storage.get_recurring_transactions()
         if not rows:
             await update.message.reply_text("No recurring transactions detected yet.")
             return
@@ -891,8 +873,9 @@ class TelegramBotService:
 
     async def _compare(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Compare this month vs last month."""
-        overall = get_period_comparison(self.storage.conn, period="month")
-        categories = get_category_comparison(self.storage.conn, period="month")
+        result = self.storage.comparison(period="month")
+        overall = result["overall"]
+        categories = result["categories"]
 
         lines = ["*This Month vs Last Month*\n"]
         if overall["previous_total"] > 0 and overall["change_percent"] is not None:
@@ -914,7 +897,7 @@ class TelegramBotService:
 
     async def _merchants(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Show top 5 merchants this month."""
-        merchants = get_top_merchants(self.storage.conn, limit=5)
+        merchants = self.storage.top_merchants_by_period(limit=5)
 
         if not merchants:
             await update.message.reply_text("No merchant data this month.")
@@ -930,7 +913,7 @@ class TelegramBotService:
 
     async def _velocity(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Show spending velocity vs last month."""
-        v = get_spending_velocity(self.storage.conn)
+        v = self.storage.spending_velocity()
 
         emoji = "\u26a0" if v["status"] == "ahead" else "\u2705"
         lines = [
@@ -945,7 +928,7 @@ class TelegramBotService:
 
     async def _summary(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Generate on-demand monthly summary report."""
-        report = generate_summary(self.storage.conn, report_type="monthly")
+        report = self.storage.generate_digest(report_type="monthly")
 
         arrow = "\u2191" if report["change"] > 0 else "\u2193"
 
@@ -1351,35 +1334,28 @@ class TelegramBotService:
             logger.debug("Cannot send daily digest: no chat_id")
             return
 
-        conn = self.storage.conn
         _now = self._local_now()
         yesterday = (_now - timedelta(days=1)).strftime("%Y-%m-%d")
         today = _now.strftime("%Y-%m-%d")
 
-        # Yesterday's total
-        yesterday_txs = self.storage.query_transactions(start_date=yesterday, end_date=yesterday, limit=10_000)
-        yesterday_total = sum(
-            tx["amount"] * (tx.get("exchange_rate") or 1)
-            for tx in yesterday_txs if tx["type"] == "expense"
-        )
+        # Yesterday's total — use get_spending_summary to handle NULL-type rows correctly
+        yesterday_summary = self.storage.get_spending_summary(yesterday, yesterday)
+        yesterday_total = yesterday_summary["total"]
+        yesterday_count = len(self.storage.query_transactions(start_date=yesterday, end_date=yesterday, limit=10_000))
 
         # Month to date
         month_start = _now.replace(day=1).strftime("%Y-%m-%d")
-        month_txs = self.storage.query_transactions(start_date=month_start, end_date=today, limit=10_000)
-        month_total = sum(
-            tx["amount"] * (tx.get("exchange_rate") or 1)
-            for tx in month_txs if tx["type"] == "expense"
-        )
+        month_total = self.storage.get_spending_summary(month_start, today)["total"]
 
         # Velocity, new merchants, anomalies
-        velocity = get_spending_velocity(conn)
-        new_merchants = check_new_merchants(conn)
+        velocity = self.storage.spending_velocity()
+        new_merchants_list = self.storage.new_merchants()
         anomaly_multiplier = float(self.storage.get_setting("anomaly_multiplier", "2.0"))
-        anomalies = get_anomalies(conn, multiplier=anomaly_multiplier)
+        anomalies = self.storage.spending_anomalies(multiplier=anomaly_multiplier)
 
         lines = [
             "*Morning Digest*\n",
-            f"Yesterday: *${yesterday_total:.2f}* ({len([t for t in yesterday_txs if t['type'] == 'expense'])} transactions)",
+            f"Yesterday: *${yesterday_total:.2f}* ({yesterday_count} transactions)",
             f"Month to date: *${month_total:.2f}*\n",
         ]
 
@@ -1387,8 +1363,8 @@ class TelegramBotService:
         if velocity["pace_percent"] > velocity_threshold:
             lines.append(f"⚠ Spending {velocity['pace_percent']:.0f}% of last month's pace")
 
-        if new_merchants:
-            lines.append(f"🛍 {len(new_merchants)} new merchant(s)")
+        if new_merchants_list:
+            lines.append(f"🛍 {len(new_merchants_list)} new merchant(s)")
 
         if anomalies:
             lines.append(f"⚠ {len(anomalies)} unusual transaction(s)")

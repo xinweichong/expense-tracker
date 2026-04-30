@@ -1277,3 +1277,123 @@ class Storage:
             "by_category": by_category,
             "by_day": by_day,
         }
+
+    # ── Recurring ─────────────────────────────────────────────────────────────
+
+    def get_merchant_history(self, merchant: str, days: int = 90) -> list[dict]:
+        """Return expense transactions for a merchant within the past *days* days."""
+        rows = self.conn.execute(
+            """SELECT amount, transaction_date FROM transactions
+               WHERE merchant = ? AND transaction_date >= date('now', ? || ' days')
+               AND (type IS NULL OR type = 'expense')
+               ORDER BY transaction_date DESC""",
+            (merchant, f"-{days}"),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_recurring(
+        self, merchant: str, avg_amount: float, frequency: str, category: Optional[str] = None
+    ) -> None:
+        existing = self.conn.execute(
+            "SELECT id FROM recurring_transactions WHERE merchant = ?", (merchant,)
+        ).fetchone()
+        if existing:
+            self.conn.execute(
+                """UPDATE recurring_transactions
+                   SET avg_amount = ?, frequency = ?, category = ?,
+                       last_seen = CURRENT_TIMESTAMP, occurrences = occurrences + 1
+                   WHERE merchant = ?""",
+                (avg_amount, frequency, category, merchant),
+            )
+        else:
+            self.conn.execute(
+                """INSERT INTO recurring_transactions
+                   (merchant, avg_amount, frequency, category, first_seen, last_seen, occurrences)
+                   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 2)""",
+                (merchant, avg_amount, frequency, category),
+            )
+        self.conn.commit()
+
+    def get_recurring_transactions(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Telegram chat ID ──────────────────────────────────────────────────────
+
+    def get_telegram_chat_id(self) -> Optional[int]:
+        value = self.get_setting("telegram_chat_id")
+        return int(value) if value else None
+
+    def set_telegram_chat_id(self, chat_id: int) -> None:
+        self.set_setting("telegram_chat_id", str(chat_id))
+
+    # ── Apple Wallet cards ────────────────────────────────────────────────────
+
+    def get_apple_wallet_cards(self) -> list[str]:
+        rows = self.conn.execute(
+            """SELECT DISTINCT description FROM transactions
+               WHERE source = 'apple_wallet' AND description LIKE 'Apple Wallet - _%'
+               ORDER BY description"""
+        ).fetchall()
+        return [r["description"] for r in rows]
+
+    # ── Merchant list helper ──────────────────────────────────────────────────
+
+    def get_merchants_in_range(self, start: str, end: str) -> list[str]:
+        """Return distinct merchant names with transactions in [start, end]."""
+        rows = self.conn.execute(
+            """SELECT DISTINCT merchant FROM transactions
+               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+               AND merchant IS NOT NULL
+               ORDER BY merchant""",
+            (start, end),
+        ).fetchall()
+        return [r["merchant"] for r in rows]
+
+    # ── Budget / Goal single-row fetch ────────────────────────────────────────
+
+    def get_budget(self, budget_id: int) -> Optional[dict]:
+        row = self.conn.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
+        return dict(row) if row else None
+
+    def get_goal(self, goal_id: int) -> Optional[dict]:
+        row = self.conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
+        return dict(row) if row else None
+
+    # ── Analytics wrappers ────────────────────────────────────────────────────
+
+    def comparison(self, period: str = "month", date: Optional[str] = None) -> dict:
+        """Return overall + per-category period comparison delegating to analytics."""
+        from src.analytics import get_period_comparison, get_category_comparison
+        return {
+            "overall": get_period_comparison(self.conn, period, date),
+            "categories": get_category_comparison(self.conn, period, date),
+        }
+
+    def top_merchants_by_period(
+        self, limit: int = 10, period: str = "month", date: Optional[str] = None
+    ) -> list[dict]:
+        from src.analytics import get_top_merchants
+        return get_top_merchants(self.conn, limit, period, date)
+
+    def merchant_trend_chart(self, merchant: str) -> dict:
+        from src.analytics import get_merchant_trend
+        return get_merchant_trend(self.conn, merchant)
+
+    def spending_velocity(self) -> dict:
+        from src.analytics import get_spending_velocity
+        return get_spending_velocity(self.conn)
+
+    def spending_anomalies(self, multiplier: float = 2.0) -> list[dict]:
+        from src.analytics import get_anomalies
+        return get_anomalies(self.conn, multiplier)
+
+    def new_merchants(self) -> list[dict]:
+        from src.analytics import check_new_merchants
+        return check_new_merchants(self.conn)
+
+    def generate_digest(self, report_type: str = "monthly") -> dict:
+        from src.analytics import generate_summary
+        return generate_summary(self.conn, report_type)

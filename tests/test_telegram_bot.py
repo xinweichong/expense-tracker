@@ -409,29 +409,20 @@ class TestDailyDigest:
         bot_service.app = MagicMock()
         bot_service.app.bot.send_message = AsyncMock()
 
-        yesterday_txs = [
-            {"amount": 10.0, "exchange_rate": 1.0, "type": "expense"},
-            {"amount": 5.0, "exchange_rate": 1.0, "type": "expense"},
-        ]
-        month_txs = [
-            {"amount": 10.0, "exchange_rate": 1.0, "type": "expense"},
-            {"amount": 5.0, "exchange_rate": 1.0, "type": "expense"},
-            {"amount": 20.0, "exchange_rate": 1.0, "type": "expense"},
-        ]
-
-        def mock_query_transactions(start_date=None, end_date=None, limit=200):
+        def mock_spending_summary(start, end):
             from datetime import datetime, timedelta
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-            if start_date == yesterday and end_date == yesterday:
-                return yesterday_txs
-            return month_txs
+            if start == yesterday and end == yesterday:
+                return {"total": 15.0, "by_category": {}}
+            return {"total": 35.0, "by_category": {}}
 
-        bot_service.storage.query_transactions = MagicMock(side_effect=mock_query_transactions)
+        bot_service.storage.get_spending_summary = MagicMock(side_effect=mock_spending_summary)
+        bot_service.storage.query_transactions = MagicMock(return_value=[{}, {}])  # count = 2
+        bot_service.storage.spending_velocity = MagicMock(return_value={"status": "ok", "pace_percent": 80})
+        bot_service.storage.new_merchants = MagicMock(return_value=[])
+        bot_service.storage.spending_anomalies = MagicMock(return_value=[])
 
-        with patch("src.telegram_bot.get_spending_velocity", return_value={"status": "ok", "pace_percent": 80}), \
-             patch("src.telegram_bot.check_new_merchants", return_value=[]), \
-             patch("src.telegram_bot.get_anomalies", return_value=[]):
-            await bot_service._send_daily_digest()
+        await bot_service._send_daily_digest()
 
         bot_service.app.bot.send_message.assert_called_once()
         call_kwargs = bot_service.app.bot.send_message.call_args[1]
@@ -447,14 +438,17 @@ class TestDailyDigest:
         bot_service.app = MagicMock()
         bot_service.app.bot.send_message = AsyncMock()
 
-        bot_service.storage.query_transactions = MagicMock(return_value=[
-            {"amount": 10.0, "exchange_rate": 1.0, "type": "expense"},
-        ])
+        bot_service.storage.get_spending_summary = MagicMock(
+            return_value={"total": 10.0, "by_category": {}}
+        )
+        bot_service.storage.query_transactions = MagicMock(return_value=[{}])
+        bot_service.storage.spending_velocity = MagicMock(
+            return_value={"status": "ahead", "pace_percent": 130}
+        )
+        bot_service.storage.new_merchants = MagicMock(return_value=[{"merchant": "NewShop"}])
+        bot_service.storage.spending_anomalies = MagicMock(return_value=[{"id": 1}])
 
-        with patch("src.telegram_bot.get_spending_velocity", return_value={"status": "ahead", "pace_percent": 130}), \
-             patch("src.telegram_bot.check_new_merchants", return_value=[{"merchant": "NewShop"}]), \
-             patch("src.telegram_bot.get_anomalies", return_value=[{"id": 1}]):
-            await bot_service._send_daily_digest()
+        await bot_service._send_daily_digest()
 
         text = bot_service.app.bot.send_message.call_args[1]["text"]
         assert "⚠" in text
