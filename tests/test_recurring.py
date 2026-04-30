@@ -91,21 +91,13 @@ class TestRecurringDetection:
 
 
 def test_recurring_detector_called_after_gmail_ingest(in_memory_db):
-    """RecurringDetector.detect() should be called after a Gmail transaction is saved."""
+    """RecurringDetector.run() should be called after a Gmail transaction is saved."""
     from unittest.mock import MagicMock, patch
     from src.storage import Storage
     from src.gmail_poller import GmailPoller
     from src.parsers.base import ParseResult
 
     storage = Storage(connection=in_memory_db)
-    # Pre-seed two matching transactions so detect() can find a pattern
-    for i, d in enumerate(["2026-03-01", "2026-04-01"]):
-        in_memory_db.execute(
-            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
-            "VALUES ('uob_paynow', ?, 50.0, 'Netflix', ?, 'expense')",
-            (f"old_{i}", d),
-        )
-    in_memory_db.commit()
 
     poller = GmailPoller(
         credentials_path="", token_path="", sender_filters=[],
@@ -117,11 +109,56 @@ def test_recurring_detector_called_after_gmail_ingest(in_memory_db):
         merchant="Netflix", transaction_date="2026-05-01T00:00:00",
     )
 
-    with patch.object(storage, "insert_transaction", return_value=99) as mock_insert, \
+    with patch.object(storage, "insert_transaction", return_value=99), \
          patch("src.gmail_poller.RecurringDetector") as MockDetector:
         instance = MockDetector.return_value
-        instance.detect.return_value = {"frequency": "monthly", "avg_amount": 50.0, "occurrences": 3}
         poller._save_and_detect(mock_result)
-        instance.detect.assert_called_once_with("Netflix", 50.0)
-        from unittest.mock import ANY
-        instance.save_recurring.assert_called_once_with("Netflix", 50.0, "monthly", ANY)
+        instance.run.assert_called_once_with("Netflix", 50.0, 99)
+
+
+def test_run_saves_recurring_when_pattern_detected(in_memory_db):
+    """RecurringDetector.run must persist recurring record when pattern found."""
+    storage = Storage(in_memory_db)
+
+    for i in range(2):
+        in_memory_db.execute("""
+            INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+                merchant, category, transaction_date, type)
+            VALUES ('manual', ?, 50.0, 'SGD', 1.0,
+                'Netflix', 'Entertainment', ?, 'expense')
+        """, (f"tx-recur-{i}", f"2026-0{i+1}-15T10:00:00"))
+    in_memory_db.execute("""
+        INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+            merchant, category, transaction_date, type)
+        VALUES ('manual', 'tx-recur-new', 50.0, 'SGD', 1.0,
+            'Netflix', 'Entertainment', '2026-03-15T10:00:00', 'expense')
+    """)
+    in_memory_db.commit()
+
+    new_tx_id = in_memory_db.execute(
+        "SELECT id FROM transactions WHERE source_id = 'tx-recur-new'"
+    ).fetchone()["id"]
+
+    detector = RecurringDetector(storage)
+    detector.run("Netflix", 50.0, new_tx_id)
+
+    rows = in_memory_db.execute(
+        "SELECT * FROM recurring_transactions WHERE merchant = 'Netflix'"
+    ).fetchall()
+    assert len(rows) >= 1
+
+
+def test_run_is_noop_when_no_pattern(in_memory_db):
+    """RecurringDetector.run must not raise when no pattern is detected."""
+    storage = Storage(in_memory_db)
+    in_memory_db.execute("""
+        INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+            merchant, category, transaction_date, type)
+        VALUES ('manual', 'tx-once', 50.0, 'SGD', 1.0,
+            'Random Shop', 'Other', '2026-04-15T10:00:00', 'expense')
+    """)
+    in_memory_db.commit()
+    tx_id = in_memory_db.execute("SELECT id FROM transactions WHERE source_id='tx-once'").fetchone()["id"]
+
+    detector = RecurringDetector(storage)
+    detector.run("Random Shop", 50.0, tx_id)  # must not raise
