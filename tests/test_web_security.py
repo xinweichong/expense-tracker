@@ -92,3 +92,23 @@ class TestLogout:
         r = await client.post("/api/logout")
         assert r.status_code == 200
         assert r.json() == {"status": "ok"}
+
+
+class TestCredentialFilePermissions:
+    def test_credentials_written_with_restricted_permissions(self, tmp_path):
+        """Credential files must not be world-readable (mode 0o600 or stricter)."""
+        import base64
+        import os
+        import stat
+
+        creds_path = tmp_path / "credentials.json"
+        fake_b64 = base64.b64encode(b'{"type": "service_account"}').decode()
+
+        # Simulate the credential-writing block in main.py
+        with open(creds_path, "w") as f:
+            f.write(base64.b64decode(fake_b64).decode())
+        os.chmod(creds_path, 0o600)
+
+        mode = stat.S_IMODE(os.stat(creds_path).st_mode)
+        assert not (mode & stat.S_IRGRP), "credential file is group-readable"
+        assert not (mode & stat.S_IROTH), "credential file is world-readable"

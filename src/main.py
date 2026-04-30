@@ -265,6 +265,7 @@ def main():
         creds_path = gmail_config.get("credentials_file", "credentials.json")
         with open(creds_path, "w") as f:
             f.write(base64.b64decode(gmail_creds_b64).decode())
+        os.chmod(creds_path, 0o600)
         logger.info("Decoded Gmail credentials from environment")
 
     if not os.path.exists(TOKEN_PATH):

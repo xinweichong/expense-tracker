@@ -1,5 +1,12 @@
 import pytest
 import sqlite3
+import os
+
+
+@pytest.fixture(autouse=True)
+def disable_secure_cookies(monkeypatch):
+    """Disable Secure cookie flag in tests — httpx uses http:// transport."""
+    monkeypatch.setenv("SECURE_COOKIES", "false")
 
 
 @pytest.fixture

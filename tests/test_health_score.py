@@ -245,12 +245,15 @@ from src.web.app import create_dashboard_app
 
 @pytest.fixture
 def health_app(in_memory_db):
+    from src.web import auth as _auth
+    _auth.init_auth(in_memory_db)
     storage = Storage(connection=in_memory_db)
     # Seed app_settings table (Phase 2b prerequisite)
     in_memory_db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('anomaly_multiplier', '2.0')")
     in_memory_db.commit()
     pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
-    return create_dashboard_app(storage, pw_hash), storage
+    yield create_dashboard_app(storage, pw_hash), storage
+    _auth._conn = None
 
 
 @pytest_asyncio.fixture

@@ -258,9 +258,12 @@ class TestTripSummary:
 
 @pytest.fixture
 def trip_app(in_memory_db):
+    from src.web import auth as _auth
+    _auth.init_auth(in_memory_db)
     storage = Storage(connection=in_memory_db)
     pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
-    return create_dashboard_app(storage, pw_hash), storage
+    yield create_dashboard_app(storage, pw_hash), storage
+    _auth._conn = None
 
 
 @pytest_asyncio.fixture
