@@ -25,3 +25,13 @@ export const COLOR_INCOME = '#30D158';    // --color-success
 export const COLOR_EXPENSE = '#FF453A';   // --color-destructive
 export const COLOR_ACCENT = '#00D4AA';    // --color-accent
 export const COLOR_MUTED_BAR = '#3A3A46';
+
+/** XAxis tick: show day-of-month only (e.g. "15") */
+export function formatDateTick(v: string): string {
+  return new Date(v).getDate().toString();
+}
+
+/** Tooltip label: short date (e.g. "15 Apr") */
+export function formatDateLabel(v: unknown): string {
+  return new Date(String(v)).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
+}

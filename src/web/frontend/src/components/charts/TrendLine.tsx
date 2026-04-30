@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
-import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, COLOR_ACCENT } from '@/lib/chartTheme';
+import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, COLOR_ACCENT, formatDateTick, formatDateLabel } from '@/lib/chartTheme';
 
 interface TrendPoint {
   date: string;
@@ -30,7 +30,7 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
           <XAxis
             dataKey="date"
             {...CHART_AXIS_PROPS}
-            tickFormatter={(v: string) => new Date(v).getDate().toString()}
+            tickFormatter={formatDateTick}
           />
           <YAxis
             {...CHART_AXIS_PROPS}
@@ -39,9 +39,7 @@ export function TrendLine({ data }: { data: TrendPoint[] }) {
           <Tooltip
             contentStyle={CHART_TOOLTIP_STYLE}
             formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Spent'] as [string, string]}
-            labelFormatter={(label) =>
-              new Date(String(label)).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
-            }
+            labelFormatter={formatDateLabel}
           />
           <Area
             type="monotone"
