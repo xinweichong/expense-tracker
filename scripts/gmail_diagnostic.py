@@ -29,11 +29,6 @@ def main():
             f.write(base64.b64decode(creds_b64).decode())
         print("[OK] Decoded Gmail credentials from env")
 
-    if token_b64 := os.environ.get("GMAIL_TOKEN_JSON"):
-        with open("token.json", "w") as f:
-            f.write(base64.b64decode(token_b64).decode())
-        print("[OK] Decoded Gmail token from env")
-
     sender_filters = gmail_config.get("sender_filters", [])
     parsers = [DbsPaylahParser(), UobPaynowParser(), UobCardParser()]
 

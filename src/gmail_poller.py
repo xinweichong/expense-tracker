@@ -66,7 +66,7 @@ class GmailPoller:
                     self.last_auth_error = msg
                     return
                 msg = ("Gmail token is invalid and cannot refresh interactively in headless environment. "
-                       "Re-generate token.json locally and update GMAIL_TOKEN_JSON env var.")
+                       "Use /reauth in Telegram to re-authorize.")
                 logger.error(msg)
                 self.last_auth_error = msg
                 return
