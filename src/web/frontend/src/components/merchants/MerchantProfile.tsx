@@ -11,20 +11,7 @@ import { ChartCard } from '@/components/ui/cards';
 import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, COLOR_ACCENT } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-
-const TAG_COLORS: Record<string, string> = {
-  online:       'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  subscription: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  foreign:      'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  essential:    'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  recurring:    'bg-teal-500/20 text-teal-400 border-teal-500/30',
-};
-
-const ALL_TAGS = Object.keys(TAG_COLORS);
-
-function formatSGD(v: number) {
-  return `$${v.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
 
 export function MerchantProfile({
   merchant,

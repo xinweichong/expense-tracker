@@ -95,3 +95,8 @@ export const PALETTE = [
   '#63E6BE', '#DAEFBD', '#B4A7FF', '#FFA07A', '#98D8C8',
   '#F7DC6F', '#BB8FCE', '#85C1E9', '#F0B27A', '#AED6F1',
 ];
+
+/** Format a Date to "YYYY-MM-DD" in local time. */
+export function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}

@@ -8,6 +8,8 @@ import {
   CHART_TOOLTIP_STYLE,
   CHART_CURSOR_LINE,
   CHART_LEGEND_STYLE,
+  formatDateTick,
+  formatDateLabel,
 } from '@/lib/chartTheme';
 
 export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
@@ -28,7 +30,7 @@ export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
           <XAxis
             dataKey="date"
             {...CHART_AXIS_PROPS}
-            tickFormatter={(v: string) => new Date(v).getDate().toString()}
+            tickFormatter={formatDateTick}
           />
           <YAxis
             {...CHART_AXIS_PROPS}
@@ -38,9 +40,7 @@ export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
             cursor={CHART_CURSOR_LINE}
             contentStyle={CHART_TOOLTIP_STYLE}
             formatter={(value: any, name: any) => [formatCurrency(Number(value ?? 0)), String(name ?? '')]}
-            labelFormatter={(label) =>
-              new Date(String(label)).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' })
-            }
+            labelFormatter={formatDateLabel}
           />
           <Legend wrapperStyle={{ ...CHART_LEGEND_STYLE, paddingTop: '8px' }} />
           {categories.map((cat) => (

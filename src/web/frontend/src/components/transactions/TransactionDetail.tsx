@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { type Transaction, type Trip, api } from '@/api/client';
 import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
 import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
+import { useIconMap } from '@/hooks/useIconMap';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -41,19 +42,25 @@ export function TransactionDetail({
   const [description, setDescription] = useState(tx.description ?? '');
   const [exchangeRate, setExchangeRate] = useState(tx.exchange_rate ?? 1.0);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const isAppleWallet = tx.source === 'apple_wallet';
   const categoryColor = getCategoryColor(tx.category ?? '');
 
-  // Reset form + exit edit mode when switching to a different transaction
-  useEffect(() => {
+  const resetFields = useCallback(() => {
     setMerchant(tx.merchant ?? '');
     setCategory(tx.category ?? '');
     setDescription(tx.description ?? '');
     setExchangeRate(tx.exchange_rate ?? 1.0);
+  }, [tx.merchant, tx.category, tx.description, tx.exchange_rate]);
+
+  // Reset form + exit edit mode when switching to a different transaction
+  useEffect(() => {
+    resetFields();
     setEditing(false);
     setSaveError(null);
-  }, [tx.id]);
+    setConfirmingDelete(false);
+  }, [tx.id, resetFields]);
 
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
@@ -66,18 +73,12 @@ export function TransactionDetail({
     staleTime: 5 * 60 * 1000,
   });
 
-  const iconMap = useMemo(
-    () => Object.fromEntries((categories ?? []).map(c => [c.name, c.icon ?? ''])),
-    [categories],
-  );
+  const iconMap = useIconMap();
   const categoryIcon = tx.category ? (iconMap[tx.category] ?? tx.category[0] ?? '•') : '•';
 
   const handleEdit = () => {
     setSaveError(null);
-    setMerchant(tx.merchant ?? '');
-    setCategory(tx.category ?? '');
-    setDescription(tx.description ?? '');
-    setExchangeRate(tx.exchange_rate ?? 1.0);
+    resetFields();
     setEditing(true);
   };
 
@@ -96,9 +97,14 @@ export function TransactionDetail({
   };
 
   const handleDelete = () => {
-    if (confirm('Delete this transaction?')) {
-      deleteTx.mutate(tx.id, { onSuccess: onClose });
-    }
+    setConfirmingDelete(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    deleteTx.mutate(tx.id, {
+      onSuccess: onClose,
+      onError: () => setConfirmingDelete(false),
+    });
   };
 
   const sourceLabel = isAppleWallet && tx.description
@@ -146,10 +152,7 @@ export function TransactionDetail({
                 onClick={() => {
                   setEditing(false);
                   setSaveError(null);
-                  setMerchant(tx.merchant ?? '');
-                  setCategory(tx.category ?? '');
-                  setDescription(tx.description ?? '');
-                  setExchangeRate(tx.exchange_rate ?? 1.0);
+                  resetFields();
                 }}
                 disabled={updateTx.isPending}
               >
@@ -163,6 +166,28 @@ export function TransactionDetail({
               >
                 <Check className="w-4 h-4 mr-1" />
                 {updateTx.isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        ) : confirmingDelete ? (
+          <div className="flex flex-col gap-1 px-4 py-2">
+            <p className="text-sm text-destructive">Delete this transaction?</p>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={deleteTx.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                onClick={handleDeleteConfirm}
+                disabled={deleteTx.isPending}
+              >
+                {deleteTx.isPending ? 'Deleting…' : 'Delete'}
               </Button>
             </div>
           </div>

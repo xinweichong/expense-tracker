@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.config import local_now
 from src.storage import Storage
-from src.web.auth import verify_password, create_session, verify_session
+from src.web.auth import verify_password, create_session, verify_session, destroy_session
 from src.analytics import (
     get_period_comparison,
     get_category_comparison,
@@ -84,6 +84,18 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         session = request.cookies.get("session")
         if not session or not verify_session(session):
             raise HTTPException(status_code=401, detail="Not authenticated")
+
+    @app.get("/api/ping")
+    async def ping(_auth=Depends(require_auth)):
+        return {"status": "ok"}
+
+    @app.post("/api/logout")
+    async def logout(request: Request, response: Response):
+        session = request.cookies.get("session")
+        if session:
+            destroy_session(session)
+        response.delete_cookie("session", httponly=True, samesite="lax")
+        return {"status": "ok"}
 
     @app.get("/api/status")
     async def get_status(_auth=Depends(require_auth)):
