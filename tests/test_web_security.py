@@ -14,7 +14,8 @@ def password_hash():
 
 
 @pytest.fixture
-def dashboard_app(in_memory_db, password_hash):
+def dashboard_app(in_memory_db, password_hash, monkeypatch):
+    monkeypatch.setenv("SECURE_COOKIES", "false")
     _auth.init_auth(in_memory_db)
     storage = Storage(connection=in_memory_db)
     yield create_dashboard_app(storage, password_hash)
@@ -47,6 +48,29 @@ class TestPing:
     async def test_ping_returns_401_when_not_authenticated(self, client):
         r = await client.get("/api/ping")
         assert r.status_code == 401
+
+
+class TestCookieFlags:
+    @pytest.mark.asyncio
+    async def test_login_cookie_is_httponly(self, client):
+        r = await client.post("/api/login", json={"password": "test-password"})
+        assert r.status_code == 200
+        set_cookie = r.headers.get("set-cookie", "")
+        assert "httponly" in set_cookie.lower()
+
+    @pytest.mark.asyncio
+    async def test_login_cookie_has_samesite_lax(self, client):
+        r = await client.post("/api/login", json={"password": "test-password"})
+        assert r.status_code == 200
+        set_cookie = r.headers.get("set-cookie", "")
+        assert "samesite=lax" in set_cookie.lower()
+
+    @pytest.mark.asyncio
+    async def test_login_cookie_not_secure_in_test(self, client):
+        # SECURE_COOKIES=false (set by dashboard_app fixture) means Secure flag must be absent
+        r = await client.post("/api/login", json={"password": "test-password"})
+        set_cookie = r.headers.get("set-cookie", "")
+        assert "secure" not in set_cookie.lower()
 
 
 class TestLogout:
