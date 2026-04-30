@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/animations';
 import { Search } from 'lucide-react';
+import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
 
 const SORT_OPTIONS = [
   { value: 'total_spent',       label: 'Total Spent' },
@@ -14,20 +15,6 @@ const SORT_OPTIONS = [
   { value: 'last_seen',         label: 'Last Seen' },
   { value: 'merchant_name',     label: 'Name' },
 ];
-
-const ALL_TAGS = ['online', 'subscription', 'foreign', 'essential', 'recurring'];
-
-const TAG_COLORS: Record<string, string> = {
-  online:       'bg-blue-500/20 text-blue-400',
-  subscription: 'bg-purple-500/20 text-purple-400',
-  foreign:      'bg-orange-500/20 text-orange-400',
-  essential:    'bg-amber-500/20 text-amber-400',
-  recurring:    'bg-teal-500/20 text-teal-400',
-};
-
-function formatSGD(v: number) {
-  return `$${v.toLocaleString('en-SG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 export function MerchantsPage() {
   const { merchantName } = useParams<{ merchantName?: string }>();
