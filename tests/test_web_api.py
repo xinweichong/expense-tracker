@@ -14,8 +14,11 @@ def password_hash():
 
 @pytest.fixture
 def dashboard_app(in_memory_db, password_hash):
+    from src.web import auth as _auth
+    _auth.init_auth(in_memory_db)
     storage = Storage(connection=in_memory_db)
-    return create_dashboard_app(storage, password_hash)
+    yield create_dashboard_app(storage, password_hash)
+    _auth._conn = None
 
 
 @pytest_asyncio.fixture

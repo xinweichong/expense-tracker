@@ -1,5 +1,12 @@
 import pytest
 import sqlite3
+import os
+
+
+@pytest.fixture(autouse=True)
+def disable_secure_cookies(monkeypatch):
+    """Disable Secure cookie flag in tests — httpx uses http:// transport."""
+    monkeypatch.setenv("SECURE_COOKIES", "false")
 
 
 @pytest.fixture
@@ -121,6 +128,11 @@ def in_memory_db():
         transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
         added_by       TEXT DEFAULT 'auto',
         PRIMARY KEY (trip_id, transaction_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """
     conn.executescript(schema)

@@ -63,11 +63,14 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         if not verify_password(password, password_hash):
             raise HTTPException(status_code=401, detail="Invalid password")
         token = create_session()
+        secure_cookies = os.environ.get("SECURE_COOKIES", "true") == "true"
         response = JSONResponse({"status": "ok"})
         response.set_cookie(
             key="session",
             value=token,
             httponly=True,
+            samesite="lax",
+            secure=secure_cookies,
             max_age=86400 * 30,
         )
         return response

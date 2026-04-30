@@ -228,7 +228,13 @@ def client():
             last_seen DATETIME,
             occurrences INTEGER DEFAULT 2
         );
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     """)
+    from src.web import auth as _auth
+    _auth.init_auth(conn)
     pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
     app = create_dashboard_app(
         storage=Storage(connection=conn),
