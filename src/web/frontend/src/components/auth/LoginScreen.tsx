@@ -18,7 +18,10 @@ export function LoginScreen() {
     setLoading(true);
     setError(false);
     const ok = await login(password);
-    if (!ok) setError(true);
+    if (!ok) {
+      setError(true);
+      setPassword('');
+    }
     setLoading(false);
   };
 
