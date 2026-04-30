@@ -1,10 +1,10 @@
 import re
 from datetime import datetime
 from typing import Optional
-from src.parsers.base import BankParser, ParseResult
+from src.parsers.base import ParseResult
 
 
-class DbsPaylahParser(BankParser):
+class DbsPaylahParser:
     @property
     def sender_domain(self) -> str:
         return "dbs.com"

@@ -425,22 +425,21 @@ class TestUobParser:
         assert result is None
 
 
-def test_bank_parser_subclass_without_sender_domain_raises():
-    """Subclass that omits sender_domain must raise TypeError at instantiation."""
-    class BadParser(BankParser):
+def test_bank_parser_missing_method_fails_isinstance():
+    """A class missing sender_domain is not a BankParser at runtime."""
+    class BadParser:
         def can_parse(self, sender: str, subject: str) -> bool:
             return False
         def parse(self, content):
             return None
         # sender_domain deliberately omitted
 
-    with pytest.raises(TypeError):
-        BadParser()
+    assert not isinstance(BadParser(), BankParser)
 
 
-def test_bank_parser_subclass_with_sender_domain_works():
-    """Subclass that defines sender_domain must instantiate without error."""
-    class GoodParser(BankParser):
+def test_bank_parser_with_all_methods_passes_isinstance():
+    """A class with all three required members is a BankParser at runtime."""
+    class GoodParser:
         @property
         def sender_domain(self) -> str:
             return "example.com"
@@ -450,5 +449,6 @@ def test_bank_parser_subclass_with_sender_domain_works():
             return None
 
     p = GoodParser()
+    assert isinstance(p, BankParser)
     assert p.sender_domain == "example.com"
 

@@ -275,7 +275,7 @@ class TestHealthScoreAPI:
     @pytest.mark.asyncio
     async def test_with_income_returns_score(self, api):
         ac, storage = api
-        in_memory_db = storage.conn
+        in_memory_db = storage._conn
         in_memory_db.execute("INSERT OR IGNORE INTO categories (name, type) VALUES ('Income', 'neutral')")
         in_memory_db.execute("INSERT OR IGNORE INTO categories (name, type) VALUES ('Dining', 'wants')")
         in_memory_db.commit()

@@ -2,10 +2,10 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from src.parsers.base import BankParser, ParseResult
+from src.parsers.base import ParseResult
 
 
-class UobParser(BankParser):
+class UobParser:
     """Handles all UOB alert email formats from @uobgroup.com.
 
     Five patterns in priority order:

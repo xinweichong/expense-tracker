@@ -11,13 +11,7 @@ class RecurringDetector:
         self.storage = storage
 
     def detect(self, merchant: str, amount: float) -> Optional[dict]:
-        rows = self.storage.conn.execute(
-            """SELECT amount, transaction_date FROM transactions
-               WHERE merchant = ? AND transaction_date >= date('now', '-90 days')
-               AND (type IS NULL OR type = 'expense')
-               ORDER BY transaction_date DESC""",
-            (merchant,),
-        ).fetchall()
+        rows = self.storage.get_merchant_history(merchant)
         if len(rows) < 2:
             return None
         amounts = [r["amount"] for r in rows]
@@ -49,30 +43,10 @@ class RecurringDetector:
         return {"frequency": frequency, "avg_amount": avg_amount, "occurrences": len(rows)}
 
     def save_recurring(self, merchant: str, avg_amount: float, frequency: str, category: Optional[str] = None) -> None:
-        existing = self.storage.conn.execute(
-            "SELECT id FROM recurring_transactions WHERE merchant = ?", (merchant,)
-        ).fetchone()
-        if existing:
-            self.storage.conn.execute(
-                """UPDATE recurring_transactions
-                   SET avg_amount = ?, frequency = ?, category = ?, last_seen = CURRENT_TIMESTAMP,
-                       occurrences = occurrences + 1 WHERE merchant = ?""",
-                (avg_amount, frequency, category, merchant),
-            )
-        else:
-            self.storage.conn.execute(
-                """INSERT INTO recurring_transactions
-                   (merchant, avg_amount, frequency, category, first_seen, last_seen, occurrences)
-                   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 2)""",
-                (merchant, avg_amount, frequency, category),
-            )
-        self.storage.conn.commit()
+        self.storage.save_recurring(merchant, avg_amount, frequency, category)
 
     def get_all_recurring(self) -> list[dict]:
-        rows = self.storage.conn.execute(
-            "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
-        ).fetchall()
-        return [dict(r) for r in rows]
+        return self.storage.get_recurring_transactions()
 
     def run(self, merchant: str, amount: float, tx_id: int) -> None:
         """Detect recurring pattern for merchant/amount and persist if found. Best-effort; logs warnings on error."""

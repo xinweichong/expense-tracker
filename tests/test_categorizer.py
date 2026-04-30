@@ -1,5 +1,6 @@
 import pytest
 from src.categorizer import Categorizer
+from src.storage import Storage
 
 
 @pytest.fixture
@@ -71,3 +72,30 @@ class TestCategorizerOverrides:
         category, source = c.categorize("FairPrice Finest")
         assert category == "Food"
         assert source == "learned"
+
+
+# ── Task 5: Categorizer.learn_merchant ───────────────────────────────────────
+
+class TestLearnMerchant:
+    def test_learn_merchant_persists_to_storage(self, categories, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        c = Categorizer(categories)
+        c.learn_merchant("Grab", "Transport", storage)
+        overrides = storage.get_merchant_overrides()
+        assert "grab" in {k.lower() for k in overrides}
+
+    def test_learn_merchant_updates_in_memory_overrides(self, categories, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        c = Categorizer(categories)
+        c.learn_merchant("Netflix", "Entertainment", storage)
+        category, source = c.categorize("Netflix")
+        assert category == "Entertainment"
+        assert source == "learned"
+
+    def test_learn_merchant_with_none_storage_does_not_raise(self, categories):
+        c = Categorizer(categories)
+        # Should silently skip persistence when no storage provided
+        c.learn_merchant("Grab", "Transport", None)
+        # In-memory override should still be updated
+        category, _ = c.categorize("Grab")
+        assert category == "Transport"

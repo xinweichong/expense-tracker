@@ -1,6 +1,5 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Optional, Any, runtime_checkable, Protocol
 
 
 @dataclass
@@ -16,16 +15,14 @@ class ParseResult:
     tx_type: str = "expense"
 
 
-class BankParser(ABC):
+@runtime_checkable
+class BankParser(Protocol):
     @property
-    @abstractmethod
     def sender_domain(self) -> str:
         ...
 
-    @abstractmethod
     def can_parse(self, sender: str, subject: str) -> bool:
         ...
 
-    @abstractmethod
     def parse(self, content: Any) -> Optional[ParseResult]:
         ...

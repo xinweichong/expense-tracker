@@ -28,6 +28,7 @@ from src.telegram_bot import TelegramBotService
 from src.webhook import create_webhook_app
 from src.web.app import create_dashboard_app
 from src.exchange import ExchangeRateService
+from src.ingestion import IngestionPipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -282,23 +283,6 @@ def main():
     # Set up parsers
     parsers = [DbsPaylahParser(), UobParser()]
 
-    # Set up Gmail poller
-    def on_transaction(result, tx_id):
-        categorizer.reload_overrides(storage.get_merchant_overrides())
-        category, match_source = categorizer.categorize(result.merchant)
-        storage.update_transaction(tx_id, category=category)
-        storage.auto_assign_to_active_trip(tx_id)
-        bot.notify_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
-
-    poller = GmailPoller(
-        credentials_path=gmail_config.get("credentials_file", "credentials.json"),
-        token_path=TOKEN_PATH,
-        sender_filters=gmail_config.get("sender_filters", []),
-        parsers=parsers,
-        storage=storage,
-        on_transaction=on_transaction,
-    )
-
     # Set up Telegram bot
     bot_token = config.get("telegram", {}).get("bot_token", "")
     exchange_config = config.get("exchange_rates", {})
@@ -314,9 +298,33 @@ def main():
         categorizer=categorizer, exchange_service=exchange_service,
         dashboard_url=dashboard_url,
         timezone=config.get("timezone", "Asia/Singapore"),
-        poller=poller,
+        poller=None,  # set after poller is created below
         oauth_redirect_uri=os.environ.get("OAUTH_REDIRECT_URI", f"{dashboard_url.rstrip('/')}/oauth/callback"),
     )
+
+    # Shared ingestion pipeline: dedup → exchange → categorize → store → recurring
+    def _on_transaction(tx: dict) -> None:
+        bot.notify_transaction(
+            tx["id"], tx["amount"], tx["merchant"],
+            tx.get("category"), tx.get("_match_source", "default"), tx["source"],
+        )
+
+    pipeline = IngestionPipeline(
+        storage=storage,
+        categorizer=categorizer,
+        exchange_service=exchange_service,
+    )
+
+    poller = GmailPoller(
+        credentials_path=gmail_config.get("credentials_file", "credentials.json"),
+        token_path=TOKEN_PATH,
+        sender_filters=gmail_config.get("sender_filters", []),
+        parsers=parsers,
+        storage=storage,
+        on_transaction=_on_transaction,
+        pipeline=pipeline,
+    )
+    bot.poller = poller
 
     # Surface Gmail auth failures to the user via Telegram (once per failure, cleared on recovery)
     def _on_gmail_auth_error(err: str) -> None:
@@ -333,9 +341,8 @@ def main():
     # Mount webhook routes
     webhook_app = create_webhook_app(
         storage,
-        exchange_service=exchange_service,
-        categorizer=categorizer,
-        on_transaction=bot.notify_transaction,
+        on_transaction=_on_transaction,
+        pipeline=pipeline,
     )
     for route in webhook_app.routes:
         app.routes.append(route)
