@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { type Transaction } from '@/api/client';
 import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
-import { useCategories } from '@/hooks/useCategories';
+import { useIconMap } from '@/hooks/useIconMap';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -22,13 +22,8 @@ export function TransactionRow({
   removeDisabled?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const { data: categories } = useCategories();
   const categoryColor = getCategoryColor(tx.category ?? '');
-
-  const iconMap = useMemo(
-    () => Object.fromEntries((categories ?? []).map(c => [c.name, c.icon ?? ''])),
-    [categories],
-  );
+  const iconMap = useIconMap();
   const categoryIcon = tx.category ? (iconMap[tx.category] ?? [...tx.category][0] ?? '•') : '•';
 
   const isClickable = !readOnly && !!onClick;

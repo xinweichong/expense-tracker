@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { type Transaction, type Trip, api } from '@/api/client';
 import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
 import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
+import { useIconMap } from '@/hooks/useIconMap';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -66,10 +67,7 @@ export function TransactionDetail({
     staleTime: 5 * 60 * 1000,
   });
 
-  const iconMap = useMemo(
-    () => Object.fromEntries((categories ?? []).map(c => [c.name, c.icon ?? ''])),
-    [categories],
-  );
+  const iconMap = useIconMap();
   const categoryIcon = tx.category ? (iconMap[tx.category] ?? tx.category[0] ?? '•') : '•';
 
   const handleEdit = () => {
