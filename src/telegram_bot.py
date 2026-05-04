@@ -164,9 +164,9 @@ class TelegramBotService:
 
     @staticmethod
     def _escape_md(text: str) -> str:
-        """Escape Telegram Markdown special characters in user-provided text."""
+        """Strip Telegram Markdown special characters from user-provided text."""
         for ch in ("_", "*", "`", "["):
-            text = text.replace(ch, f"\\{ch}")
+            text = text.replace(ch, "")
         return text
 
     def _format_tx_block(self, tx: dict, icon_map: dict[str, str] | None = None) -> str:
