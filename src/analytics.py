@@ -142,7 +142,7 @@ def get_top_merchants(
                ROUND(SUM(amount * exchange_rate), 2) as total,
                ROUND(AVG(amount * exchange_rate), 2) as avg_amount
         FROM transactions
-        WHERE type = 'expense'
+        WHERE (type IS NULL OR type = 'expense')
           AND merchant IS NOT NULL
           AND transaction_date >= ? AND transaction_date <= ?
         GROUP BY merchant
