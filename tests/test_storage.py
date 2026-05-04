@@ -690,8 +690,8 @@ def test_get_budget_progress_includes_null_type_rows(in_memory_db):
         INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
             merchant, category, transaction_date, type)
         VALUES ('manual', 'null-type-1', 50.0, 'SGD', 1.0,
-            'Old Merchant', 'Food', '2026-04-01T10:00:00', NULL)
-    """)
+            'Old Merchant', 'Food', ?, NULL)
+    """, (datetime.now().strftime("%Y-%m-%dT10:00:00"),))
     in_memory_db.execute("""
         INSERT INTO budgets (category, period, amount) VALUES ('Food', 'monthly', 200.0)
     """)
@@ -709,20 +709,21 @@ def test_get_health_score_includes_null_type_in_total_expense(in_memory_db):
     from src.storage import Storage
     s = Storage(in_memory_db)
 
+    today = datetime.now().strftime("%Y-%m-%dT10:00:00")
     # Seed income so the score can compute
     in_memory_db.execute("""
         INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
             merchant, category, transaction_date, type)
         VALUES ('manual', 'income-1', 1000.0, 'SGD', 1.0,
-            'Employer', 'Income', '2026-04-01T10:00:00', 'income')
-    """)
+            'Employer', 'Income', ?, 'income')
+    """, (today,))
     # Pre-migration expense row with NULL type
     in_memory_db.execute("""
         INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
             merchant, category, transaction_date, type)
         VALUES ('manual', 'null-exp-1', 800.0, 'SGD', 1.0,
-            'Old Shop', 'Shopping', '2026-04-02T10:00:00', NULL)
-    """)
+            'Old Shop', 'Shopping', ?, NULL)
+    """, (today,))
     in_memory_db.commit()
 
     result = s.get_health_score(months=1)

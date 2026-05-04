@@ -1324,7 +1324,17 @@ class Storage:
 
     def get_telegram_chat_id(self) -> Optional[int]:
         value = self.get_setting("telegram_chat_id")
-        return int(value) if value else None
+        if value:
+            return int(value)
+        # One-time migration: pre-1af83a7 deployments stored chat_id in ingestion_state
+        row = self._conn.execute(
+            "SELECT last_processed_id FROM ingestion_state WHERE source = 'telegram_chat_id'"
+        ).fetchone()
+        if row:
+            chat_id = int(row["last_processed_id"])
+            self.set_telegram_chat_id(chat_id)
+            return chat_id
+        return None
 
     def set_telegram_chat_id(self, chat_id: int) -> None:
         self.set_setting("telegram_chat_id", str(chat_id))

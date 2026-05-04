@@ -728,10 +728,11 @@ def make_tx(i, tx_type="expense"):
 
 def test_daily_digest_sums_more_than_100_transactions(in_memory_db):
     """Month total must not be capped at 100 transactions."""
+    from datetime import datetime
     from src.telegram_bot import TelegramBotService
 
     storage = Storage(in_memory_db)
-    # Insert 150 expense transactions of $10 each = $1500 expected
+    # Insert 150 expense transactions of $10 each = $1500 expected, dated 2026-04-15
     for i in range(150):
         in_memory_db.execute("""
             INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
@@ -770,7 +771,9 @@ def test_daily_digest_sums_more_than_100_transactions(in_memory_db):
     bot.app = mock_app
     bot._loop = asyncio.new_event_loop()
 
-    bot._loop.run_until_complete(bot._send_daily_digest())
+    # Pin _local_now to April 16 so that April 15 = "yesterday" and April = current month
+    with patch.object(bot, "_local_now", return_value=datetime(2026, 4, 16, 8, 0, 0)):
+        bot._loop.run_until_complete(bot._send_daily_digest())
 
     # Find the message that contains month-to-date
     digest_text = " ".join(sent_messages)
