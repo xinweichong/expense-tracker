@@ -1,8 +1,11 @@
 import pytest
+from datetime import datetime
 from src.storage import Storage
 
 
-def _insert_tx(db, source_id, amount, category, tx_type="expense", exchange_rate=1.0, merchant="TestMerchant", date="2026-04-15"):
+def _insert_tx(db, source_id, amount, category, tx_type="expense", exchange_rate=1.0, merchant="TestMerchant", date=None):
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
     db.execute(
         """INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type)
            VALUES ('test', ?, ?, 'SGD', ?, ?, ?, ?, ?)""",
@@ -282,13 +285,16 @@ class TestHealthScoreAPI:
         in_memory_db.execute("INSERT OR IGNORE INTO categories (name, type) VALUES ('Income', 'neutral')")
         in_memory_db.execute("INSERT OR IGNORE INTO categories (name, type) VALUES ('Dining', 'wants')")
         in_memory_db.commit()
+        today = datetime.now().strftime("%Y-%m-%d")
         in_memory_db.execute(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type) "
-            "VALUES ('test', 'inc1', 5000.0, 'SGD', 1.0, 'Salary', 'Income', '2026-04-01', 'income')"
+            "VALUES ('test', 'inc1', 5000.0, 'SGD', 1.0, 'Salary', 'Income', ?, 'income')",
+            (today,),
         )
         in_memory_db.execute(
             "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, category, transaction_date, type) "
-            "VALUES ('test', 'exp1', 1000.0, 'SGD', 1.0, 'RestaurantX', 'Dining', '2026-04-15', 'expense')"
+            "VALUES ('test', 'exp1', 1000.0, 'SGD', 1.0, 'RestaurantX', 'Dining', ?, 'expense')",
+            (today,),
         )
         in_memory_db.commit()
         resp = await ac.get("/api/health-score")

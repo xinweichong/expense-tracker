@@ -1067,9 +1067,12 @@ class TelegramBotService:
         if not self._loop or not self.app:
             logger.debug("Cannot send text: bot not started yet")
             return
-        asyncio.run_coroutine_threadsafe(
+        fut = asyncio.run_coroutine_threadsafe(
             self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown"),
             self._loop,
+        )
+        fut.add_done_callback(
+            lambda f: logger.error("notify_text send failed: %s", f.exception()) if f.exception() else None
         )
 
     def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
@@ -1080,9 +1083,12 @@ class TelegramBotService:
         if not self._loop or not self.app:
             logger.debug("Cannot notify: bot not started yet")
             return
-        asyncio.run_coroutine_threadsafe(
+        fut = asyncio.run_coroutine_threadsafe(
             self._async_notify(tx_id, amount, merchant, category, match_source, source),
             self._loop,
+        )
+        fut.add_done_callback(
+            lambda f: logger.error("notify_transaction send failed: %s", f.exception()) if f.exception() else None
         )
 
     async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
@@ -1421,4 +1427,7 @@ class TelegramBotService:
         if not self._loop or not self.app:
             logger.debug("Cannot send daily digest: bot not started")
             return
-        asyncio.run_coroutine_threadsafe(self._send_daily_digest(), self._loop)
+        fut = asyncio.run_coroutine_threadsafe(self._send_daily_digest(), self._loop)
+        fut.add_done_callback(
+            lambda f: logger.error("notify_daily_digest send failed: %s", f.exception()) if f.exception() else None
+        )
