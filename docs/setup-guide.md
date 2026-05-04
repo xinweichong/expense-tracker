@@ -1,6 +1,6 @@
 # Setup Guide — Getting Everything Running
 
-This guide walks you through every step to get Cashe fully operational: Telegram bot, Gmail email ingestion, Railway cloud deployment, and configuring which emails are crawled.
+This guide walks you through every step to get Cashe fully operational: Telegram bot, Gmail email ingestion, Oracle Cloud deployment, and configuring which emails are crawled.
 
 ---
 
@@ -17,7 +17,7 @@ This guide walks you through every step to get Cashe fully operational: Telegram
 9. [Adding a New Bank](#9-adding-a-new-bank)
 10. [Running as a Service](#10-running-as-a-service)
 11. [Troubleshooting](#11-troubleshooting)
-12. [Railway Deployment](#12-railway-deployment)
+12. [Oracle Cloud Deployment](#12-oracle-cloud-deployment)
 
 ---
 
@@ -26,7 +26,8 @@ This guide walks you through every step to get Cashe fully operational: Telegram
 - **Python 3.11+** (for local development)
 - **A Gmail account** that receives bank transaction emails
 - **An iPhone** for Telegram + Apple Wallet
-- **A [Railway](https://railway.app/) account** for cloud deployment
+- **An [Oracle Cloud](https://cloud.oracle.com/) Always Free account** for cloud deployment
+- **A [Cloudflare](https://cloudflare.com/) account with a domain** for the Tunnel + TLS
 
 ---
 
@@ -180,7 +181,7 @@ gmail:
 server:
   host: "0.0.0.0"                        # listen on all interfaces
   port: 8080                             # port for web dashboard + webhooks
-  webhook_base_url: "https://your-app.up.railway.app"  # your Railway URL
+  webhook_base_url: "https://cashe.yourdomain.com"       # your Cloudflare Tunnel public hostname
 
 # Web dashboard password
 web:
@@ -225,7 +226,7 @@ Copy the output (starts with `$2b$12$...`) and paste it as `web.password_hash`.
 
 This is the URL your iPhone will POST Apple Wallet transactions to:
 
-- **Railway:** `https://your-app.up.railway.app` (from the Railway dashboard)
+- **Oracle Cloud + Cloudflare Tunnel:** `https://cashe.yourdomain.com`
 
 The full webhook path is: `{webhook_base_url}/webhook/apple-wallet`
 
@@ -254,7 +255,7 @@ You should see output like:
 - Try `/today` — should say "No transactions on 2026-04-17" (or show any existing data)
 
 **Web dashboard:**
-- Open `https://your-app.up.railway.app` in a browser
+- Open `https://cashe.yourdomain.com` in a browser
 - Enter the password you set in `web.password_hash`
 - You should see the dashboard with empty charts
 
@@ -271,7 +272,7 @@ See the detailed iOS Shortcut instructions in the [README.md](../README.md) unde
 
 1. Open Shortcuts → Automation → Transaction trigger
 2. Build ~14 actions to extract date, card, merchant, amount
-3. POST JSON to `https://your-app.up.railway.app/webhook/apple-wallet`
+3. POST JSON to `https://cashe.yourdomain.com/webhook/apple-wallet`
 4. Set to **Run Immediately** with no notification
 
 ---
@@ -560,14 +561,15 @@ sudo journalctl -u expense-tracker -f
 | Amount shows as positive instead of negative | Check the If block in the Shortcut — the Combine Text + Set Variable must be inside the If condition. |
 | Takes ~8 purchases to get working | Normal. Each real transaction lets you verify the Shortcut output and tweak the regex or payload format. |
 
-### Railway
+### Oracle Cloud / Docker
 
 | Problem | Fix |
 |---------|-----|
-| Deploy fails | Check `railway logs`. Ensure `Dockerfile` exists and `requirements.txt` is valid |
-| Gmail not working | Verify `GMAIL_CREDENTIALS_JSON` and `GMAIL_TOKEN_JSON` are base64-encoded correctly: `base64 -i credentials.json` |
-| Database resets on deploy | Add a persistent volume mounted at `/data` and set `EXPENSE_DB_PATH=/data/expense_tracker.db` |
-| Server unreachable from iPhone | Verify the Railway URL works in Safari on your iPhone |
+| Container won't start | Run `docker compose logs app` — check that `config.yaml` and `credentials.json` are present in the repo root on the VM |
+| Gmail not authenticating | Verify `token.json` is in `data/` on the VM; re-run `python scripts/gmail_auth.py` locally and SCP the new `token.json` |
+| Tunnel not connecting | Run `docker compose logs cloudflared`. Check `TUNNEL_TOKEN` in `.env`. The tunnel should show as healthy in Cloudflare Zero Trust |
+| Database lost on redeploy | It shouldn't be — `data/` is bind-mounted. Use `docker compose down` (not `--volumes`) to stop without wiping it |
+| Server unreachable from iPhone | Confirm `https://cashe.yourdomain.com` loads in Safari. Check the Cloudflare Tunnel status and that the public hostname is set to `http://app:8080` |
 
 ### Logs
 
@@ -589,132 +591,138 @@ grep "Gmail authenticated" logs/app.log
 
 ---
 
-## 12. Railway Deployment
+## 12. Oracle Cloud Deployment
 
-Deploy the expense tracker to [Railway](https://railway.app/) for a cloud-hosted setup that doesn't require your local machine to stay on.
+Deploy Cashe to an **Oracle Always Free** ARM VM with a **Cloudflare Tunnel** for public HTTPS access — no open inbound ports, no TLS certificates to manage, and a custom domain on the free plan.
 
-### 12.1 Create a Railway Account
+### 12.1 Provision an Oracle Cloud VM
 
-1. Go to [railway.app](https://railway.app/) and sign up (GitHub login is easiest)
-2. Verify your email if prompted
+1. Sign up at [cloud.oracle.com](https://cloud.oracle.com/) — the Always Free tier requires a credit card but charges nothing
+2. Go to **Compute → Instances → Create Instance**
+3. Choose:
+   - **Image:** Ubuntu 22.04 (Minimal)
+   - **Shape:** `VM.Standard.A1.Flex` — set **1 OCPU / 6 GB RAM** minimum (up to 4 OCPU / 24 GB are free)
+4. Under **Networking**, ensure a public IPv4 address is assigned
+5. Under **Add SSH keys**, upload your public key (`~/.ssh/id_rsa.pub`)
+6. Create the instance and note the **Public IP**
 
-### 12.2 Install the Railway CLI
+Add an SSH alias to `~/.ssh/config` for convenience:
 
-```bash
-npm i -g @railway/cli
-railway login
+```
+Host cashe-ssh
+    HostName YOUR_VM_PUBLIC_IP
+    User ubuntu
+    IdentityFile ~/.ssh/id_rsa
 ```
 
-This opens a browser to authenticate your CLI session.
+Verify SSH works: `ssh cashe-ssh`
 
-### 12.3 Initialize the Project
+### 12.2 Install Docker on the VM
 
 ```bash
+ssh cashe-ssh
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and back in, or run: newgrp docker
+docker run hello-world   # verify
+```
+
+### 12.3 Create a Cloudflare Tunnel
+
+1. In the Cloudflare dashboard go to **Zero Trust → Networks → Tunnels**
+2. Click **Create a tunnel** → name it (e.g. `cashe`) → **Save tunnel**
+3. Copy the **tunnel token** shown on screen
+4. Under **Public Hostname**, add:
+   - Subdomain: `cashe`
+   - Domain: `yourdomain.com`
+   - Service: `http://app:8080`
+5. Save — Cloudflare provisions the DNS record automatically
+
+### 12.4 Clone and Configure on the VM
+
+```bash
+ssh cashe-ssh
+git clone https://github.com/xinweichong/expense-tracker.git
 cd expense-tracker
-railway init
+git checkout develop
+cp .env.example .env
+nano .env   # paste in TUNNEL_TOKEN=<your token from step 12.3>
+mkdir -p data
 ```
 
-Select **"Empty project"** and give it a name like `expense-tracker`. Railway creates a new project and links this directory.
+### 12.5 Copy Credentials from Your Local Machine
 
-### 12.4 Set Environment Variables
-
-In the Railway dashboard (or via CLI), set these environment variables:
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `TELEGRAM_BOT_TOKEN` | Your Telegram bot token from @BotFather | `7123456789:AAHfG3k9dBz8VqX2nLm5pRtYwKj7cF6sDxE` |
-| `WEB_PASSWORD_HASH` | bcrypt hash of your dashboard password | `$2b$12$...` |
-| `GMAIL_SENDER_FILTERS` | Comma-separated sender addresses | `notification@dbs.com,notification@uob.com` |
-| `GMAIL_CREDENTIALS_JSON` | Base64-encoded `credentials.json` | (see below) |
-| `GMAIL_TOKEN_JSON` | Base64-encoded `token.json` | (see below) |
-| `EXPENSE_DB_PATH` | Database path on persistent volume | `/data/expense_tracker.db` |
-| `WEBHOOK_BASE_URL` | Your Railway public URL | `https://expense-tracker.up.railway.app` |
-
-To encode your Gmail credential files as base64:
+Run these on your **local machine**:
 
 ```bash
-# macOS / Linux
-base64 -i credentials.json
-base64 -i token.json
-
-# Copy the output and set it as the env var value
+scp config.yaml cashe-ssh:~/expense-tracker/
+scp credentials.json cashe-ssh:~/expense-tracker/
+scp token.json cashe-ssh:~/expense-tracker/data/
 ```
 
-Alternatively via CLI:
+Ensure `config.yaml` has the correct `webhook_base_url`:
+
+```yaml
+server:
+  webhook_base_url: "https://cashe.yourdomain.com"
+```
+
+### 12.6 First Deploy
+
+On the VM:
 
 ```bash
-railway variables set TELEGRAM_BOT_TOKEN="your-token"
-railway variables set WEB_PASSWORD_HASH="your-hash"
-railway variables set GMAIL_SENDER_FILTERS="notification@dbs.com,notification@uob.com"
-railway variables set GMAIL_CREDENTIALS_JSON="$(base64 -i credentials.json)"
-railway variables set GMAIL_TOKEN_JSON="$(base64 -i token.json)"
-railway variables set EXPENSE_DB_PATH="/data/expense_tracker.db"
+cd ~/expense-tracker
+docker compose up -d --build
 ```
 
-### 12.5 Add a Persistent Volume
-
-The database must survive redeployments. Add a volume mounted at `/data`:
-
-1. Go to your project in the Railway dashboard
-2. Click **"New"** -> **"Volume"**
-3. Set mount path: `/data`
-4. Set size: **1 GB** (sufficient for years of transaction data)
-
-### 12.6 Deploy
+The first build takes a few minutes (downloads base images, builds React frontend, installs Python deps). Check progress:
 
 ```bash
-railway up
+docker compose logs -f
 ```
 
-Railway detects the Dockerfile, builds the image, and deploys. The first deploy takes a few minutes.
+You should eventually see:
 
-Check logs:
-
-```bash
-railway logs
 ```
-
-You should see:
-```
-Gmail credentials decoded from environment
-Gmail poller started (interval: 120s)
+Database ready: X transactions, Y categories
+Gmail authenticated successfully
 Telegram bot started
 Starting web server on 0.0.0.0:8080
 ```
 
-### 12.7 Get the Public URL
+### 12.7 Verify
 
-Railway assigns a public URL automatically. Find it in the Railway dashboard under **Settings** -> **Networking** -> **Public URL**, or via CLI:
+1. Open `https://cashe.yourdomain.com` in a browser — you should reach the login page
+2. Send `/start` to your Telegram bot — it should respond
+3. Make a test payment and confirm the Apple Wallet webhook fires
 
-```bash
-railway domain
-```
+### 12.8 Subsequent Deploys
 
-Update the `WEBHOOK_BASE_URL` env var to match:
-
-```bash
-railway variables set WEBHOOK_BASE_URL="https://your-app.up.railway.app"
-```
-
-Then redeploy:
+After merging changes to `develop` on GitHub, deploy by running on the VM:
 
 ```bash
-railway up
+cd ~/expense-tracker
+./deploy.sh
 ```
 
-### 12.8 Update iOS Shortcut
+`deploy.sh` runs `git pull && docker compose up -d --build`. The database in `data/` is preserved across deploys because it is bind-mounted, not part of the image.
 
-Change the webhook URL in your iOS Shortcut to point to the Railway URL:
+### 12.9 Useful Commands
 
-- Old: `http://100.64.0.1:8080/webhook/apple-wallet`
-- New: `https://your-app.up.railway.app/webhook/apple-wallet`
+```bash
+# View live logs
+docker compose logs -f
 
-### 12.9 How It Works
+# View only app logs
+docker compose logs -f app
 
-When deployed on Railway:
+# Restart without rebuild
+docker compose restart
 
-1. **No `config.yaml` needed** -- all configuration comes from environment variables
-2. **Gmail credentials** are decoded from base64 env vars (`GMAIL_CREDENTIALS_JSON`, `GMAIL_TOKEN_JSON`) and written to disk at startup
-3. **Database** persists on the mounted volume at `/data/expense_tracker.db`
-4. **PORT** is automatically set by Railway and respected by the application
-5. **Logs** go to stdout (captured by Railway's log system) and to `logs/app.log` on the container filesystem
+# Stop everything (data preserved)
+docker compose down
+
+# Check container status
+docker compose ps
+```
