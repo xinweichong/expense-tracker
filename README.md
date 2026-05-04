@@ -101,7 +101,7 @@ Most people don't track their spending — not because they don't care, but beca
 | **Category Management** | Full CRUD with keyword editor, icon and colour picker, needs/wants/neutral type classification |
 | **CSV Export** | Download filtered transactions from the Transactions page |
 | **Scheduled Reports** | Daily morning digest, weekly and monthly summary reports via Telegram |
-| **Railway Deployment** | Multi-stage Docker build (no Node.js in runtime image), persistent volume, one-command deploy |
+| **Oracle Cloud Deployment** | Runs free on Oracle Always Free ARM VM + Cloudflare Tunnel — no open ports, automatic TLS, custom domain |
 | **Privacy-First** | All data stays in your own SQLite database. No third-party data sharing. No telemetry |
 
 ---
@@ -134,7 +134,8 @@ Single Python process. SQLite with WAL mode. FastAPI for webhooks and the dashbo
 - **Node.js 22+** (only needed to rebuild the frontend — a pre-built `dist/` is committed)
 - **Gmail account** with API credentials (for email ingestion) — see setup guide
 - **Telegram Bot Token** (from [@BotFather](https://t.me/botfather))
-- **A [Railway](https://railway.app/) account** for cloud deployment
+- **An [Oracle Cloud](https://cloud.oracle.com/) Always Free account** for cloud deployment
+- **A [Cloudflare](https://cloudflare.com/) account with a domain** for the Tunnel + TLS
 
 ---
 
@@ -179,23 +180,50 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt()
 
 Copy the output (starts with `$2b$12$...`) into `config.yaml` as `web.password_hash`.
 
-### Railway (Cloud) Deployment
+### Oracle Cloud Deployment
 
-No server needed — Railway hosts the app and provides a public HTTPS URL. The multi-stage Dockerfile builds the React frontend and produces a lean Python-only runtime image.
+Cashe runs on an **Oracle Always Free** ARM VM behind a **Cloudflare Tunnel** — no open inbound ports, automatic TLS, and a custom domain. Docker Compose manages the two services (`app` + `cloudflared`).
+
+**Prerequisites:** an Oracle Cloud account and a domain on Cloudflare (free plan works).
+
+**One-time setup:**
 
 ```bash
-npm i -g @railway/cli && railway login
-railway init
-railway variables set TELEGRAM_BOT_TOKEN="your-token"
-railway variables set WEB_PASSWORD_HASH="your-bcrypt-hash"
-railway variables set GMAIL_CREDENTIALS_JSON="$(base64 -i credentials.json)"
-railway variables set GMAIL_TOKEN_JSON="$(base64 -i token.json)"
-railway variables set EXPENSE_DB_PATH="/data/expense_tracker.db"
-# Add a persistent volume at /data via Railway dashboard (1GB)
-railway up
+# 1. Provision an A1.Flex VM on Oracle Cloud (Ubuntu 22.04)
+#    Minimum: 1 OCPU / 6 GB RAM from the Always Free pool
+
+# 2. Install Docker on the VM
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER && newgrp docker
+
+# 3. Create a Cloudflare Tunnel
+#    Zero Trust → Networks → Tunnels → Create tunnel → cloudflared connector
+#    Add public hostname: cashe.yourdomain.com → http://app:8080
+#    Copy the tunnel token shown in the dashboard
+
+# 4. Clone and configure on the VM
+git clone https://github.com/xinweichong/expense-tracker.git
+cd expense-tracker && git checkout develop
+cp .env.example .env
+# Edit .env — paste in TUNNEL_TOKEN from step 3
+mkdir -p data
+
+# 5. Copy credentials from your local machine
+scp config.yaml ubuntu@YOUR-VM-IP:~/expense-tracker/
+scp credentials.json ubuntu@YOUR-VM-IP:~/expense-tracker/
+scp token.json ubuntu@YOUR-VM-IP:~/expense-tracker/data/
+
+# 6. First deploy
+docker compose up -d --build
 ```
 
-See [docs/setup-guide.md](docs/setup-guide.md) for the full Railway walkthrough.
+**Subsequent deploys** — run on the VM from `~/expense-tracker/`:
+
+```bash
+./deploy.sh   # git pull + docker compose up -d --build
+```
+
+See [docs/setup-guide.md](docs/setup-guide.md) for the full Oracle + Cloudflare Tunnel walkthrough.
 
 ---
 
@@ -546,7 +574,7 @@ expense-tracker/
 |-------|----------|
 | Automation doesn't fire | Settings → Shortcuts → Advanced → enable "Allow Running Scripts". Check Focus modes |
 | Server returns 400 | Add "Show Result" to inspect JSON payload. Verify amount is a number and merchant is not empty |
-| Server unreachable | Verify the Railway URL works in Safari on your iPhone |
+| Server unreachable | Verify the domain (`https://cashe.yourdomain.com`) resolves and the Cloudflare Tunnel is connected |
 | Duplicate transactions | Server deduplicates by `source_id` (unique constraint); re-sent webhooks are silently ignored |
 
 ### Database
@@ -556,13 +584,14 @@ expense-tracker/
 | SQLite locked errors | WAL mode is enabled by default. Ensure only one process accesses the DB file |
 | Missing columns after update | Run `python src/main.py` once — migrations run automatically (`ALTER TABLE` adds missing columns) |
 
-### Railway
+### Oracle Cloud / Docker
 
 | Issue | Solution |
 |-------|----------|
-| Deploy fails | Check `railway logs`. Ensure `Dockerfile` exists and `requirements.txt` is valid |
-| Gmail not working | Verify `GMAIL_CREDENTIALS_JSON` and `GMAIL_TOKEN_JSON` are base64-encoded correctly: `base64 -i credentials.json` |
-| Database resets on deploy | Add a persistent volume mounted at `/data` and set `EXPENSE_DB_PATH=/data/expense_tracker.db` |
+| Container won't start | Run `docker compose logs app` — check that `config.yaml` and `credentials.json` are present in the repo root on the VM |
+| Gmail not authenticating | Verify `token.json` is in `data/` on the VM; re-run `python scripts/gmail_auth.py` locally and SCP the new `token.json` |
+| Tunnel not connecting | Run `docker compose logs cloudflared`. Check `TUNNEL_TOKEN` in `.env`. The tunnel should show as healthy in Cloudflare Zero Trust |
+| Database lost on redeploy | It shouldn't be — `data/` is bind-mounted. Use `docker compose down` (not `--volumes`) to stop without wiping it |
 
 ---
 
@@ -580,7 +609,7 @@ feature/xxx ──merge --no-ff──> develop ──test──> main (tagged re
 
 ## Documentation
 
-- **[docs/setup-guide.md](docs/setup-guide.md)** — Full setup walkthrough with Telegram, Gmail, Railway, and troubleshooting
+- **[docs/setup-guide.md](docs/setup-guide.md)** — Full setup walkthrough with Telegram, Gmail, Oracle Cloud deployment, and troubleshooting
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history
 - **[AGENTS.md](AGENTS.md)** — AI agent context and architecture notes
 
