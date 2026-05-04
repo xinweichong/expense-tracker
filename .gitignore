@@ -4,6 +4,7 @@ credentials.json
 token.json
 .env
 .env.*
+!.env.example
 
 # Gmail OAuth tokens
 *.pickle
