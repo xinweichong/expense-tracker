@@ -17,18 +17,14 @@ import atexit
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from src.analytics import generate_summary
 from src.config import load_config
-from src.storage import Storage
-from src.categorizer import Categorizer
+from src.storage import Storage, AdminStorage
 from src.parsers.dbs_paylah import DbsPaylahParser
 from src.parsers.uob import UobParser
-from src.gmail_poller import GmailPoller
 from src.telegram_bot import TelegramBotService
 from src.webhook import create_webhook_app
 from src.web.app import create_dashboard_app
 from src.exchange import ExchangeRateService
-from src.ingestion import IngestionPipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,16 +35,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# In Railway/containers, use /data for persistent storage
+# ---------------------------------------------------------------------------
+# Path constants
+# ---------------------------------------------------------------------------
+DATA_DIR = "/data" if os.path.isdir("/data") else "data"
+APP_DB_PATH = os.path.join(DATA_DIR, "app.db")
+USERS_DIR = os.path.join(DATA_DIR, "users")
+
+# Legacy single-DB path (still used by init_db, which is called by UserManager)
 _db_env = os.environ.get("EXPENSE_DB_PATH", "")
-DB_PATH = _db_env if _db_env else ("/data/expense_tracker.db" if os.path.isdir("/data") else "expense_tracker.db")
-TOKEN_PATH = "/data/token.json" if os.path.isdir("/data") else "token.json"
+DB_PATH = _db_env if _db_env else os.path.join(DATA_DIR, "expense_tracker.db")
+TOKEN_PATH = os.path.join(DATA_DIR, "token.json")
+
 CONFIG_PATH = os.environ.get("EXPENSE_CONFIG_PATH", "config.yaml")
-SUMMARY_CACHE_DIR = os.environ.get(
-    "SUMMARY_CACHE_DIR",
-    os.path.join(os.path.dirname(__file__), "..", "data", "summaries")
-)
-os.makedirs(SUMMARY_CACHE_DIR, exist_ok=True)
 
 
 def init_db(db_path: str) -> sqlite3.Connection:
@@ -229,6 +228,87 @@ def init_db(db_path: str) -> sqlite3.Connection:
     return conn
 
 
+def init_app_db(db_path: str) -> sqlite3.Connection:
+    """Create or open app.db (the AdminStorage database) and apply its schema."""
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            username            TEXT UNIQUE NOT NULL,
+            password_hash       TEXT NOT NULL,
+            telegram_chat_id    TEXT,
+            gmail_connected     INTEGER DEFAULT 0,
+            wants_gmail         INTEGER DEFAULT 1,
+            wants_apple_wallet  INTEGER DEFAULT 1,
+            onboarding_complete INTEGER DEFAULT 0,
+            created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+            token           TEXT PRIMARY KEY,
+            username        TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+            user_agent      TEXT,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS admin_sessions (
+            token           TEXT PRIMARY KEY,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS telegram_link_tokens (
+            token       TEXT PRIMARY KEY,
+            username    TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+            expires_at  DATETIME NOT NULL
+        );
+    """)
+    conn.commit()
+    return conn
+
+
+def seed_admin_if_needed(admin_storage: AdminStorage, config: dict, data_dir: str) -> None:
+    """Run once on first boot. If app.db has no users, create the admin user from config.yaml.
+    Also migrates the legacy telegram_chat_id from the per-user DB (if present).
+    """
+    if admin_storage.list_users():
+        return   # already seeded
+
+    web_cfg = config.get("web", {})
+    username = web_cfg.get("admin_username") or web_cfg.get("username", "admin")
+    password_hash = web_cfg.get("password_hash", "")
+    if not password_hash:
+        logger.warning("No password_hash in config — admin user cannot log in")
+        return
+
+    admin_storage.create_user(username, password_hash)
+
+    # Migrate existing Telegram chat_id from legacy per-user DB (if it exists there)
+    user_db_path = os.path.join(data_dir, "users", username, "expense_tracker.db")
+    if os.path.exists(user_db_path):
+        try:
+            _conn = sqlite3.connect(user_db_path)
+            row = _conn.execute(
+                "SELECT last_processed_id FROM ingestion_state WHERE source = 'telegram_chat_id'"
+            ).fetchone()
+            _conn.close()
+            if row and row[0]:
+                admin_storage.update_user(username, telegram_chat_id=row[0])
+                logger.info("Migrated Telegram chat_id for admin user '%s'", username)
+        except Exception as e:
+            logger.warning("Could not migrate telegram_chat_id for '%s': %s", username, e)
+
+    admin_storage.update_user(
+        username,
+        gmail_connected=1,
+        onboarding_complete=1,
+        wants_gmail=1,
+        wants_apple_wallet=1,
+    )
+    logger.info("Admin user '%s' seeded from config", username)
+
+
 def _run_bot(bot: TelegramBotService) -> None:
     """Run the Telegram bot in a background thread using asyncio."""
     import asyncio
@@ -268,29 +348,16 @@ def main():
         os.chmod(creds_path, 0o600)
         logger.info("Decoded Gmail credentials from environment")
 
-    if not os.path.exists(TOKEN_PATH):
-        logger.info("No Gmail token found — use /reauth in Telegram to authorize")
+    # ---------------------------------------------------------------------------
+    # Multi-user startup sequence
+    # ---------------------------------------------------------------------------
+    os.makedirs(USERS_DIR, exist_ok=True)
 
-    conn = init_db(DB_PATH)
+    app_conn = init_app_db(APP_DB_PATH)
+    admin_storage = AdminStorage(app_conn)
     from src.web.auth import init_auth
-    init_auth(conn)
-    storage = Storage(connection=conn)
+    init_auth(admin_storage)
 
-    # Load categories from config
-    cat_data = [
-        {"name": c["name"], "keywords": ",".join(c.get("keywords", [])), "icon": c.get("icon", "")}
-        for c in config.get("categories", [])
-    ]
-    storage.load_categories(cat_data)
-    categorizer = Categorizer(
-        config.get("categories", []),
-        overrides=storage.get_merchant_overrides(),
-    )
-
-    # Set up parsers
-    parsers = [DbsPaylahParser(), UobParser()]
-
-    # Set up Telegram bot
     bot_token = config.get("telegram", {}).get("bot_token", "")
     exchange_config = config.get("exchange_rates", {})
     exchange_service = ExchangeRateService(
@@ -301,81 +368,68 @@ def main():
     dashboard_url = server_config.get("webhook_base_url", "")
 
     bot = TelegramBotService(
-        storage=storage, bot_token=bot_token,
-        categorizer=categorizer, exchange_service=exchange_service,
+        admin_storage=admin_storage,
+        bot_token=bot_token,
+        exchange_service=exchange_service,
         dashboard_url=dashboard_url,
         timezone=config.get("timezone", "Asia/Singapore"),
-        poller=None,  # set after poller is created below
-        oauth_redirect_uri=os.environ.get("OAUTH_REDIRECT_URI", f"{dashboard_url.rstrip('/')}/oauth/callback"),
     )
 
-    # Shared ingestion pipeline: dedup → exchange → categorize → store → recurring
-    def _on_transaction(tx: dict) -> None:
-        bot.notify_transaction(
-            tx["id"], tx["amount"], tx["merchant"],
-            tx.get("category"), tx.get("_match_source", "default"), tx["source"],
-        )
+    parsers = [DbsPaylahParser(), UobParser()]
 
-    pipeline = IngestionPipeline(
-        storage=storage,
-        categorizer=categorizer,
+    scheduler = BackgroundScheduler(timezone=config.get("timezone", "Asia/Singapore"))
+
+    from src.user_manager import UserManager
+    user_manager = UserManager(
+        data_dir=DATA_DIR,
+        config=config,
         exchange_service=exchange_service,
-    )
-
-    poller = GmailPoller(
-        credentials_path=gmail_config.get("credentials_file", "credentials.json"),
-        token_path=TOKEN_PATH,
-        sender_filters=gmail_config.get("sender_filters", []),
         parsers=parsers,
-        storage=storage,
-        on_transaction=_on_transaction,
-        pipeline=pipeline,
+        scheduler=scheduler,
+        bot=bot,
+        admin_storage=admin_storage,
     )
-    bot.poller = poller
+    bot.user_manager = user_manager   # back-reference for per-user routing
 
-    # Surface Gmail auth failures to the user via Telegram (once per failure, cleared on recovery)
-    def _on_gmail_auth_error(err: str) -> None:
-        bot.notify_text(
-            "⚠️ *Gmail Authentication Failed*\n\n"
-            "Email polling has stopped. Use /reauth to re-authorize."
-        )
-    poller.on_auth_error = _on_gmail_auth_error
+    seed_admin_if_needed(admin_storage, config, DATA_DIR)
+    user_manager.load_all_users()
 
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown(wait=False))
+    logger.info("APScheduler started")
+
+    # ---------------------------------------------------------------------------
     # Build combined FastAPI app
+    # ---------------------------------------------------------------------------
     from fastapi import FastAPI
     app = FastAPI()
 
-    # Mount webhook routes
-    webhook_app = create_webhook_app(
-        storage,
-        on_transaction=_on_transaction,
-        pipeline=pipeline,
-    )
+    # Webhook routes (per-user: /webhook/apple-wallet/{username})
+    webhook_app = create_webhook_app(user_manager=user_manager, bot=bot)
     for route in webhook_app.routes:
         app.routes.append(route)
 
-    # Mount dashboard
+    # Dashboard (per-user auth via user_manager)
     dashboard_app = create_dashboard_app(
-        storage, config.get("web", {}).get("password_hash", ""),
-        poller=poller, bot=bot, exchange_service=exchange_service,
+        user_manager=user_manager,
+        admin_storage=admin_storage,
+        exchange_service=exchange_service,
+        host_base_url=dashboard_url,
     )
+
+    # Admin app (user management)
+    from src.web.admin_app import create_admin_app
+    admin_password_hash = config.get("web", {}).get("admin_password_hash", "")
+    admin_app = create_admin_app(
+        admin_storage=admin_storage,
+        user_manager=user_manager,
+        admin_password_hash=admin_password_hash,
+    )
+    app.mount("/admin", admin_app)
     app.mount("/", dashboard_app)
 
     host = server_config.get("host", "0.0.0.0")
     port = int(os.environ.get("PORT", server_config.get("port", 8080)))
-
-    # Start Gmail poller in background thread
-    poll_interval = gmail_config.get("poll_interval_seconds", 120)
-    if os.path.exists(gmail_config.get("credentials_file", "credentials.json")):
-        poll_thread = threading.Thread(
-            target=poller.poll_loop,
-            args=(poll_interval,),
-            daemon=True,
-        )
-        poll_thread.start()
-        logger.info(f"Gmail poller started (interval: {poll_interval}s)")
-    else:
-        logger.warning("Gmail credentials not found — skipping email polling")
 
     # Start Telegram bot in background thread
     if bot_token:
@@ -385,37 +439,6 @@ def main():
         logger.info("Telegram bot started")
     else:
         logger.warning("No Telegram bot token — skipping bot")
-
-    # Scheduled summary reports
-    if bot_token:
-        def _format_and_send_summary(report_type: str) -> None:
-            try:
-                report = generate_summary(conn, report_type=report_type, cache_dir=SUMMARY_CACHE_DIR)
-                arrow = "\u2191" if report["change"] > 0 else "\u2193"
-                lines = [
-                    f"*{'Weekly' if report_type == 'weekly' else 'Monthly'} Summary*\n",
-                    f"*Total spent:* ${report['total_spent']:.2f} ({report['transaction_count']} transactions)",
-                ]
-                if report["top_category"]:
-                    lines.append(f"*Top category:* {report['top_category']['category']} (${report['top_category']['total']:.2f})")
-                if report["biggest_transaction"]:
-                    bt = report["biggest_transaction"]
-                    lines.append(f"*Biggest:* {bt['merchant']} \u2014 ${bt['amount']:.2f}")
-                if report["previous_total"] > 0 and report["change_percent"] is not None:
-                    lines.append(f"*vs last period:* {arrow} ${abs(report['change']):.2f} ({report['change_percent']:+.1f}%)")
-                if report["new_merchant_count"] > 0:
-                    lines.append(f"*New merchants:* {report['new_merchant_count']}")
-                bot.notify_text("\n".join(lines))
-            except Exception as e:
-                logger.error(f"Failed to generate/send {report_type} summary: {e}")
-
-        scheduler = BackgroundScheduler(timezone=config.get("timezone", "Asia/Singapore"))
-        scheduler.add_job(lambda: _format_and_send_summary("weekly"), 'cron', day_of_week='sun', hour=9)
-        scheduler.add_job(lambda: _format_and_send_summary("monthly"), 'cron', day=1, hour=9)
-        scheduler.add_job(bot.notify_daily_digest, 'cron', hour=8, minute=0)
-        scheduler.start()
-        atexit.register(lambda: scheduler.shutdown(wait=False))
-        logger.info("APScheduler started for weekly/monthly summaries")
 
     # Start web server (blocking)
     logger.info(f"Starting web server on {host}:{port}")
