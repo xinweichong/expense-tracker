@@ -71,6 +71,7 @@ class UserManager:
             try:
                 ctx = self._build_context(username, db_path)
                 self._registry[username] = ctx
+                self._register_scheduler_jobs(username)
                 if user["gmail_connected"]:
                     ctx.poller.start()
                 logger.info(

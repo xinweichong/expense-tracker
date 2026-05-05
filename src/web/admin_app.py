@@ -3,7 +3,7 @@ import logging
 import os
 import secrets
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.responses import JSONResponse, FileResponse
@@ -33,9 +33,9 @@ def create_admin_app(
 
     def _is_locked_out(ip: str) -> bool:
         attempts, lockout_until = _login_attempts.get(ip, (0, None))
-        if lockout_until and datetime.utcnow() < lockout_until:
+        if lockout_until and datetime.now(timezone.utc) < lockout_until:
             return True
-        if lockout_until and datetime.utcnow() >= lockout_until:
+        if lockout_until and datetime.now(timezone.utc) >= lockout_until:
             _login_attempts.pop(ip, None)
         return False
 
@@ -43,7 +43,7 @@ def create_admin_app(
         attempts, _ = _login_attempts.get(ip, (0, None))
         attempts += 1
         if attempts >= _MAX_ATTEMPTS:
-            _login_attempts[ip] = (attempts, datetime.utcnow() + timedelta(minutes=_LOCKOUT_MINUTES))
+            _login_attempts[ip] = (attempts, datetime.now(timezone.utc) + timedelta(minutes=_LOCKOUT_MINUTES))
         else:
             _login_attempts[ip] = (attempts, None)
 

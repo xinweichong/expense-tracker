@@ -62,7 +62,7 @@ def _make_user_manager(data_dir, admin_storage, **kwargs):
         },
         exchange_service=None,
         parsers=[],
-        scheduler=None,
+        scheduler=kwargs.pop("scheduler", None),
         bot=None,
         admin_storage=admin_storage,
         **kwargs,
@@ -206,3 +206,38 @@ class TestDeleteUser:
         admin = _make_admin_storage()
         um = _make_user_manager(str(tmp_path), admin)
         um.delete_user("nobody")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Test 14: load_all_users registers scheduler jobs
+# ---------------------------------------------------------------------------
+
+class TestLoadAllUsersSchedulerJobs:
+    def test_load_all_users_registers_scheduler_jobs(self, tmp_path):
+        """After load_all_users(), APScheduler must have daily/weekly/monthly jobs
+        for every loaded user. This was the regression where restart silently dropped
+        all digest notifications for existing users."""
+        from unittest.mock import MagicMock
+
+        admin = _make_admin_storage()
+        # Pre-create users on disk
+        pre_um = _make_user_manager(str(tmp_path), admin)
+        pre_um.create_user("alice", PW_HASH)
+        pre_um.create_user("bob", PW_HASH)
+
+        # Simulate a fresh startup: new UserManager with a mock scheduler
+        mock_scheduler = MagicMock()
+        added_job_ids = []
+        def capture_add_job(fn, trigger, *, id, **kwargs):
+            added_job_ids.append(id)
+        mock_scheduler.add_job.side_effect = capture_add_job
+
+        um2 = _make_user_manager(str(tmp_path), admin, scheduler=mock_scheduler)
+        um2.load_all_users()
+
+        assert "daily_alice" in added_job_ids
+        assert "weekly_alice" in added_job_ids
+        assert "monthly_alice" in added_job_ids
+        assert "daily_bob" in added_job_ids
+        assert "weekly_bob" in added_job_ids
+        assert "monthly_bob" in added_job_ids

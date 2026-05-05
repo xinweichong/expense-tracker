@@ -7,7 +7,11 @@ from httpx import AsyncClient, ASGITransport
 from src.storage import Storage, AdminStorage
 from src.web.app import create_dashboard_app
 from src.web import auth as _auth
-from helpers import FakeUserManager, make_admin_db_with_user, TEST_USERNAME, TEST_PASSWORD
+from helpers import (
+    FakeUserManager, FakeMultiUserManager,
+    make_admin_db_with_user, make_admin_db_schema,
+    TEST_USERNAME, TEST_PASSWORD,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -117,4 +121,174 @@ class TestCredentialFilePermissions:
         mode = stat.S_IMODE(os.stat(creds_path).st_mode)
         assert not (mode & stat.S_IRGRP), "credential file is group-readable"
         assert not (mode & stat.S_IROTH), "credential file is world-readable"
+
+
+# ---------------------------------------------------------------------------
+# Tests 11: force_password_change enforcement
+# ---------------------------------------------------------------------------
+
+def _make_force_pw_fixtures(monkeypatch, in_memory_db, force_pw_username="newuser", force_pw_password="temppass"):
+    """Return (app, admin_storage, force_pw_username, force_pw_password)."""
+    monkeypatch.setenv("SECURE_COOKIES", "false")
+    admin_conn = make_admin_db_schema()
+    admin_storage = AdminStorage(admin_conn)
+    # Normal user
+    pw_hash = bcrypt.hashpw(TEST_PASSWORD.encode(), bcrypt.gensalt()).decode()
+    admin_conn.execute(
+        "INSERT INTO users (username, password_hash, onboarding_complete, force_password_change) VALUES (?, ?, 1, 0)",
+        (TEST_USERNAME, pw_hash),
+    )
+    # New user whose password must be changed
+    forced_hash = bcrypt.hashpw(force_pw_password.encode(), bcrypt.gensalt()).decode()
+    admin_conn.execute(
+        "INSERT INTO users (username, password_hash, onboarding_complete, force_password_change) VALUES (?, ?, 1, 1)",
+        (force_pw_username, forced_hash),
+    )
+    admin_conn.commit()
+    _auth.init_auth(admin_storage)
+    storage = Storage(connection=in_memory_db)
+    user_manager = FakeUserManager(storage)
+    app = create_dashboard_app(user_manager, admin_storage)
+    return app, admin_storage
+
+
+class TestForcePasswordChange:
+    @pytest.mark.asyncio
+    async def test_force_pw_user_cannot_access_api(self, in_memory_db, monkeypatch):
+        """A user with force_password_change=1 gets 403 on regular endpoints."""
+        app, _ = _make_force_pw_fixtures(monkeypatch, in_memory_db)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            await ac.post("/api/login", json={"username": "newuser", "password": "temppass"})
+            r = await ac.get("/api/ping")
+            assert r.status_code == 403
+            assert "Password change required" in r.text
+
+    @pytest.mark.asyncio
+    async def test_force_pw_user_can_read_own_profile(self, in_memory_db, monkeypatch):
+        """/api/users/me must still be accessible so the frontend can read force_password_change."""
+        app, _ = _make_force_pw_fixtures(monkeypatch, in_memory_db)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            await ac.post("/api/login", json={"username": "newuser", "password": "temppass"})
+            r = await ac.get("/api/users/me")
+            assert r.status_code == 200
+            assert r.json()["force_password_change"] is True
+
+    @pytest.mark.asyncio
+    async def test_force_pw_user_can_logout(self, in_memory_db, monkeypatch):
+        """/api/logout must always be accessible."""
+        app, _ = _make_force_pw_fixtures(monkeypatch, in_memory_db)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            await ac.post("/api/login", json={"username": "newuser", "password": "temppass"})
+            r = await ac.post("/api/logout")
+            assert r.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_normal_user_not_blocked(self, in_memory_db, monkeypatch):
+        """A user with force_password_change=0 accesses the API normally."""
+        app, _ = _make_force_pw_fixtures(monkeypatch, in_memory_db)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            await ac.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+            r = await ac.get("/api/ping")
+            assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Test 12: Cross-user data isolation
+# ---------------------------------------------------------------------------
+
+def _make_in_memory_user_db():
+    """Create a bare in-memory SQLite connection with the per-user schema."""
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript("""
+        CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            source_id TEXT UNIQUE,
+            amount REAL NOT NULL,
+            currency TEXT DEFAULT 'SGD',
+            exchange_rate REAL DEFAULT 1.0,
+            merchant TEXT,
+            description TEXT,
+            category TEXT,
+            transaction_date DATETIME,
+            ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            raw_data TEXT,
+            type TEXT DEFAULT 'expense'
+        );
+        CREATE TABLE categories (name TEXT PRIMARY KEY, keywords TEXT, icon TEXT, color TEXT, type TEXT DEFAULT 'neutral');
+        CREATE TABLE ingestion_state (source TEXT PRIMARY KEY, last_processed_id TEXT, last_processed_at DATETIME, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS merchant_overrides (merchant TEXT PRIMARY KEY, category TEXT NOT NULL, source TEXT DEFAULT 'manual', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS recurring_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, merchant TEXT NOT NULL, avg_amount REAL NOT NULL, frequency TEXT NOT NULL, category TEXT, first_seen DATETIME, last_seen DATETIME, occurrences INTEGER DEFAULT 2);
+        CREATE TABLE IF NOT EXISTS merchant_tags (merchant TEXT PRIMARY KEY, tags TEXT DEFAULT '', notes TEXT DEFAULT '', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS budgets (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, period TEXT NOT NULL DEFAULT 'monthly', amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(category, period));
+        CREATE TABLE IF NOT EXISTS goals (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, target_amount REAL NOT NULL, saved_amount REAL NOT NULL DEFAULT 0, target_date DATE, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused')), created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS goal_contributions (id INTEGER PRIMARY KEY AUTOINCREMENT, goal_id INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE, amount REAL NOT NULL, month TEXT NOT NULL, contributed_date TEXT, source TEXT NOT NULL DEFAULT 'auto', note TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS trips (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, destination TEXT, start_date DATE NOT NULL, end_date DATE, primary_currency TEXT DEFAULT 'SGD', status TEXT NOT NULL DEFAULT 'inactive', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS trip_transactions (trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE, transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE, added_by TEXT DEFAULT 'auto', PRIMARY KEY (trip_id, transaction_id));
+        CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+    """)
+    return conn
+
+
+class TestCrossUserDataIsolation:
+    @pytest.mark.asyncio
+    async def test_user_cannot_see_other_users_transactions(self, monkeypatch):
+        """Alice's session must only see Alice's transactions — never Bob's."""
+        monkeypatch.setenv("SECURE_COOKIES", "false")
+
+        # Build admin DB with two users
+        admin_conn = make_admin_db_schema()
+        admin_storage = AdminStorage(admin_conn)
+        alice_hash = bcrypt.hashpw(b"alice-pass", bcrypt.gensalt()).decode()
+        bob_hash = bcrypt.hashpw(b"bob-pass", bcrypt.gensalt()).decode()
+        admin_conn.execute(
+            "INSERT INTO users (username, password_hash, onboarding_complete) VALUES (?, ?, 1)",
+            ("alice", alice_hash),
+        )
+        admin_conn.execute(
+            "INSERT INTO users (username, password_hash, onboarding_complete) VALUES (?, ?, 1)",
+            ("bob", bob_hash),
+        )
+        admin_conn.commit()
+
+        # Separate per-user SQLite DBs
+        alice_conn = _make_in_memory_user_db()
+        bob_conn = _make_in_memory_user_db()
+        alice_storage = Storage(connection=alice_conn)
+        bob_storage = Storage(connection=bob_conn)
+
+        # Seed a transaction into Alice's DB only
+        alice_storage.insert_transaction(
+            source="manual", source_id="alice-tx-001",
+            amount=99.0, merchant="Secret Shop",
+            transaction_date="2026-01-01T12:00:00",
+        )
+
+        _auth.init_auth(admin_storage)
+        user_manager = FakeMultiUserManager({"alice": alice_storage, "bob": bob_storage})
+        app = create_dashboard_app(user_manager, admin_storage)
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            # Alice can see her transaction
+            await ac.post("/api/login", json={"username": "alice", "password": "alice-pass"})
+            r = await ac.get("/api/transactions?limit=50")
+            assert r.status_code == 200
+            alice_txs = r.json()
+            assert any(t["merchant"] == "Secret Shop" for t in alice_txs)
+
+        # Bob gets a fresh client (different session cookie jar)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            await ac.post("/api/login", json={"username": "bob", "password": "bob-pass"})
+            r = await ac.get("/api/transactions?limit=50")
+            assert r.status_code == 200
+            bob_txs = r.json()
+            assert not any(t["merchant"] == "Secret Shop" for t in bob_txs)
 

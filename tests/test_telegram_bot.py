@@ -877,3 +877,118 @@ def test_apply_category_update_notifies_transaction_not_found(bot_with_storage):
 
     query.edit_message_text.assert_called_once_with("Transaction not found.")
 
+
+# ---------------------------------------------------------------------------
+# Test 13: Telegram /start link-token command (multi-user mode)
+# ---------------------------------------------------------------------------
+
+def _make_multi_user_bot(in_memory_db):
+    """Return a TelegramBotService wired to a real AdminStorage with one user."""
+    import sqlite3
+    from src.storage import AdminStorage
+
+    admin_conn = sqlite3.connect(":memory:", check_same_thread=False)
+    admin_conn.execute("PRAGMA foreign_keys = ON")
+    admin_conn.row_factory = sqlite3.Row
+    admin_conn.executescript("""
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            telegram_chat_id TEXT,
+            gmail_connected INTEGER DEFAULT 0,
+            wants_gmail INTEGER DEFAULT 1,
+            wants_apple_wallet INTEGER DEFAULT 1,
+            onboarding_complete INTEGER DEFAULT 0,
+            force_password_change INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE sessions (
+            token TEXT PRIMARY KEY,
+            username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+            user_agent TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE admin_sessions (
+            token TEXT PRIMARY KEY,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE telegram_link_tokens (
+            token TEXT PRIMARY KEY,
+            username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+            expires_at DATETIME NOT NULL
+        );
+    """)
+    admin_storage = AdminStorage(admin_conn)
+    admin_storage.create_user("alice", "hash")
+    bot = TelegramBotService(bot_token="fake", admin_storage=admin_storage)
+    return bot, admin_storage
+
+
+def _make_update(chat_id: int, args: list = None):
+    """Build a minimal fake telegram Update for /start."""
+    message = AsyncMock()
+    message.chat_id = chat_id
+    message.reply_text = AsyncMock()
+    update = MagicMock()
+    update.effective_chat.id = chat_id
+    update.message = message
+    ctx = MagicMock()
+    ctx.args = args or []
+    return update, ctx
+
+
+class TestStartCommand:
+    def test_valid_token_links_chat_id(self, in_memory_db):
+        """Sending /start <valid-token> writes the chat_id to the user record."""
+        bot, admin_storage = _make_multi_user_bot(in_memory_db)
+        token = admin_storage.create_telegram_link_token("alice")
+
+        update, ctx = _make_update(chat_id=99001, args=[token])
+        asyncio.get_event_loop().run_until_complete(bot._start(update, ctx))
+
+        user = admin_storage.get_user("alice")
+        assert user["telegram_chat_id"] == "99001"
+        update.message.reply_text.assert_called_once_with("Your Telegram is now linked to Cashe.")
+
+    def test_invalid_token_replies_with_error(self, in_memory_db):
+        """Sending /start <bad-token> replies with an invalid code message."""
+        bot, admin_storage = _make_multi_user_bot(in_memory_db)
+
+        update, ctx = _make_update(chat_id=99002, args=["CASHE-BADTOK"])
+        asyncio.get_event_loop().run_until_complete(bot._start(update, ctx))
+
+        user = admin_storage.get_user("alice")
+        assert user["telegram_chat_id"] is None
+        call_text = update.message.reply_text.call_args[0][0]
+        assert "invalid" in call_text.lower() or "expired" in call_text.lower()
+
+    def test_token_is_consumed_and_cannot_be_reused(self, in_memory_db):
+        """A valid token is one-time use — second /start with same token is rejected."""
+        bot, admin_storage = _make_multi_user_bot(in_memory_db)
+        token = admin_storage.create_telegram_link_token("alice")
+
+        update1, ctx1 = _make_update(chat_id=99003, args=[token])
+        asyncio.get_event_loop().run_until_complete(bot._start(update1, ctx1))
+
+        # Second use — same token should be rejected
+        update2, ctx2 = _make_update(chat_id=99004, args=[token])
+        asyncio.get_event_loop().run_until_complete(bot._start(update2, ctx2))
+
+        # Alice should still be linked to 99003, not 99004
+        user = admin_storage.get_user("alice")
+        assert user["telegram_chat_id"] == "99003"
+
+    def test_start_with_no_args_prompts_for_code(self, in_memory_db):
+        """/start with no args (and no user_manager) prompts the user to get a code."""
+        bot, admin_storage = _make_multi_user_bot(in_memory_db)
+
+        update, ctx = _make_update(chat_id=99005, args=[])
+        asyncio.get_event_loop().run_until_complete(bot._start(update, ctx))
+
+        # No user should be linked; user prompted to use a code
+        call_text = update.message.reply_text.call_args[0][0]
+        assert "/start" in call_text
+

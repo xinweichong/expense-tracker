@@ -46,10 +46,17 @@ export function OnboardingPage() {
     setStepIndex(1);
   };
 
+  const [completeError, setCompleteError] = useState<string | null>(null);
+
   const handleFinalComplete = async () => {
-    await api.completeOnboarding();
-    await invalidateCurrentUser();
-    navigate('/');
+    setCompleteError(null);
+    try {
+      await api.completeOnboarding();
+      await invalidateCurrentUser();
+      navigate('/');
+    } catch {
+      setCompleteError('Something went wrong. Please try again.');
+    }
   };
 
   const isLastStep = stepIndex === totalSteps - 1;
@@ -135,6 +142,10 @@ export function OnboardingPage() {
             </motion.div>
           </AnimatePresence>
         </div>
+
+        {completeError && (
+          <p className="text-sm text-destructive text-center">{completeError}</p>
+        )}
       </div>
     </div>
   );
