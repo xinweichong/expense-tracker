@@ -2,9 +2,10 @@ import pytest
 import bcrypt
 import sqlite3
 from fastapi.testclient import TestClient
-from src.storage import Storage
+from src.storage import Storage, AdminStorage
 from src.web.app import create_dashboard_app
 from src.config import local_now
+from helpers import FakeUserManager, make_admin_db_with_user, TEST_USERNAME, TEST_PASSWORD
 
 
 class TestMerchantList:
@@ -228,20 +229,16 @@ def client():
             last_seen DATETIME,
             occurrences INTEGER DEFAULT 2
         );
-        CREATE TABLE IF NOT EXISTS sessions (
-            token TEXT PRIMARY KEY,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
     """)
     from src.web import auth as _auth
-    _auth.init_auth(conn)
-    pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
-    app = create_dashboard_app(
-        storage=Storage(connection=conn),
-        password_hash=pw_hash,
-    )
+    admin_conn = make_admin_db_with_user()
+    admin_storage = AdminStorage(admin_conn)
+    _auth.init_auth(admin_storage)
+    storage = Storage(connection=conn)
+    user_manager = FakeUserManager(storage)
+    app = create_dashboard_app(user_manager, admin_storage)
     c = TestClient(app, raise_server_exceptions=True)
-    c.post("/api/login", json={"password": "test"})
+    c.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
     return c, conn
 
 

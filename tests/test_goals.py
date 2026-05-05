@@ -170,17 +170,21 @@ class TestGoalProgress:
 import bcrypt
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from src.storage import Storage, AdminStorage
 from src.web.app import create_dashboard_app
+from helpers import FakeUserManager, make_admin_db_with_user, TEST_USERNAME, TEST_PASSWORD
 
 
 @pytest.fixture
 def goal_app(in_memory_db):
     from src.web import auth as _auth
-    _auth.init_auth(in_memory_db)
+    admin_conn = make_admin_db_with_user()
+    admin_storage = AdminStorage(admin_conn)
+    _auth.init_auth(admin_storage)
     storage = Storage(connection=in_memory_db)
-    pw_hash = bcrypt.hashpw(b"test", bcrypt.gensalt()).decode()
-    yield create_dashboard_app(storage, pw_hash), storage
-    _auth._conn = None
+    user_manager = FakeUserManager(storage)
+    yield create_dashboard_app(user_manager, admin_storage), storage
+    _auth._admin_storage = None
 
 
 @pytest_asyncio.fixture
@@ -188,7 +192,7 @@ async def api(goal_app):
     app, storage = goal_app
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        await ac.post("/api/login", json={"password": "test"})
+        await ac.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
         yield ac, storage
 
 

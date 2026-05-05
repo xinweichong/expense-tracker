@@ -5,11 +5,35 @@ from httpx import AsyncClient, ASGITransport
 from src.webhook import create_webhook_app
 from src.storage import Storage
 
+TEST_USER = "alice"
+
+
+class FakeContext:
+    def __init__(self, storage, categorizer=None, exchange_service=None, on_transaction=None):
+        self.storage = storage
+        self.poller = None
+        self.categorizer = categorizer
+        self.exchange_service = exchange_service
+        self.on_transaction = on_transaction
+
+
+class FakeUserManager:
+    def __init__(self, ctx):
+        self._ctx = ctx
+
+    def get(self, username):
+        return self._ctx if username == TEST_USER else None
+
+
+def _url(path=""):
+    return f"/webhook/apple-wallet/{TEST_USER}{path}"
+
 
 @pytest.fixture
 def webhook_app(in_memory_db):
     storage = Storage(connection=in_memory_db)
-    return create_webhook_app(storage)
+    ctx = FakeContext(storage)
+    return create_webhook_app(FakeUserManager(ctx))
 
 
 @pytest_asyncio.fixture
@@ -22,7 +46,7 @@ async def client(webhook_app):
 class TestAppleWalletWebhook:
     @pytest.mark.asyncio
     async def test_valid_payload_returns_200(self, client, in_memory_db):
-        response = await client.post("/webhook/apple-wallet", json={
+        response = await client.post(_url(), json={
             "amount": "-12.50",
             "merchant": "Toast Box",
             "card": "DBS Debit Mastercard",
@@ -34,14 +58,27 @@ class TestAppleWalletWebhook:
         assert "transaction_id" in data
 
     @pytest.mark.asyncio
+    async def test_unknown_user_returns_404(self, webhook_app):
+        transport = ASGITransport(app=webhook_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.post("/webhook/apple-wallet/nobody", json={
+                "amount": "-12.50",
+                "merchant": "Toast Box",
+                "card": "DBS Debit",
+                "date": "16/04/2026 12:30:00",
+            })
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
     async def test_foreign_currency_payload(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         mock_exchange = MagicMock()
-        mock_exchange.get_rate.return_value = 0.35  # 1 PLN = 0.35 SGD (example)
-        app = create_webhook_app(storage, exchange_service=mock_exchange)
+        mock_exchange.get_rate.return_value = 0.35
+        ctx = FakeContext(storage, exchange_service=mock_exchange)
+        app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            response = await ac.post("/webhook/apple-wallet", json={
+            response = await ac.post(_url(), json={
                 "amount": "PLN 3.78",
                 "merchant": "Zabka",
                 "card": "Visa Signature",
@@ -59,16 +96,16 @@ class TestAppleWalletWebhook:
     async def test_sgd_payload_skips_exchange_lookup(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         mock_exchange = MagicMock()
-        app = create_webhook_app(storage, exchange_service=mock_exchange)
+        ctx = FakeContext(storage, exchange_service=mock_exchange)
+        app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            await ac.post("/webhook/apple-wallet", json={
+            await ac.post(_url(), json={
                 "amount": "12.50",
                 "merchant": "Toast Box",
                 "card": "DBS Debit",
                 "date": "16/04/2026 12:30:00",
             })
-        # SGD transactions should NOT trigger a rate lookup
         mock_exchange.get_rate.assert_not_called()
 
     @pytest.mark.asyncio
@@ -76,10 +113,11 @@ class TestAppleWalletWebhook:
         storage = Storage(connection=in_memory_db)
         mock_cat = MagicMock()
         mock_cat.categorize.return_value = ("Food & Drink", "keyword:toast")
-        app = create_webhook_app(storage, categorizer=mock_cat)
+        ctx = FakeContext(storage, categorizer=mock_cat)
+        app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            response = await ac.post("/webhook/apple-wallet", json={
+            response = await ac.post(_url(), json={
                 "amount": "-12.50",
                 "merchant": "Toast Box",
                 "card": "DBS Debit",
@@ -95,10 +133,11 @@ class TestAppleWalletWebhook:
     async def test_on_transaction_callback_fires(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         callback = MagicMock()
-        app = create_webhook_app(storage, on_transaction=callback)
+        ctx = FakeContext(storage, on_transaction=callback)
+        app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            response = await ac.post("/webhook/apple-wallet", json={
+            response = await ac.post(_url(), json={
                 "amount": "-12.50",
                 "merchant": "Toast Box",
                 "card": "DBS Debit",
@@ -111,7 +150,7 @@ class TestAppleWalletWebhook:
     @pytest.mark.asyncio
     async def test_card_name_stored_in_description(self, client, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        response = await client.post("/webhook/apple-wallet", json={
+        response = await client.post(_url(), json={
             "amount": "-12.50",
             "merchant": "Toast Box",
             "card": "Visa Signature",
@@ -123,8 +162,7 @@ class TestAppleWalletWebhook:
 
     @pytest.mark.asyncio
     async def test_numeric_amount_accepted(self, client):
-        """Numeric JSON amount values are coerced to string and parsed."""
-        response = await client.post("/webhook/apple-wallet", json={
+        response = await client.post(_url(), json={
             "amount": 12.50,
             "merchant": "Toast Box",
             "card": "DBS Debit",
@@ -134,7 +172,7 @@ class TestAppleWalletWebhook:
 
     @pytest.mark.asyncio
     async def test_missing_amount_returns_400(self, client):
-        response = await client.post("/webhook/apple-wallet", json={
+        response = await client.post(_url(), json={
             "merchant": "Test",
             "card": "Visa",
             "date": "16/04/2026 12:00:00",
@@ -143,7 +181,7 @@ class TestAppleWalletWebhook:
 
     @pytest.mark.asyncio
     async def test_missing_merchant_returns_400(self, client):
-        response = await client.post("/webhook/apple-wallet", json={
+        response = await client.post(_url(), json={
             "amount": "-10.0",
             "card": "Visa",
             "date": "16/04/2026 12:00:00",
@@ -158,9 +196,9 @@ class TestAppleWalletWebhook:
             "card": "DBS Debit",
             "date": "16/04/2026 12:30:00",
         }
-        r1 = await client.post("/webhook/apple-wallet", json=payload)
+        r1 = await client.post(_url(), json=payload)
         assert r1.status_code == 200
-        r2 = await client.post("/webhook/apple-wallet", json=payload)
+        r2 = await client.post(_url(), json=payload)
         assert r2.status_code == 200
         assert r2.json()["status"] == "duplicate"
 
@@ -169,7 +207,6 @@ class TestWebhookDedup:
     @pytest.mark.asyncio
     async def test_cross_source_duplicate_detected(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        # Simulate a DBS PayLah! transaction already in the DB
         storage.insert_transaction(
             source="dbs_paylah",
             source_id="email-123",
@@ -177,10 +214,11 @@ class TestWebhookDedup:
             merchant="BAN MIAN",
             transaction_date="2026-04-16T12:00:00",
         )
-        app = create_webhook_app(storage)
+        ctx = FakeContext(storage)
+        app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            response = await ac.post("/webhook/apple-wallet", json={
+            response = await ac.post(_url(), json={
                 "amount": "-8.20",
                 "merchant": "BAN MIAN",
                 "card": "DBS Debit",

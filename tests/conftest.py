@@ -1,6 +1,11 @@
 import pytest
 import sqlite3
 import os
+import sys
+import bcrypt
+
+# Make the tests/ directory importable so test files can do `from helpers import ...`
+sys.path.insert(0, os.path.dirname(__file__))
 
 
 @pytest.fixture(autouse=True)
@@ -138,6 +143,45 @@ def in_memory_db():
     conn.executescript(schema)
     yield conn
     conn.close()
+
+
+@pytest.fixture
+def in_memory_admin_db():
+    """Provide an in-memory SQLite connection with the app.db schema applied."""
+    conn = sqlite3.connect(":memory:")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript("""
+        CREATE TABLE users (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            username            TEXT UNIQUE NOT NULL,
+            password_hash       TEXT NOT NULL,
+            telegram_chat_id    TEXT,
+            gmail_connected     INTEGER DEFAULT 0,
+            wants_gmail         INTEGER DEFAULT 1,
+            wants_apple_wallet  INTEGER DEFAULT 1,
+            onboarding_complete INTEGER DEFAULT 0,
+            created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE sessions (
+            token           TEXT PRIMARY KEY,
+            username        TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+            user_agent      TEXT,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE admin_sessions (
+            token           TEXT PRIMARY KEY,
+            created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE telegram_link_tokens (
+            token       TEXT PRIMARY KEY,
+            username    TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+            expires_at  DATETIME NOT NULL
+        );
+    """)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 @pytest.fixture

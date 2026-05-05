@@ -3,7 +3,7 @@ import { api } from '@/api/client';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
 }
@@ -27,9 +27,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('auth:unauthorized', handler);
   }, []);
 
-  const login = async (password: string) => {
+  const login = async (username: string, password: string) => {
     try {
-      await api.login(password);
+      await api.login(username, password);
       setIsAuthenticated(true);
       return true;
     } catch {

@@ -84,8 +84,21 @@ def estimate_next_date(frequency: str, last_seen: str) -> str:
 
 
 class TelegramBotService:
-    def __init__(self, storage: Storage, bot_token: str, categorizer: Optional[Categorizer] = None, exchange_service: Optional[ExchangeRateService] = None, dashboard_url: str = "", timezone: str = "Asia/Singapore", poller=None, oauth_redirect_uri: str = ""):
+    def __init__(
+        self,
+        storage: Optional[Storage] = None,
+        bot_token: str = "",
+        categorizer: Optional[Categorizer] = None,
+        exchange_service: Optional[ExchangeRateService] = None,
+        dashboard_url: str = "",
+        timezone: str = "Asia/Singapore",
+        poller=None,
+        oauth_redirect_uri: str = "",
+        admin_storage=None,
+    ):
         self.storage = storage
+        self.admin_storage = admin_storage
+        self.user_manager = None    # set via back-reference after UserManager is constructed
         self.bot_token = bot_token
         self.categorizer = categorizer
         self.exchange_service = exchange_service
@@ -99,17 +112,30 @@ class TelegramBotService:
         # Lifecycle state — read by /api/status
         self.is_running: bool = False
         self.last_error: Optional[str] = None
-        # Restore persisted chat_id
-        self._load_chat_id()
+        # Restore persisted chat_id (single-user legacy mode only)
+        if self.storage is not None:
+            self._load_chat_id()
+
+    def _resolve_chat_id(self, username: Optional[str] = None) -> Optional[int]:
+        """Return the Telegram chat ID for a user (multi-user) or self.chat_id (legacy)."""
+        if username and self.admin_storage:
+            user = self.admin_storage.get_user(username)
+            if user and user["telegram_chat_id"]:
+                return int(user["telegram_chat_id"])
+            return None
+        return self.chat_id
 
     def _load_chat_id(self) -> None:
+        if self.storage is None:
+            return
         chat_id = self.storage.get_telegram_chat_id()
         if chat_id:
             self.chat_id = chat_id
             logger.info("Restored Telegram chat_id: %s", self.chat_id)
 
     def _save_chat_id(self, chat_id: int) -> None:
-        self.storage.set_telegram_chat_id(chat_id)
+        if self.storage is not None:
+            self.storage.set_telegram_chat_id(chat_id)
 
     def _local_now(self) -> datetime:
         """Return current datetime in the configured local timezone."""
@@ -538,7 +564,44 @@ class TelegramBotService:
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._unknown_text))
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        self.chat_id = update.effective_chat.id
+        chat_id = update.effective_chat.id
+        args = context.args or []
+
+        # Multi-user mode: token-based linking
+        if self.admin_storage is not None:
+            if args:
+                token = args[0]
+                username = self.admin_storage.consume_telegram_link_token(token)
+                if not username:
+                    await update.message.reply_text(
+                        "This code is invalid or has expired. "
+                        "Return to the Cashe onboarding page to generate a new one."
+                    )
+                    return
+                existing = self.admin_storage.get_user_by_chat_id(str(chat_id))
+                if existing and existing["username"] != username:
+                    await update.message.reply_text("This code belongs to a different account.")
+                    return
+                self.admin_storage.update_user(username, telegram_chat_id=str(chat_id))
+                await update.message.reply_text("Your Telegram is now linked to Cashe.")
+                return
+            # /start with no args — check if already linked
+            if self.user_manager:
+                ctx = self.user_manager.get_by_chat_id(chat_id)
+                if ctx:
+                    await update.message.reply_text(
+                        f"Welcome back! You're linked as *{ctx.username}*.",
+                        parse_mode="Markdown",
+                    )
+                    return
+            await update.message.reply_text(
+                "Send `/start <code>` from the Cashe onboarding page to link your account.",
+                parse_mode="Markdown",
+            )
+            return
+
+        # Legacy single-user mode
+        self.chat_id = chat_id
         self._save_chat_id(self.chat_id)
         await update.message.reply_text(
             "Expense Tracker bot ready! Use the menu button or /help to see all commands."
@@ -1059,41 +1122,51 @@ class TelegramBotService:
             "Type /help for a full list."
         )
 
-    def notify_text(self, text: str) -> None:
+    def notify_text(self, text: str, username: Optional[str] = None) -> None:
         """Send a plain text message. Called from background threads (e.g., APScheduler)."""
-        if not self.chat_id:
+        chat_id = self._resolve_chat_id(username)
+        if not chat_id:
             logger.info("Cannot send notification: no chat_id registered (user must send /start)")
             return
         if not self._loop or not self.app:
             logger.debug("Cannot send text: bot not started yet")
             return
         fut = asyncio.run_coroutine_threadsafe(
-            self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown"),
+            self.app.bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown"),
             self._loop,
         )
         fut.add_done_callback(
             lambda f: logger.error("notify_text send failed: %s", f.exception()) if f.exception() else None
         )
 
-    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
+    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str, username: Optional[str] = None) -> None:
         """Send a transaction notification. Called from the Gmail poller thread."""
-        if not self.chat_id:
+        chat_id = self._resolve_chat_id(username)
+        if not chat_id:
             logger.info("Cannot send notification: no chat_id registered (user must send /start)")
             return
         if not self._loop or not self.app:
             logger.debug("Cannot notify: bot not started yet")
             return
+        # Resolve the correct storage for this notification
+        storage = self.storage
+        if username and self.user_manager:
+            ctx = self.user_manager.get(username)
+            if ctx:
+                storage = ctx.storage
         fut = asyncio.run_coroutine_threadsafe(
-            self._async_notify(tx_id, amount, merchant, category, match_source, source),
+            self._async_notify(tx_id, amount, merchant, category, match_source, source, chat_id, storage),
             self._loop,
         )
         fut.add_done_callback(
             lambda f: logger.error("notify_transaction send failed: %s", f.exception()) if f.exception() else None
         )
 
-    async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str) -> None:
-        icon_map = self.storage.get_category_icon_map()
-        tx = self.storage.get_transaction(tx_id)
+    async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str, chat_id: Optional[int] = None, storage=None) -> None:
+        _chat_id = chat_id if chat_id is not None else self.chat_id
+        _storage = storage if storage is not None else self.storage
+        icon_map = _storage.get_category_icon_map()
+        tx = _storage.get_transaction(tx_id)
         # For Apple Wallet, show the card name stored in description
         if source == "apple_wallet":
             _desc = (tx.get("description") or "") if tx else ""
@@ -1113,22 +1186,22 @@ class TelegramBotService:
             else:
                 lines.append(f"`+${amount:.2f} {currency}` · {self._escape_md(source_label)}")
             lines.append(f"_{tx_id} · {tx_date}_")
-            await self.app.bot.send_message(chat_id=self.chat_id, text="\n".join(lines), parse_mode="Markdown")
+            await self.app.bot.send_message(chat_id=_chat_id, text="\n".join(lines), parse_mode="Markdown")
         elif category and match_source != "default":
             text = self._format_tx_block(tx, icon_map)
             # Append trip context if trips are active
-            if self.storage.get_setting("trips_enabled", "false") == "true":
-                active_trip = self.storage.get_active_trip()
+            if _storage.get_setting("trips_enabled", "false") == "true":
+                active_trip = _storage.get_active_trip()
                 if active_trip:
-                    summary = self.storage.get_trip_summary(active_trip["id"])
+                    summary = _storage.get_trip_summary(active_trip["id"])
                     if summary:
                         from datetime import datetime as _dt
                         start_dt = _dt.strptime(active_trip["start_date"], "%Y-%m-%d")
                         day_num = (self._local_now().date() - start_dt.date()).days + 1
                         text += f"\n\n✈️ {active_trip['name']} · Trip total: S${summary['total_sgd']:.2f} (Day {day_num})"
-            await self.app.bot.send_message(chat_id=self.chat_id, text=text, parse_mode="Markdown")
+            await self.app.bot.send_message(chat_id=_chat_id, text=text, parse_mode="Markdown")
         else:
-            categories = self.storage.get_categories()
+            categories = _storage.get_categories()
             buttons = []
             row = []
             for cat in categories:
@@ -1144,7 +1217,7 @@ class TelegramBotService:
             keyboard = InlineKeyboardMarkup(buttons)
             text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{self._escape_md(source_label)} · Pick a category:"
             await self.app.bot.send_message(
-                chat_id=self.chat_id,
+                chat_id=_chat_id,
                 text=text,
                 parse_mode="Markdown",
                 reply_markup=keyboard,
@@ -1154,23 +1227,24 @@ class TelegramBotService:
         if tx and tx.get("type") != "income":
             try:
                 _sgd = tx["amount"] * (tx.get("exchange_rate") or 1.0)
-                await self._check_and_alert_budgets(category, _sgd)
+                await self._check_and_alert_budgets(category, _sgd, _storage)
             except Exception as _e:
                 logger.warning("Budget alert check failed: %s", _e)
 
     async def _check_and_alert_budgets(
-        self, category: Optional[str], amount_sgd: float
+        self, category: Optional[str], amount_sgd: float, storage=None
     ) -> None:
         """Check budget thresholds and send alerts if a 80% or 100% boundary was just crossed.
 
         Called at the end of _async_notify after every ingested transaction.
         """
-        if self.storage.get_setting("budgets_enabled", "false") != "true":
+        _storage = storage if storage is not None else self.storage
+        if _storage.get_setting("budgets_enabled", "false") != "true":
             return
         if not self.chat_id or not self.app:
             return
 
-        progress = self.storage.get_budget_progress()
+        progress = _storage.get_budget_progress()
         for b in progress:
             # Only check the overall budget and the budget matching this transaction's category
             is_overall = b["category"] is None
@@ -1334,9 +1408,11 @@ class TelegramBotService:
             reply_markup=keyboard,
         )
 
-    async def _send_daily_digest(self) -> None:
+    async def _send_daily_digest(self, chat_id: Optional[int] = None, storage=None) -> None:
         """Send morning digest: yesterday's total, month-to-date, any alerts."""
-        if not self.chat_id:
+        _chat_id = chat_id if chat_id is not None else self.chat_id
+        _storage = storage if storage is not None else self.storage
+        if not _chat_id:
             logger.debug("Cannot send daily digest: no chat_id")
             return
 
@@ -1345,19 +1421,19 @@ class TelegramBotService:
         today = _now.strftime("%Y-%m-%d")
 
         # Yesterday's total — use get_spending_summary to handle NULL-type rows correctly
-        yesterday_summary = self.storage.get_spending_summary(yesterday, yesterday)
+        yesterday_summary = _storage.get_spending_summary(yesterday, yesterday)
         yesterday_total = yesterday_summary["total"]
-        yesterday_count = len(self.storage.query_transactions(start_date=yesterday, end_date=yesterday, limit=10_000))
+        yesterday_count = len(_storage.query_transactions(start_date=yesterday, end_date=yesterday, limit=10_000))
 
         # Month to date
         month_start = _now.replace(day=1).strftime("%Y-%m-%d")
-        month_total = self.storage.get_spending_summary(month_start, today)["total"]
+        month_total = _storage.get_spending_summary(month_start, today)["total"]
 
         # Velocity, new merchants, anomalies
-        velocity = self.storage.spending_velocity()
-        new_merchants_list = self.storage.new_merchants()
-        anomaly_multiplier = float(self.storage.get_setting("anomaly_multiplier", "2.0"))
-        anomalies = self.storage.spending_anomalies(multiplier=anomaly_multiplier)
+        velocity = _storage.spending_velocity()
+        new_merchants_list = _storage.new_merchants()
+        anomaly_multiplier = float(_storage.get_setting("anomaly_multiplier", "2.0"))
+        anomalies = _storage.spending_anomalies(multiplier=anomaly_multiplier)
 
         lines = [
             "*Morning Digest*\n",
@@ -1365,7 +1441,7 @@ class TelegramBotService:
             f"Month to date: *${month_total:.2f}*\n",
         ]
 
-        velocity_threshold = float(self.storage.get_setting("velocity_alert_threshold", "110"))
+        velocity_threshold = float(_storage.get_setting("velocity_alert_threshold", "110"))
         if velocity["pace_percent"] > velocity_threshold:
             lines.append(f"⚠ Spending {velocity['pace_percent']:.0f}% of last month's pace")
 
@@ -1383,7 +1459,7 @@ class TelegramBotService:
         ])
 
         await self.app.bot.send_message(
-            chat_id=self.chat_id,
+            chat_id=_chat_id,
             text="\n".join(lines),
             parse_mode="Markdown",
             reply_markup=keyboard,
@@ -1419,15 +1495,25 @@ class TelegramBotService:
         except Exception as e:
             await update.message.reply_text(f"Poll failed: {e}")
 
-    def notify_daily_digest(self) -> None:
+    def notify_daily_digest(self, username: Optional[str] = None) -> None:
         """Schedule daily digest send. Called from APScheduler background thread."""
-        if not self.chat_id:
+        chat_id = self._resolve_chat_id(username)
+        if not chat_id:
             logger.info("Cannot send daily digest: no chat_id registered (user must send /start)")
             return
         if not self._loop or not self.app:
             logger.debug("Cannot send daily digest: bot not started")
             return
-        fut = asyncio.run_coroutine_threadsafe(self._send_daily_digest(), self._loop)
+        # Resolve per-user storage if in multi-user mode
+        storage = self.storage
+        if username and self.user_manager:
+            ctx = self.user_manager.get(username)
+            if ctx:
+                storage = ctx.storage
+        fut = asyncio.run_coroutine_threadsafe(
+            self._send_daily_digest(chat_id=chat_id, storage=storage),
+            self._loop,
+        )
         fut.add_done_callback(
             lambda f: logger.error("notify_daily_digest send failed: %s", f.exception()) if f.exception() else None
         )

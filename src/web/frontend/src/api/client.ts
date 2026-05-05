@@ -178,13 +178,75 @@ export interface HealthScore {
   };
 }
 
+export interface CurrentUser {
+  username: string;
+  gmail_connected: boolean;
+  telegram_chat_id: number | null;
+  wants_gmail: boolean;
+  wants_apple_wallet: boolean;
+  onboarding_complete: boolean;
+}
+
+export interface SessionInfo {
+  token: string;
+  user_agent: string | null;
+  created_at: string;
+  last_used_at: string;
+}
+
 export const api = {
   // Auth
-  login: (password: string) =>
+  login: (username: string, password: string) =>
     request<{ status: string }>('/api/login', {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     }),
+
+  // Current user
+  getCurrentUser: () => request<CurrentUser>('/api/users/me'),
+
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ status: string }>('/api/users/me/password', {
+      method: 'PUT',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
+  // Sessions
+  listSessions: () => request<SessionInfo[]>('/api/sessions'),
+
+  logoutAllOtherSessions: () =>
+    request<{ status: string }>('/api/sessions', { method: 'DELETE' }),
+
+  logoutSession: (token: string) =>
+    request<{ status: string }>(`/api/sessions/${token}`, { method: 'DELETE' }),
+
+  // Onboarding
+  setOnboardingPreferences: (wants_gmail: boolean, wants_apple_wallet: boolean) =>
+    request<{ status: string }>('/api/onboarding/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ wants_gmail, wants_apple_wallet }),
+    }),
+
+  getOnboardingGmailConnectUrl: () =>
+    request<{ url: string }>('/api/onboarding/gmail/connect-url'),
+
+  createTelegramLinkToken: () =>
+    request<{ token: string }>('/api/onboarding/telegram/link-token', { method: 'POST' }),
+
+  getWebhookUrl: () => request<{ url: string }>('/api/onboarding/webhook-url'),
+
+  completeOnboarding: () =>
+    request<{ status: string }>('/api/onboarding/complete', { method: 'PUT' }),
+
+  // Connections (post-onboarding management)
+  disconnectTelegram: () =>
+    request<{ status: string }>('/api/connections/telegram', { method: 'DELETE' }),
+
+  disconnectGmail: () =>
+    request<{ status: string }>('/api/connections/gmail', { method: 'DELETE' }),
+
+  getGmailReconnectUrl: () =>
+    request<{ url: string }>('/api/connections/gmail/connect-url'),
 
   // Transactions
   getTransactions: (params?: Record<string, string | number>) => {

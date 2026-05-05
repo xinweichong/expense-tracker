@@ -9,6 +9,7 @@ import { fadeUpVariants } from '@/lib/animations';
 
 export function LoginScreen() {
   const { login } = useAuth();
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -17,7 +18,7 @@ export function LoginScreen() {
     e.preventDefault();
     setLoading(true);
     setError(false);
-    const ok = await login(password);
+    const ok = await login(username, password);
     if (!ok) {
       setError(true);
       setPassword('');
@@ -51,24 +52,33 @@ export function LoginScreen() {
         <Card className="p-6">
           <div className="mb-5">
             <p className="text-sm font-semibold text-foreground">Welcome back</p>
-            <p className="text-xs text-muted mt-0.5">Enter your password to continue</p>
+            <p className="text-xs text-muted mt-0.5">Enter your credentials to continue</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-3">
+            <Input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="bg-background border-border"
+              autoFocus
+              autoComplete="username"
+            />
             <Input
               type="password"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="bg-background border-border"
-              autoFocus
+              autoComplete="current-password"
             />
             {error && (
-              <p className="text-sm text-destructive">Incorrect password. Try again.</p>
+              <p className="text-sm text-destructive">Incorrect username or password.</p>
             )}
             <Button
               type="submit"
               className="w-full"
-              disabled={loading || !password}
+              disabled={loading || !username || !password}
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </Button>
