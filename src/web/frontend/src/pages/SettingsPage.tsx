@@ -298,9 +298,9 @@ export function SettingsPage() {
             </div>
 
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="w-full justify-start text-muted hover:text-foreground -mx-1"
+              className="w-full border-destructive text-destructive hover:bg-destructive hover:text-white"
               onClick={logout}
             >
               Sign out
