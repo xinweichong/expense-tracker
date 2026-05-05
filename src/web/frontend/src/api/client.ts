@@ -185,6 +185,7 @@ export interface CurrentUser {
   wants_gmail: boolean;
   wants_apple_wallet: boolean;
   onboarding_complete: boolean;
+  force_password_change: boolean;
 }
 
 export interface SessionInfo {

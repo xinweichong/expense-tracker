@@ -243,8 +243,9 @@ def init_app_db(db_path: str) -> sqlite3.Connection:
             gmail_connected     INTEGER DEFAULT 0,
             wants_gmail         INTEGER DEFAULT 1,
             wants_apple_wallet  INTEGER DEFAULT 1,
-            onboarding_complete INTEGER DEFAULT 0,
-            created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+            onboarding_complete   INTEGER DEFAULT 0,
+            force_password_change INTEGER DEFAULT 0,
+            created_at            DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS sessions (
             token           TEXT PRIMARY KEY,
@@ -264,7 +265,12 @@ def init_app_db(db_path: str) -> sqlite3.Connection:
             expires_at  DATETIME NOT NULL
         );
     """)
-    conn.commit()
+    # Migration: add force_password_change if missing (existing app.db)
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN force_password_change INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass
     return conn
 
 
@@ -305,6 +311,7 @@ def seed_admin_if_needed(admin_storage: AdminStorage, config: dict, data_dir: st
         onboarding_complete=1,
         wants_gmail=1,
         wants_apple_wallet=1,
+        force_password_change=0,
     )
     logger.info("Admin user '%s' seeded from config", username)
 

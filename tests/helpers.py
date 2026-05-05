@@ -39,6 +39,7 @@ def make_admin_db_with_user(password: str = TEST_PASSWORD):
             wants_gmail INTEGER DEFAULT 1,
             wants_apple_wallet INTEGER DEFAULT 1,
             onboarding_complete INTEGER DEFAULT 0,
+            force_password_change INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE sessions (
@@ -61,7 +62,8 @@ def make_admin_db_with_user(password: str = TEST_PASSWORD):
     """)
     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     conn.execute(
-        "INSERT INTO users (username, password_hash, onboarding_complete) VALUES (?, ?, 1)",
+        """INSERT INTO users (username, password_hash, onboarding_complete, force_password_change)
+           VALUES (?, ?, 1, 0)""",
         (TEST_USERNAME, pw_hash),
     )
     conn.commit()

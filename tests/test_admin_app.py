@@ -29,6 +29,7 @@ def _make_admin_db():
             wants_gmail INTEGER DEFAULT 1,
             wants_apple_wallet INTEGER DEFAULT 1,
             onboarding_complete INTEGER DEFAULT 0,
+            force_password_change INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE sessions (
@@ -129,14 +130,19 @@ async def test_admin_create_user(app, admin_db, user_manager):
         login = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
         session_cookie = login.cookies.get("admin_session")
         client.cookies.set("admin_session", session_cookie)
-        resp = await client.post("/api/users", json={"username": "alice", "password": "pass1234"})
+        resp = await client.post("/api/users", json={"username": "alice"})
     assert resp.status_code == 200
-    assert resp.json()["username"] == "alice"
+    data = resp.json()
+    assert data["username"] == "alice"
+    # server-generated password returned once
+    assert "password" in data and len(data["password"]) >= 12
     # UserManager.create_user was called
     assert "alice" in user_manager.created
-    # user exists in AdminStorage
+    # user exists in AdminStorage with force_password_change=1
     storage = AdminStorage(admin_db)
-    assert storage.get_user("alice") is not None
+    user = storage.get_user("alice")
+    assert user is not None
+    assert user["force_password_change"] == 1
 
 
 @pytest.mark.asyncio
@@ -178,6 +184,7 @@ async def test_admin_reset_password(app, admin_db):
     assert resp.status_code == 200
     user = storage.get_user("alice")
     assert bcrypt.checkpw(b"newpass12", user["password_hash"].encode())
+    assert user["force_password_change"] == 1
     # All sessions invalidated
     assert storage.verify_session(old_session) is None
 

@@ -21,6 +21,7 @@ def test_create_and_get_user(in_memory_admin_db):
     assert user["onboarding_complete"] == 0
     assert user["wants_gmail"] == 1
     assert user["wants_apple_wallet"] == 1
+    assert user["force_password_change"] == 1
 
 
 def test_get_user_not_found(in_memory_admin_db):

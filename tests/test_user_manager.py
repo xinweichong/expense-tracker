@@ -28,6 +28,7 @@ def _make_admin_storage():
             wants_gmail INTEGER DEFAULT 1,
             wants_apple_wallet INTEGER DEFAULT 1,
             onboarding_complete INTEGER DEFAULT 0,
+            force_password_change INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE sessions (

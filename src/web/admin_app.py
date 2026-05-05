@@ -1,6 +1,8 @@
 import bcrypt
 import logging
 import os
+import secrets
+import string
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
@@ -101,15 +103,17 @@ def create_admin_app(
             for u in users
         ]
 
+    def _generate_password(length: int = 16) -> str:
+        alphabet = string.ascii_letters + string.digits + "!@#$%"
+        return "".join(secrets.choice(alphabet) for _ in range(length))
+
     @app.post("/api/users", dependencies=[Depends(require_admin_session)])
     async def create_user(request: Request):
         body = await request.json()
         username = body.get("username", "").strip().lower()
-        password = body.get("password", "")
-        if not username or not password:
-            raise HTTPException(status_code=400, detail="username and password are required")
-        if len(password) < 8:
-            raise HTTPException(status_code=422, detail="password must be at least 8 characters")
+        if not username:
+            raise HTTPException(status_code=400, detail="username is required")
+        password = _generate_password()
         password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         try:
             user_manager.create_user(username, password_hash)
@@ -141,7 +145,7 @@ def create_admin_app(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-        admin_storage.update_user(username, password_hash=new_hash)
+        admin_storage.update_user(username, password_hash=new_hash, force_password_change=1)
         admin_storage.destroy_all_sessions(username)
         return {"status": "ok"}
 
