@@ -1581,12 +1581,21 @@ class TelegramBotService:
             reply_markup=keyboard,
         )
 
+    def _resolve_poller(self, update):
+        """Return the GmailPoller for the sending user (multi-user) or self.poller (legacy)."""
+        if self.user_manager:
+            chat_id = self._get_chat_id(update)
+            ctx = self.user_manager.get_by_chat_id(chat_id) if chat_id else None
+            return ctx.poller if ctx else None
+        return self.poller
+
     async def _reauth(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self.poller or not self.oauth_redirect_uri:
+        poller = self._resolve_poller(update)
+        if not poller or not self.oauth_redirect_uri:
             await update.message.reply_text("Gmail not configured.")
             return
         try:
-            auth_url = self.poller.start_reauth(self.oauth_redirect_uri)
+            auth_url = poller.start_reauth(self.oauth_redirect_uri)
             await update.message.reply_text(
                 f"Click the link below to re-authorize Gmail:\n{auth_url}",
                 disable_web_page_preview=True,
@@ -1595,15 +1604,16 @@ class TelegramBotService:
             await update.message.reply_text(f"Failed to start re-authorization: {e}")
 
     async def _forcepoll(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self.poller:
+        poller = self._resolve_poller(update)
+        if not poller:
             await update.message.reply_text("Gmail not configured.")
             return
-        if not self.poller.service:
+        if not poller.service:
             await update.message.reply_text("Gmail not authenticated. Use /reauth first.")
             return
         await update.message.reply_text("Polling Gmail for new emails...")
         try:
-            count = self.poller.force_poll()
+            count = poller.force_poll()
             if count == 0:
                 await update.message.reply_text("No new transactions found.")
             else:
