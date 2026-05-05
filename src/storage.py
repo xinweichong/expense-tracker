@@ -1407,3 +1407,220 @@ class Storage:
     def generate_digest(self, report_type: str = "monthly") -> dict:
         from src.analytics import generate_summary
         return generate_summary(self._conn, report_type)
+
+
+import secrets
+import random
+import string
+
+
+class AdminStorage:
+    """Manages users, sessions, admin sessions, and Telegram link tokens in app.db.
+
+    Takes a sqlite3.Connection; caller owns the connection lifecycle.
+    """
+
+    def __init__(self, connection: sqlite3.Connection):
+        self._conn = connection
+        self._conn.row_factory = sqlite3.Row
+
+    # ── Users ──────────────────────────────────────────────────────────────────
+
+    def create_user(self, username: str, password_hash: str) -> None:
+        """Insert a new user row. Raises ValueError if username already exists."""
+        try:
+            self._conn.execute(
+                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                (username, password_hash),
+            )
+            self._conn.commit()
+        except sqlite3.IntegrityError:
+            raise ValueError(f"user '{username}' already exists")
+
+    def get_user(self, username: str) -> dict | None:
+        """Returns full user row as dict, or None if not found."""
+        row = self._conn.execute(
+            "SELECT * FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_user_by_chat_id(self, chat_id: str) -> dict | None:
+        """Lookup user by Telegram chat_id."""
+        row = self._conn.execute(
+            "SELECT * FROM users WHERE telegram_chat_id = ?", (str(chat_id),)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_users(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM users ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_user(self, username: str) -> None:
+        """Delete user row. ON DELETE CASCADE removes sessions and telegram_link_tokens."""
+        self._conn.execute("DELETE FROM users WHERE username = ?", (username,))
+        self._conn.commit()
+
+    def update_user(self, username: str, **fields) -> None:
+        """Update one or more fields on a user row.
+        Allowed fields: gmail_connected, telegram_chat_id, wants_gmail,
+                        wants_apple_wallet, onboarding_complete, password_hash
+        Raises ValueError for disallowed fields.
+        """
+        allowed = {
+            "gmail_connected", "telegram_chat_id", "wants_gmail",
+            "wants_apple_wallet", "onboarding_complete", "password_hash",
+        }
+        invalid = set(fields) - allowed
+        if invalid:
+            raise ValueError(f"disallowed update fields: {invalid}")
+        if not fields:
+            return
+        set_clauses = ", ".join(f"{k} = ?" for k in fields)
+        params = list(fields.values()) + [username]
+        self._conn.execute(
+            f"UPDATE users SET {set_clauses} WHERE username = ?", params
+        )
+        self._conn.commit()
+
+    # ── User sessions (30-day sliding window) ─────────────────────────────────
+
+    def create_session(self, username: str, user_agent: str = "") -> str:
+        """Create a session token for a user. Returns the session token."""
+        token = secrets.token_hex(32)
+        self._conn.execute(
+            "INSERT INTO sessions (token, username, user_agent) VALUES (?, ?, ?)",
+            (token, username, user_agent),
+        )
+        self._conn.commit()
+        return token
+
+    def verify_session(self, token: str) -> str | None:
+        """Returns username if session is valid and within 30-day sliding window.
+        Updates last_used_at on every successful verify.
+        Returns None if token not found or expired.
+        """
+        row = self._conn.execute(
+            "SELECT username, last_used_at FROM sessions WHERE token = ?", (token,)
+        ).fetchone()
+        if not row:
+            return None
+        last_used = datetime.fromisoformat(row["last_used_at"])
+        if datetime.utcnow() - last_used > timedelta(days=30):
+            self._conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            self._conn.commit()
+            return None
+        self._conn.execute(
+            "UPDATE sessions SET last_used_at = CURRENT_TIMESTAMP WHERE token = ?",
+            (token,),
+        )
+        self._conn.commit()
+        return row["username"]
+
+    def destroy_session(self, token: str) -> None:
+        self._conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        self._conn.commit()
+
+    def destroy_all_sessions(self, username: str, except_token: str | None = None) -> None:
+        """Delete all sessions for a user, optionally keeping one (the current session)."""
+        if except_token:
+            self._conn.execute(
+                "DELETE FROM sessions WHERE username = ? AND token != ?",
+                (username, except_token),
+            )
+        else:
+            self._conn.execute(
+                "DELETE FROM sessions WHERE username = ?", (username,)
+            )
+        self._conn.commit()
+
+    def list_sessions(self, username: str) -> list[dict]:
+        """Return all sessions for a user, newest first."""
+        rows = self._conn.execute(
+            """SELECT token, user_agent, created_at, last_used_at
+               FROM sessions WHERE username = ?
+               ORDER BY last_used_at DESC""",
+            (username,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ── Admin sessions (2-hour sliding window) ─────────────────────────────────
+
+    def create_admin_session(self) -> str:
+        token = secrets.token_hex(32)
+        self._conn.execute(
+            "INSERT INTO admin_sessions (token) VALUES (?)", (token,)
+        )
+        self._conn.commit()
+        return token
+
+    def verify_admin_session(self, token: str) -> bool:
+        """Returns True if token exists and last_used_at is within 2 hours."""
+        row = self._conn.execute(
+            "SELECT last_used_at FROM admin_sessions WHERE token = ?", (token,)
+        ).fetchone()
+        if not row:
+            return False
+        last_used = datetime.fromisoformat(row["last_used_at"])
+        if datetime.utcnow() - last_used > timedelta(hours=2):
+            self._conn.execute(
+                "DELETE FROM admin_sessions WHERE token = ?", (token,)
+            )
+            self._conn.commit()
+            return False
+        self._conn.execute(
+            "UPDATE admin_sessions SET last_used_at = CURRENT_TIMESTAMP WHERE token = ?",
+            (token,),
+        )
+        self._conn.commit()
+        return True
+
+    def destroy_admin_session(self, token: str) -> None:
+        self._conn.execute("DELETE FROM admin_sessions WHERE token = ?", (token,))
+        self._conn.commit()
+
+    # ── Telegram link tokens ──────────────────────────────────────────────────
+
+    def create_telegram_link_token(self, username: str) -> str:
+        """Generate a CASHE-XXXXXX one-time code. Stores with 24h expiry.
+        Deletes any existing tokens for this user before creating a new one.
+        """
+        self._conn.execute(
+            "DELETE FROM telegram_link_tokens WHERE username = ?", (username,)
+        )
+        suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        token = f"CASHE-{suffix}"
+        expires_at = (datetime.utcnow() + timedelta(hours=24)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        self._conn.execute(
+            "INSERT INTO telegram_link_tokens (token, username, expires_at) VALUES (?, ?, ?)",
+            (token, username, expires_at),
+        )
+        self._conn.commit()
+        return token
+
+    def consume_telegram_link_token(self, token: str) -> str | None:
+        """Validate and consume a Telegram link token.
+        Returns the associated username if valid and not expired.
+        Deletes the token (one-time use) on success.
+        Returns None if token not found or expired.
+        """
+        row = self._conn.execute(
+            "SELECT username, expires_at FROM telegram_link_tokens WHERE token = ?",
+            (token,),
+        ).fetchone()
+        if not row:
+            return None
+        if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
+            self._conn.execute(
+                "DELETE FROM telegram_link_tokens WHERE token = ?", (token,)
+            )
+            self._conn.commit()
+            return None
+        self._conn.execute(
+            "DELETE FROM telegram_link_tokens WHERE token = ?", (token,)
+        )
+        self._conn.commit()
+        return row["username"]
