@@ -9,7 +9,7 @@ class UobParser:
     """Handles all UOB alert email formats from @uobgroup.com.
 
     Five patterns in priority order:
-      1. SGD card purchase   (DD/MM/YY, no time)
+      1. Card purchase       (any currency, DD/MM/YY, no time)
       2. Accumulated transit (DD/MM/YY, no time)
       3. Card reversal       (DD Mon YY H:MMAM/PM — income)
       4. PayNow received     (DD-MON-YYYY H:MMAM/PM — income)
@@ -20,10 +20,10 @@ class UobParser:
     def sender_domain(self) -> str:
         return "uobgroup.com"
 
-    # Pattern 1: SGD card purchase
+    # Pattern 1: Card purchase (any currency)
     CARD_PATTERN = re.compile(
-        r"A transaction of SGD\s+([0-9,]+\.\d{2})\s+was made with your UOB Card ending (\d{4})"
-        r"\s+on\s+(\d{2}/\d{2}/\d{2})\s+at\s+([^.]+?)\s*\.\s*If unauthorised",
+        r"A transaction of ([A-Z]{3})\s+([0-9,]+\.\d{2})\s+was made with your UOB Card ending (\d{4})"
+        r"\s+on\s+(\d{2}/\d{2}/\d{2})\s+at\s+(.+?)\s*\.\s*If unauthorised",
         re.IGNORECASE,
     )
     # Pattern 2: Accumulated transit
@@ -90,13 +90,16 @@ class UobParser:
         m = self.CARD_PATTERN.search(body)
         if not m:
             return None
-        amount = float(m.group(1).replace(",", ""))
-        card_last4, merchant = m.group(2), m.group(4).strip()
-        iso_date = self._iso_from_slash_date(m.group(3))
+        currency = m.group(1).upper()
+        amount = float(m.group(2).replace(",", ""))
+        card_last4 = m.group(3)
+        iso_date = self._iso_from_slash_date(m.group(4))
+        merchant = m.group(5).strip()
         return ParseResult(
             source="uob_card",
             source_id="",
             amount=amount,
+            currency=currency,
             merchant=merchant,
             description=f"UOB Card *{card_last4} - {merchant}",
             transaction_date=f"{iso_date}T00:00:00",
