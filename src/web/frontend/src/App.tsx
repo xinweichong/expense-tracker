@@ -69,10 +69,6 @@ function AppContent() {
     <>
       <CategoryColorLoader />
       <Routes>
-        {/* Admin routes — no AppShell chrome */}
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/admin/*" element={<AdminPage />} />
-
         {/* Dashboard routes */}
         <Route element={<AppShell />}>
           <Route index element={<OverviewPage />} />
@@ -94,9 +90,19 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
+        <Routes>
+          {/* Admin routes bypass the regular user auth flow entirely */}
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/admin/*" element={<AdminPage />} />
+          <Route
+            path="*"
+            element={
+              <AuthProvider>
+                <AppContent />
+              </AuthProvider>
+            }
+          />
+        </Routes>
       </BrowserRouter>
     </QueryClientProvider>
   );
