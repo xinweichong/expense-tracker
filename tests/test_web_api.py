@@ -1,24 +1,24 @@
+import sqlite3
 import bcrypt
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.storage import Storage
+from src.storage import Storage, AdminStorage
 from src.web.app import create_dashboard_app
+from helpers import FakeUserManager, make_admin_db_with_user, TEST_USERNAME, TEST_PASSWORD
 
 
 @pytest.fixture
-def password_hash():
-    return bcrypt.hashpw(b"test-password", bcrypt.gensalt()).decode()
-
-
-@pytest.fixture
-def dashboard_app(in_memory_db, password_hash):
+def dashboard_app(in_memory_db):
     from src.web import auth as _auth
-    _auth.init_auth(in_memory_db)
+    admin_conn = make_admin_db_with_user(TEST_PASSWORD)
+    admin_storage = AdminStorage(admin_conn)
+    _auth.init_auth(admin_storage)
     storage = Storage(connection=in_memory_db)
-    yield create_dashboard_app(storage, password_hash)
-    _auth._conn = None
+    user_manager = FakeUserManager(storage)
+    yield create_dashboard_app(user_manager, admin_storage)
+    _auth._admin_storage = None
 
 
 @pytest_asyncio.fixture
@@ -26,7 +26,7 @@ async def client(dashboard_app):
     transport = ASGITransport(app=dashboard_app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # Log in to get a session cookie
-        await ac.post("/api/login", json={"password": "test-password"})
+        await ac.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
         yield ac
 
 

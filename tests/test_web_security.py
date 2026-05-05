@@ -1,25 +1,30 @@
+import sqlite3
 import bcrypt
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.storage import Storage
+from src.storage import Storage, AdminStorage
 from src.web.app import create_dashboard_app
 from src.web import auth as _auth
+from helpers import FakeUserManager, make_admin_db_with_user, TEST_USERNAME, TEST_PASSWORD
+
+
+@pytest.fixture(autouse=True)
+def reset_auth():
+    yield
+    _auth._admin_storage = None
 
 
 @pytest.fixture
-def password_hash():
-    return bcrypt.hashpw(b"test-password", bcrypt.gensalt()).decode()
-
-
-@pytest.fixture
-def dashboard_app(in_memory_db, password_hash, monkeypatch):
+def dashboard_app(in_memory_db, monkeypatch):
     monkeypatch.setenv("SECURE_COOKIES", "false")
-    _auth.init_auth(in_memory_db)
+    admin_conn = make_admin_db_with_user(TEST_PASSWORD)
+    admin_storage = AdminStorage(admin_conn)
+    _auth.init_auth(admin_storage)
     storage = Storage(connection=in_memory_db)
-    yield create_dashboard_app(storage, password_hash)
-    _auth._conn = None
+    user_manager = FakeUserManager(storage)
+    return create_dashboard_app(user_manager, admin_storage)
 
 
 @pytest_asyncio.fixture
@@ -33,7 +38,7 @@ async def client(dashboard_app):
 async def authed_client(dashboard_app):
     transport = ASGITransport(app=dashboard_app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        await ac.post("/api/login", json={"password": "test-password"})
+        await ac.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
         yield ac
 
 
@@ -53,14 +58,14 @@ class TestPing:
 class TestCookieFlags:
     @pytest.mark.asyncio
     async def test_login_cookie_is_httponly(self, client):
-        r = await client.post("/api/login", json={"password": "test-password"})
+        r = await client.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
         assert r.status_code == 200
         set_cookie = r.headers.get("set-cookie", "")
         assert "httponly" in set_cookie.lower()
 
     @pytest.mark.asyncio
     async def test_login_cookie_has_samesite_lax(self, client):
-        r = await client.post("/api/login", json={"password": "test-password"})
+        r = await client.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
         assert r.status_code == 200
         set_cookie = r.headers.get("set-cookie", "")
         assert "samesite=lax" in set_cookie.lower()
@@ -68,7 +73,7 @@ class TestCookieFlags:
     @pytest.mark.asyncio
     async def test_login_cookie_not_secure_in_test(self, client):
         # SECURE_COOKIES=false (set by dashboard_app fixture) means Secure flag must be absent
-        r = await client.post("/api/login", json={"password": "test-password"})
+        r = await client.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
         set_cookie = r.headers.get("set-cookie", "")
         assert "secure" not in set_cookie.lower()
 
@@ -112,3 +117,4 @@ class TestCredentialFilePermissions:
         mode = stat.S_IMODE(os.stat(creds_path).st_mode)
         assert not (mode & stat.S_IRGRP), "credential file is group-readable"
         assert not (mode & stat.S_IROTH), "credential file is world-readable"
+
