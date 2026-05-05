@@ -21,10 +21,15 @@ import {
   useDeleteCategory,
   useMerchantOverrides,
 } from '@/hooks/useCategories';
-import { api, type Category } from '@/api/client';
+import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
+import { api, type Category, type SessionInfo } from '@/api/client';
 import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
-import { Pencil, Trash2, Plus, X, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown } from 'lucide-react';
+import {
+  Pencil, Trash2, Plus, X, ChevronDown,
+  CheckCircle2, Wifi, WifiOff,
+} from 'lucide-react';
+import { TelegramStep, GmailStep, AppleWalletStep } from '@/components/onboarding/steps';
 
 const ICON_OPTIONS = [
   '🍜', '🚗', '🛒', '📄', '🎬', '📌', '💰', '🏥', '✈️', '🎓',
@@ -38,26 +43,57 @@ const CAT_TYPES = [
   { value: 'neutral', label: 'Neutral' },
 ] as const;
 
-export function SettingsPage() {
-  const { data: categories } = useCategories();
-  const { data: overrides } = useMerchantOverrides();
-  const createCat = useCreateCategory();
-  const updateCat = useUpdateCategory();
-  const deleteCat = useDeleteCategory();
+// ── Session helpers ───────────────────────────────────────────────────────────
 
+function parseUserAgent(ua: string): string {
+  const browser =
+    ua.includes('Safari') && !ua.includes('Chrome') ? 'Safari' :
+    ua.includes('Chrome') ? 'Chrome' :
+    ua.includes('Firefox') ? 'Firefox' : 'Browser';
+  const os =
+    ua.includes('iPhone') ? 'iPhone' :
+    ua.includes('Mac') ? 'macOS' :
+    ua.includes('Windows') ? 'Windows' :
+    ua.includes('Android') ? 'Android' : 'Device';
+  return `${browser} · ${os}`;
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export function SettingsPage() {
+  const qc = useQueryClient();
   const { hash } = useLocation();
+  const { data: currentUser } = useCurrentUser();
+  const invalidateCurrentUser = useInvalidateCurrentUser();
+
+  // Smooth-scroll to hash anchor
   useEffect(() => {
     if (!hash) return;
     const el = document.getElementById(hash.slice(1));
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [hash]);
 
-  // Populate getCategoryColor overrides when categories load
+  // ── Categories ──────────────────────────────────────────────────────────────
+  const { data: categories } = useCategories();
+  const { data: overrides } = useMerchantOverrides();
+  const createCat = useCreateCategory();
+  const updateCat = useUpdateCategory();
+  const deleteCat = useDeleteCategory();
+
   useEffect(() => {
     if (categories) setCategoryColors(categories);
   }, [categories]);
 
-  const qc = useQueryClient();
   const deleteOverride = useMutation({
     mutationFn: (merchant: string) => api.deleteMerchantOverride(merchant),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }),
@@ -81,21 +117,61 @@ export function SettingsPage() {
   const [editKeywords, setEditKeywords] = useState('');
   const [editIcon, setEditIcon] = useState('');
   const [editColor, setEditColor] = useState('');
-  const [error, setError] = useState('');
+  const [catError, setCatError] = useState('');
 
-  // Alert threshold state
+  const usedColors = (categories ?? [])
+    .filter((c: Category) => c.color)
+    .map((c: Category) => c.color!.toLowerCase());
+
+  const startEdit = (cat: Category) => {
+    setEditingCategory(cat.name);
+    setExpandedCategory(null);
+    setEditKeywords(cat.keywords ?? '');
+    setEditIcon(cat.icon ?? '📌');
+    setEditColor(cat.color ?? '');
+    setCatError('');
+  };
+
+  const handleAddCategory = () => {
+    if (!newCatName.trim()) return;
+    setCatError('');
+    createCat.mutate(
+      { name: newCatName.trim(), keywords: newCatKeywords.trim() || undefined, icon: newCatIcon, color: newCatColor || undefined },
+      {
+        onSuccess: () => { setShowAddCategory(false); setNewCatName(''); setNewCatKeywords(''); setNewCatIcon('📌'); setNewCatColor(''); },
+        onError: (err: Error) => setCatError(err.message),
+      },
+    );
+  };
+
+  const handleUpdateCategory = (name: string) => {
+    setCatError('');
+    updateCat.mutate(
+      { name, data: { keywords: editKeywords, icon: editIcon, color: editColor || undefined } },
+      { onSuccess: () => setEditingCategory(null), onError: (err: Error) => setCatError(err.message) },
+    );
+  };
+
+  const handleDeleteCategory = (name: string) => {
+    if (confirm(`Delete category "${name}"? Transactions will be moved to "Other".`)) {
+      deleteCat.mutate(name, { onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }) });
+    }
+  };
+
+  const handleDeleteOverride = (merchant: string) => {
+    if (confirm(`Remove learned override for "${merchant}"?`)) {
+      deleteOverride.mutate(merchant);
+    }
+  };
+
+  // ── Settings (feature toggles + alert thresholds) ───────────────────────────
   const [anomalyMultiplier, setAnomalyMultiplier] = useState<string>('');
   const [velocityThreshold, setVelocityThreshold] = useState<string>('');
+  const [settingsError, setSettingsError] = useState('');
 
   const { data: settings, refetch: refetchSettings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.getSettings(),
-  });
-
-  const { data: systemStatus } = useQuery({
-    queryKey: ['status'],
-    queryFn: () => api.getStatus(),
-    refetchInterval: 30_000,
   });
 
   useEffect(() => {
@@ -107,118 +183,330 @@ export function SettingsPage() {
 
   const saveSettings = async () => {
     try {
-      setError('');
-      await api.updateSettings({
-        anomaly_multiplier: parseFloat(anomalyMultiplier),
-        velocity_alert_threshold: parseInt(velocityThreshold),
-      });
+      setSettingsError('');
+      await api.updateSettings({ anomaly_multiplier: parseFloat(anomalyMultiplier), velocity_alert_threshold: parseInt(velocityThreshold) });
       refetchSettings();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to save settings';
-      setError(msg);
+      setSettingsError(e instanceof Error ? e.message : 'Failed to save settings');
     }
   };
 
-  const toggleBudgets = async (enabled: boolean) => {
-    await api.updateSettings({ budgets_enabled: enabled });
+  const toggleSetting = async (key: 'budgets_enabled' | 'goals_enabled' | 'trips_enabled', val: boolean) => {
+    await api.updateSettings({ [key]: val });
     refetchSettings();
   };
 
-  const toggleGoals = async (enabled: boolean) => {
-    await api.updateSettings({ goals_enabled: enabled });
-    refetchSettings();
-  };
+  // ── Account: change password ────────────────────────────────────────────────
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwLoading, setPwLoading] = useState(false);
 
-  const toggleTrips = async (enabled: boolean) => {
-    await api.updateSettings({ trips_enabled: enabled });
-    refetchSettings();
-  };
-
-  // Colors already in use by other categories
-  const usedColors = (categories ?? [])
-    .filter((c: Category) => c.color)
-    .map((c: Category) => c.color!.toLowerCase());
-
-  const startEdit = (cat: Category) => {
-    setEditingCategory(cat.name);
-    setExpandedCategory(null);
-    setEditKeywords(cat.keywords ?? '');
-    setEditIcon(cat.icon ?? '📌');
-    setEditColor(cat.color ?? '');
-    setError('');
-  };
-
-  const handleAddCategory = () => {
-    if (!newCatName.trim()) return;
-    setError('');
-    createCat.mutate(
-      {
-        name: newCatName.trim(),
-        keywords: newCatKeywords.trim() || undefined,
-        icon: newCatIcon,
-        color: newCatColor || undefined,
-      },
-      {
-        onSuccess: () => {
-          setShowAddCategory(false);
-          setNewCatName('');
-          setNewCatKeywords('');
-          setNewCatIcon('📌');
-          setNewCatColor('');
-        },
-        onError: (err: Error) => setError(err.message),
-      },
-    );
-  };
-
-  const handleUpdateCategory = (name: string) => {
-    setError('');
-    updateCat.mutate(
-      {
-        name,
-        data: {
-          keywords: editKeywords,
-          icon: editIcon,
-          color: editColor || undefined,
-        },
-      },
-      {
-        onSuccess: () => setEditingCategory(null),
-        onError: (err: Error) => setError(err.message),
-      },
-    );
-  };
-
-  const handleDeleteCategory = (name: string) => {
-    if (confirm(`Delete category "${name}"? Transactions will be moved to "Other".`)) {
-      deleteCat.mutate(name, {
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }),
-      });
+  const handleChangePassword = async () => {
+    setPwError('');
+    setPwSuccess(false);
+    if (newPw !== confirmPw) { setPwError('Passwords do not match.'); return; }
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters.'); return; }
+    setPwLoading(true);
+    try {
+      await api.changePassword(currentPw, newPw);
+      setPwSuccess(true);
+      setCurrentPw(''); setNewPw(''); setConfirmPw('');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('401') || msg.includes('Current password')) {
+        setPwError('Current password is incorrect.');
+      } else {
+        setPwError('Failed to change password.');
+      }
+    } finally {
+      setPwLoading(false);
     }
   };
 
-  const handleDeleteOverride = (merchant: string) => {
-    if (confirm(`Remove learned override for "${merchant}"?`)) {
-      deleteOverride.mutate(merchant);
+  // ── Account: sessions ───────────────────────────────────────────────────────
+  const { data: sessions, refetch: refetchSessions } = useQuery<SessionInfo[]>({
+    queryKey: ['sessions'],
+    queryFn: () => api.listSessions(),
+  });
+
+  const removeSession = useMutation({
+    mutationFn: (token: string) => api.logoutSession(token),
+    onSuccess: () => refetchSessions(),
+  });
+
+  const logoutAllOthers = useMutation({
+    mutationFn: () => api.logoutAllOtherSessions(),
+    onSuccess: () => refetchSessions(),
+  });
+
+  // ── Connections ─────────────────────────────────────────────────────────────
+  // Which inline connection step is currently open: null | 'telegram' | 'gmail' | 'apple_wallet'
+  const [activeConnectionStep, setActiveConnectionStep] = useState<'telegram' | 'gmail' | 'apple_wallet' | null>(null);
+  const [disconnectingGmail, setDisconnectingGmail] = useState(false);
+  const [disconnectingTelegram, setDisconnectingTelegram] = useState(false);
+
+  const handleDisconnectGmail = async () => {
+    if (!confirm('This will stop email ingestion. Are you sure?')) return;
+    setDisconnectingGmail(true);
+    try {
+      await api.disconnectGmail();
+      await invalidateCurrentUser();
+    } finally {
+      setDisconnectingGmail(false);
     }
+  };
+
+  const handleDisconnectTelegram = async () => {
+    if (!confirm('Unlink Telegram? You will no longer receive transaction notifications.')) return;
+    setDisconnectingTelegram(true);
+    try {
+      await api.disconnectTelegram();
+      await invalidateCurrentUser();
+    } finally {
+      setDisconnectingTelegram(false);
+    }
+  };
+
+  const handleConnectionStepComplete = async () => {
+    setActiveConnectionStep(null);
+    await invalidateCurrentUser();
   };
 
   return (
     <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-settings">
 
-      {/* ── Title area ── */}
+      {/* ── Title ── */}
       <div className="area-title">
         <h1 className="text-xl font-bold">Settings</h1>
       </div>
 
-      {/* ── Left panel: categories + merchant overrides ── */}
+      {/* ── LEFT PANEL: Account + Connections ── */}
       <div className="area-left grid-scroll-panel space-y-4">
+
+        {/* Account */}
+        <PageCard title="Account">
+          <div className="space-y-5">
+            {/* Username display */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted">Username</span>
+              <span className="text-sm font-medium text-foreground">{currentUser?.username ?? '—'}</span>
+            </div>
+
+            <Separator />
+
+            {/* Change password */}
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-foreground">Change Password</p>
+              <Input
+                type="password"
+                placeholder="Current password"
+                value={currentPw}
+                onChange={(e) => setCurrentPw(e.target.value)}
+                className="bg-background border-border"
+                autoComplete="current-password"
+              />
+              <Input
+                type="password"
+                placeholder="New password"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                className="bg-background border-border"
+                autoComplete="new-password"
+              />
+              <Input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                className="bg-background border-border"
+                autoComplete="new-password"
+              />
+              {pwError && <p className="text-sm text-destructive">{pwError}</p>}
+              {pwSuccess && <p className="text-sm text-success">Password changed successfully.</p>}
+              <Button
+                size="sm"
+                onClick={handleChangePassword}
+                disabled={pwLoading || !currentPw || !newPw || !confirmPw}
+              >
+                {pwLoading ? 'Saving…' : 'Change Password'}
+              </Button>
+            </div>
+
+            <Separator />
+
+            {/* Active sessions */}
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-foreground">Active Sessions</p>
+              {sessions && sessions.length > 0 ? (
+                <>
+                  <div className="space-y-1">
+                    {sessions.map((s) => (
+                      <div key={s.token} className="flex items-center justify-between py-1.5">
+                        <div className="min-w-0">
+                          <p className="text-sm text-foreground truncate">
+                            {s.user_agent ? parseUserAgent(s.user_agent) : 'Unknown device'}
+                          </p>
+                          <p className="text-xs text-muted">{relativeTime(s.last_used_at)}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive shrink-0"
+                          onClick={() => removeSession.mutate(s.token)}
+                          disabled={removeSession.isPending}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  {sessions.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted hover:text-foreground"
+                      onClick={() => logoutAllOthers.mutate()}
+                      disabled={logoutAllOthers.isPending}
+                    >
+                      Log out all other devices
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted">No active sessions</p>
+              )}
+            </div>
+          </div>
+        </PageCard>
+
+        {/* Connections */}
+        {activeConnectionStep ? (
+          <PageCard title="Connections">
+            {activeConnectionStep === 'telegram' && (
+              <TelegramStep onComplete={handleConnectionStepComplete} />
+            )}
+            {activeConnectionStep === 'gmail' && (
+              <GmailStep onComplete={handleConnectionStepComplete} />
+            )}
+            {activeConnectionStep === 'apple_wallet' && (
+              <AppleWalletStep onComplete={handleConnectionStepComplete} />
+            )}
+            <Button variant="ghost" size="sm" className="mt-2 text-muted" onClick={() => setActiveConnectionStep(null)}>
+              ← Back
+            </Button>
+          </PageCard>
+        ) : (
+          <PageCard title="Connections">
+            <div className="divide-y divide-border">
+              {/* Gmail */}
+              <div className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {currentUser?.gmail_connected ? (
+                    <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                  ) : (
+                    <WifiOff className="w-4 h-4 text-muted shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Gmail</p>
+                    <p className="text-xs text-muted">
+                      {currentUser?.gmail_connected ? 'Connected' : 'Not connected'}
+                    </p>
+                  </div>
+                </div>
+                {currentUser?.gmail_connected ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive shrink-0"
+                    onClick={handleDisconnectGmail}
+                    disabled={disconnectingGmail}
+                  >
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setActiveConnectionStep('gmail')}
+                  >
+                    Connect
+                  </Button>
+                )}
+              </div>
+
+              {/* Telegram */}
+              <div className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {currentUser?.telegram_chat_id ? (
+                    <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                  ) : (
+                    <WifiOff className="w-4 h-4 text-muted shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Telegram</p>
+                    <p className="text-xs text-muted">
+                      {currentUser?.telegram_chat_id ? 'Linked' : 'Not linked'}
+                    </p>
+                  </div>
+                </div>
+                {currentUser?.telegram_chat_id ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive shrink-0"
+                    onClick={handleDisconnectTelegram}
+                    disabled={disconnectingTelegram}
+                  >
+                    Unlink
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setActiveConnectionStep('telegram')}
+                  >
+                    Link Telegram
+                  </Button>
+                )}
+              </div>
+
+              {/* Apple Wallet */}
+              <div className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Wifi className="w-4 h-4 text-muted shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Apple Wallet</p>
+                    <p className="text-xs text-muted">Passive — via iOS Shortcut</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setActiveConnectionStep('apple_wallet')}
+                >
+                  Set up →
+                </Button>
+              </div>
+            </div>
+          </PageCard>
+        )}
+
+      </div>
+
+      {/* ── RIGHT PANEL: Categories + Preferences ── */}
+      <div className="area-right grid-scroll-panel space-y-4">
 
         {/* Categories */}
         <Card className="border-border">
           <div className="p-4 border-b border-border flex items-center justify-between">
             <h2 className="font-medium">Categories</h2>
-            <Button size="sm" variant="ghost" onClick={() => { setShowAddCategory(true); setError(''); }}>
+            <Button size="sm" variant="ghost" onClick={() => { setShowAddCategory(true); setCatError(''); }}>
               <Plus className="w-4 h-4 mr-1" />
               Add
             </Button>
@@ -237,10 +525,8 @@ export function SettingsPage() {
                   variants={staggerItemVariants}
                   exit={{ opacity: 0, transition: { duration: 0.15 } }}
                 >
-                {editingCategory === cat.name ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      {/* Icon picker */}
+                  {editingCategory === cat.name ? (
+                    <div className="space-y-3">
                       <div className="shrink-0">
                         <label className="text-xs text-muted block mb-1">Icon</label>
                         <div className="flex flex-wrap gap-1 max-w-[200px]">
@@ -256,144 +542,123 @@ export function SettingsPage() {
                           ))}
                         </div>
                       </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted">Keywords (comma-separated)</label>
-                      <Input
-                        value={editKeywords}
-                        onChange={(e) => setEditKeywords(e.target.value)}
-                        placeholder="keyword1, keyword2"
-                        className="bg-background border-border text-sm"
-                        autoFocus
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted">Color</label>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {PALETTE.map((c) => {
-                          const taken = usedColors.includes(c.toLowerCase()) && (cat.color?.toLowerCase() !== c.toLowerCase());
-                          return (
-                            <motion.button
-                              key={c}
-                              type="button"
-                              disabled={taken}
-                              title={taken ? 'Already in use' : c}
-                              className={`w-7 h-7 rounded-full border-2 transition-colors ${editColor === c ? 'border-white' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-                              style={{ backgroundColor: c }}
-                              onClick={() => setEditColor(c)}
-                              animate={{ scale: editColor === c ? 1.1 : 1 }}
-                              whileHover={taken ? {} : { scale: editColor === c ? 1.1 : 1.05 }}
-                              transition={springs.snappy}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {error && <p className="text-xs text-destructive">{error}</p>}
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => handleUpdateCategory(cat.name)} disabled={updateCat.isPending}>
-                        Save
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setEditingCategory(null); setError(''); }}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="inline-block w-3 h-3 rounded-full shrink-0"
-                          style={{ backgroundColor: cat.color || getCategoryColor(cat.name) }}
+                      <div>
+                        <label className="text-xs text-muted">Keywords (comma-separated)</label>
+                        <Input
+                          value={editKeywords}
+                          onChange={(e) => setEditKeywords(e.target.value)}
+                          placeholder="keyword1, keyword2"
+                          className="bg-background border-border text-sm"
+                          autoFocus
                         />
-                        <span className="text-lg">{cat.icon || '📌'}</span>
-                        <span className="text-sm font-medium">{cat.name}</span>
                       </div>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => startEdit(cat)}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => handleDeleteCategory(cat.name)}
-                          disabled={deleteCat.isPending}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                      <div>
+                        <label className="text-xs text-muted">Color</label>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {PALETTE.map((c) => {
+                            const taken = usedColors.includes(c.toLowerCase()) && (cat.color?.toLowerCase() !== c.toLowerCase());
+                            return (
+                              <motion.button
+                                key={c}
+                                type="button"
+                                disabled={taken}
+                                title={taken ? 'Already in use' : c}
+                                className={`w-7 h-7 rounded-full border-2 transition-colors ${editColor === c ? 'border-white' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
+                                style={{ backgroundColor: c }}
+                                onClick={() => setEditColor(c)}
+                                animate={{ scale: editColor === c ? 1.1 : 1 }}
+                                whileHover={taken ? {} : { scale: editColor === c ? 1.1 : 1.05 }}
+                                transition={springs.snappy}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {catError && <p className="text-xs text-destructive">{catError}</p>}
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => handleUpdateCategory(cat.name)} disabled={updateCat.isPending}>Save</Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setEditingCategory(null); setCatError(''); }}>Cancel</Button>
                       </div>
                     </div>
-                    {/* Type selector — immediate save */}
-                    <div className="flex items-center gap-2 mt-1.5 ml-7">
-                      <label className="text-xs text-muted">Type</label>
-                      <select
-                        value={cat.type ?? 'neutral'}
-                        onChange={async (e) => {
-                          await api.updateCategory(cat.name, {
-                            type: e.target.value as 'needs' | 'wants' | 'neutral',
-                          });
-                          qc.invalidateQueries({ queryKey: ['categories'] });
-                        }}
-                        className="select-field text-xs py-0.5 h-7"
-                      >
-                        {CAT_TYPES.map((t) => (
-                          <option key={t.value} value={t.value}>{t.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {cat.keywords?.trim() && (
-                      <div className="flex flex-wrap gap-1 mt-1.5 ml-7">
-                        {cat.keywords.split(',').map((kw) => (
-                          <Badge key={kw.trim()} variant="outline" className="text-xs border-border">
-                            {kw.trim()}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                    {/* Learned merchant overrides — count badge + expandable chips */}
-                    {(overridesByCategory.get(cat.name)?.length ?? 0) > 0 && (
-                      <div className="mt-1.5 ml-7">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedCategory(expandedCategory === cat.name ? null : cat.name)}
-                          className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border text-muted hover:text-foreground hover:border-foreground/50 transition-colors"
-                        >
-                          <span>{overridesByCategory.get(cat.name)!.length} learned</span>
-                          <ChevronDown
-                            className={`w-3 h-3 transition-transform ${expandedCategory === cat.name ? 'rotate-180' : ''}`}
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="inline-block w-3 h-3 rounded-full shrink-0"
+                            style={{ backgroundColor: cat.color || getCategoryColor(cat.name) }}
                           />
-                        </button>
-                        {expandedCategory === cat.name && (
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {overridesByCategory.get(cat.name)!.map((merchant) => (
-                              <span
-                                key={merchant}
-                                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border bg-card"
-                              >
-                                {merchant}
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteOverride(merchant)}
-                                  disabled={deleteOverride.isPending}
-                                  className="text-muted hover:text-destructive transition-colors"
-                                >
-                                  <X className="w-2.5 h-2.5" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                          <span className="text-lg">{cat.icon || '📌'}</span>
+                          <span className="text-sm font-medium">{cat.name}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(cat)}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                            onClick={() => handleDeleteCategory(cat.name)}
+                            disabled={deleteCat.isPending}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </div>
-                    )}
-                  </>
-                )}
+                      <div className="flex items-center gap-2 mt-1.5 ml-7">
+                        <label className="text-xs text-muted">Type</label>
+                        <select
+                          value={cat.type ?? 'neutral'}
+                          onChange={async (e) => {
+                            await api.updateCategory(cat.name, { type: e.target.value as 'needs' | 'wants' | 'neutral' });
+                            qc.invalidateQueries({ queryKey: ['categories'] });
+                          }}
+                          className="select-field text-xs py-0.5 h-7"
+                        >
+                          {CAT_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {cat.keywords?.trim() && (
+                        <div className="flex flex-wrap gap-1 mt-1.5 ml-7">
+                          {cat.keywords.split(',').map((kw) => (
+                            <Badge key={kw.trim()} variant="outline" className="text-xs border-border">
+                              {kw.trim()}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {(overridesByCategory.get(cat.name)?.length ?? 0) > 0 && (
+                        <div className="mt-1.5 ml-7">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedCategory(expandedCategory === cat.name ? null : cat.name)}
+                            className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border text-muted hover:text-foreground hover:border-foreground/50 transition-colors"
+                          >
+                            <span>{overridesByCategory.get(cat.name)!.length} learned</span>
+                            <ChevronDown className={`w-3 h-3 transition-transform ${expandedCategory === cat.name ? 'rotate-180' : ''}`} />
+                          </button>
+                          {expandedCategory === cat.name && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {overridesByCategory.get(cat.name)!.map((merchant) => (
+                                <span key={merchant} className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border bg-card">
+                                  {merchant}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteOverride(merchant)}
+                                    disabled={deleteOverride.isPending}
+                                    className="text-muted hover:text-destructive transition-colors"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -403,150 +668,28 @@ export function SettingsPage() {
           </motion.div>
         </Card>
 
-      </div>
-
-      {/* ── Right panel: feature toggles + alert thresholds ── */}
-      <div className="area-right grid-scroll-panel space-y-4">
-
-        {/* System Status */}
-        <PageCard title="System Status">
-          <div className="divide-y divide-border">
-            {/* Gmail */}
-            <div className="flex items-start gap-3 py-3">
-              {systemStatus?.gmail.authenticated === false || systemStatus?.gmail.last_auth_error ? (
-                <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-              ) : systemStatus?.gmail.authenticated ? (
-                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 shrink-0" />
-              ) : (
-                <div className="w-4 h-4 rounded-full border border-border mt-0.5 shrink-0" />
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Gmail</p>
-                {systemStatus?.gmail.last_auth_error ? (
-                  <>
-                    <p className="text-xs text-destructive">Auth failed — re-authenticate via Railway</p>
-                    <p className="text-xs text-muted mt-0.5 truncate">{systemStatus.gmail.last_auth_error}</p>
-                  </>
-                ) : systemStatus?.gmail.authenticated ? (
-                  <p className="text-xs text-muted">
-                    Connected{systemStatus.gmail.last_poll_at ? ` · Last polled ${systemStatus.gmail.last_poll_at.slice(0, 16).replace('T', ' ')}` : ''}
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted">Not configured</p>
-                )}
-              </div>
-            </div>
-            {/* Telegram Bot */}
-            <div className="flex items-start gap-3 py-3">
-              {systemStatus?.telegram.running === false ? (
-                <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-              ) : systemStatus?.telegram.running ? (
-                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 shrink-0" />
-              ) : (
-                <div className="w-4 h-4 rounded-full border border-border mt-0.5 shrink-0" />
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Telegram Bot</p>
-                {systemStatus?.telegram.running === false ? (
-                  <>
-                    <p className="text-xs text-destructive">Crashed — check Railway logs</p>
-                    {systemStatus.telegram.last_error && (
-                      <p className="text-xs text-muted mt-0.5 truncate">{systemStatus.telegram.last_error}</p>
-                    )}
-                  </>
-                ) : systemStatus?.telegram.running ? (
-                  <p className="text-xs text-muted">Running</p>
-                ) : (
-                  <p className="text-xs text-muted">Not configured</p>
-                )}
-              </div>
-            </div>
-            {/* Exchange Rates */}
-            <div className="flex items-start gap-3 py-3">
-              {systemStatus?.exchange.using_fallback ? (
-                <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
-              ) : systemStatus?.exchange.using_fallback === false ? (
-                <CheckCircle2 className="w-4 h-4 text-success mt-0.5 shrink-0" />
-              ) : (
-                <div className="w-4 h-4 rounded-full border border-border mt-0.5 shrink-0" />
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Exchange Rates</p>
-                {systemStatus?.exchange.using_fallback ? (
-                  <>
-                    <p className="text-xs text-warning">Using hardcoded fallback rates</p>
-                    {systemStatus.exchange.last_fetch_error && (
-                      <p className="text-xs text-muted mt-0.5 truncate">{systemStatus.exchange.last_fetch_error}</p>
-                    )}
-                  </>
-                ) : systemStatus?.exchange.using_fallback === false ? (
-                  <p className="text-xs text-muted">Live rates</p>
-                ) : (
-                  <p className="text-xs text-muted">Unknown</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </PageCard>
-
         {/* Feature Toggles */}
         <div id="feature-toggles">
           <PageCard title="Feature Toggles">
             <div className="divide-y divide-border">
-              <div className="flex items-center justify-between py-4">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Budgets</p>
-                  <p className="text-xs text-muted">Set spending limits and track progress</p>
+              {([
+                { key: 'budgets_enabled' as const, label: 'Budgets', desc: 'Set spending limits and track progress' },
+                { key: 'goals_enabled' as const, label: 'Goals', desc: 'Track savings targets and monthly progress' },
+                { key: 'trips_enabled' as const, label: 'Trips', desc: 'Group transactions by trip and track travel spend' },
+              ]).map(({ key, label, desc }) => (
+                <div key={key} className="flex items-center justify-between py-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{label}</p>
+                    <p className="text-xs text-muted">{desc}</p>
+                  </div>
+                  <button
+                    onClick={() => toggleSetting(key, !settings?.[key])}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${settings?.[key] ? 'bg-success' : 'bg-foreground/20'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings?.[key] ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => toggleBudgets(!settings?.budgets_enabled)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${
-                    settings?.budgets_enabled ? 'bg-success' : 'bg-foreground/20'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                      settings?.budgets_enabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-              <div className="flex items-center justify-between py-4">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Goals</p>
-                  <p className="text-xs text-muted">Track savings targets and monthly progress</p>
-                </div>
-                <button
-                  onClick={() => toggleGoals(!settings?.goals_enabled)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${
-                    settings?.goals_enabled ? 'bg-success' : 'bg-foreground/20'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                      settings?.goals_enabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-              <div className="flex items-center justify-between py-4">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Trips</p>
-                  <p className="text-xs text-muted">Group transactions by trip and track travel spend</p>
-                </div>
-                <button
-                  onClick={() => toggleTrips(!settings?.trips_enabled)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${
-                    settings?.trips_enabled ? 'bg-success' : 'bg-foreground/20'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                      settings?.trips_enabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
+              ))}
             </div>
           </PageCard>
         </div>
@@ -574,32 +717,15 @@ export function SettingsPage() {
                 className="input-field w-32"
               />
             </div>
-            <button
-              onClick={saveSettings}
-              className="btn-action"
-            >
-              Save
-            </button>
-            {error && <p className="text-sm text-destructive mt-1">{error}</p>}
+            <button onClick={saveSettings} className="btn-action">Save</button>
+            {settingsError && <p className="text-sm text-destructive mt-1">{settingsError}</p>}
           </div>
         </PageCard>
 
       </div>
 
-      {/* Add Category Dialog — Radix portal, layout-position-independent */}
-      <Dialog
-        open={showAddCategory}
-        onOpenChange={(open) => {
-          setShowAddCategory(open);
-          if (!open) {
-            setNewCatName('');
-            setNewCatKeywords('');
-            setNewCatIcon('📌');
-            setNewCatColor('');
-            setError('');
-          }
-        }}
-      >
+      {/* Add Category Dialog */}
+      <Dialog open={showAddCategory} onOpenChange={(open) => { setShowAddCategory(open); if (!open) { setNewCatName(''); setNewCatKeywords(''); setNewCatIcon('📌'); setNewCatColor(''); setCatError(''); } }}>
         <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle>Add Category</DialogTitle>
@@ -661,15 +787,11 @@ export function SettingsPage() {
                 })}
               </div>
             </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
+            {catError && <p className="text-xs text-destructive">{catError}</p>}
             <Separator />
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setShowAddCategory(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddCategory} disabled={!newCatName.trim() || createCat.isPending}>
-                Add
-              </Button>
+              <Button variant="ghost" onClick={() => setShowAddCategory(false)}>Cancel</Button>
+              <Button onClick={handleAddCategory} disabled={!newCatName.trim() || createCat.isPending}>Add</Button>
             </div>
           </div>
         </DialogContent>
