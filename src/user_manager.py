@@ -135,6 +135,7 @@ class UserManager:
         from src.storage import Storage
         from src.categorizer import Categorizer
         from src.gmail_poller import GmailPoller
+        from src.ingestion import IngestionPipeline
 
         conn = sqlite3.connect(db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
@@ -158,6 +159,11 @@ class UserManager:
             storage=storage,
             on_transaction=self._make_on_transaction(username, storage, categorizer),
             on_auth_error=self._make_on_auth_error(username),
+            pipeline=IngestionPipeline(
+                storage=storage,
+                categorizer=categorizer,
+                exchange_service=self._exchange_service,
+            ),
             poll_interval=poll_interval,
         )
         # Attach exchange_service and categorizer to context for webhook direct path
