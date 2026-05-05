@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
+import bcrypt
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 import csv
@@ -12,7 +13,6 @@ import io
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.config import local_now
-from src.storage import Storage
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
 from src.analytics import (
     load_summary,
@@ -35,34 +35,46 @@ SUMMARY_CACHE_DIR = os.environ.get(
 )
 
 
-def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=None, exchange_service=None) -> FastAPI:
+def create_dashboard_app(
+    user_manager,
+    admin_storage,
+    exchange_service=None,
+    host_base_url: str = "",
+) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
 
     @app.get("/oauth/callback")
     async def oauth_callback(request: Request):
-        if poller is None:
-            return Response(content="<h2>Gmail not configured.</h2>", media_type="text/html", status_code=404)
         code = request.query_params.get("code")
-        state = request.query_params.get("state")
-        if not code or not state:
+        username = request.query_params.get("state")
+        if not code or not username:
             return Response(content="<h2>Missing code or state.</h2>", media_type="text/html", status_code=400)
+        ctx = user_manager.get(username)
+        if not ctx:
+            return Response(content="<h2>Unknown user.</h2>", media_type="text/html", status_code=404)
         try:
-            poller.complete_reauth(code, state)
+            redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
+            ctx.poller.complete_reauth(code, username)
+            user_manager.start_poller(username)
+            admin_storage.update_user(username, gmail_connected=1)
             return Response(
-                content="<h2>Gmail re-authenticated successfully. You can close this tab.</h2>",
+                content="<h2>Gmail connected. You can close this tab.</h2>",
                 media_type="text/html",
             )
         except Exception as e:
-            logger.error(f"OAuth callback failed: {e}")
-            return Response(content=f"<h2>Re-authentication failed: {e}</h2>", media_type="text/html", status_code=400)
+            logger.error(f"OAuth callback failed for {username}: {e}")
+            return Response(content=f"<h2>Connection failed: {e}</h2>", media_type="text/html", status_code=400)
 
     @app.post("/api/login")
     async def login(request: Request):
         body = await request.json()
+        username = body.get("username", "")
         password = body.get("password", "")
-        if not verify_password(password, password_hash):
-            raise HTTPException(status_code=401, detail="Invalid password")
-        token = create_session()
+        user = admin_storage.get_user(username)
+        if not user or not verify_password(password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+        user_agent = request.headers.get("User-Agent", "")
+        token = create_session(username, user_agent)
         secure_cookies = os.environ.get("SECURE_COOKIES", "true") == "true"
         response = JSONResponse({"status": "ok"})
         response.set_cookie(
@@ -75,13 +87,21 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         )
         return response
 
-    async def require_auth(request: Request):
+    async def require_auth(request: Request) -> str:
         session = request.cookies.get("session")
-        if not session or not verify_session(session):
+        username = verify_session(session) if session else None
+        if not username:
             raise HTTPException(status_code=401, detail="Not authenticated")
+        return username
+
+    def _get_storage(username: str = Depends(require_auth)):
+        ctx = user_manager.get(username)
+        if not ctx:
+            raise HTTPException(status_code=500, detail="User context not found")
+        return ctx.storage
 
     @app.get("/api/ping")
-    async def ping(_auth=Depends(require_auth)):
+    async def ping(username: str = Depends(require_auth)):
         return {"status": "ok"}
 
     @app.post("/api/logout")
@@ -93,7 +113,9 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return {"status": "ok"}
 
     @app.get("/api/status")
-    async def get_status(_auth=Depends(require_auth)):
+    async def get_status(username: str = Depends(require_auth)):
+        ctx = user_manager.get(username)
+        poller = ctx.poller if ctx else None
         return {
             "gmail": {
                 "authenticated": poller.service is not None if poller else None,
@@ -101,8 +123,8 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
                 "last_poll_at": getattr(poller, "last_poll_at", None),
             },
             "telegram": {
-                "running": bot.is_running if bot else None,
-                "last_error": bot.last_error if bot else None,
+                "running": None,
+                "last_error": None,
             },
             "exchange": {
                 "using_fallback": exchange_service.using_fallback if exchange_service else None,
@@ -110,12 +132,137 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
             },
         }
 
+    # ── Current user ──────────────────────────────────────────────────────────
+
+    @app.get("/api/users/me")
+    async def get_current_user(username: str = Depends(require_auth)):
+        user = admin_storage.get_user(username)
+        return {
+            "username": user["username"],
+            "gmail_connected": bool(user["gmail_connected"]),
+            "telegram_chat_id": user["telegram_chat_id"],
+            "wants_gmail": bool(user["wants_gmail"]),
+            "wants_apple_wallet": bool(user["wants_apple_wallet"]),
+            "onboarding_complete": bool(user["onboarding_complete"]),
+        }
+
+    @app.put("/api/users/me/password")
+    async def change_password(request: Request, username: str = Depends(require_auth)):
+        body = await request.json()
+        current_password = body.get("current_password", "")
+        new_password = body.get("new_password", "")
+        if not new_password or len(new_password) < 8:
+            raise HTTPException(status_code=422, detail="new_password must be at least 8 characters")
+        user = admin_storage.get_user(username)
+        if not verify_password(current_password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+        new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        admin_storage.update_user(username, password_hash=new_hash)
+        return {"status": "ok"}
+
+    # ── Session management ────────────────────────────────────────────────────
+
+    @app.get("/api/sessions")
+    async def list_sessions(request: Request, username: str = Depends(require_auth)):
+        return admin_storage.list_sessions(username)
+
+    @app.delete("/api/sessions")
+    async def logout_all_other_sessions(request: Request, username: str = Depends(require_auth)):
+        current_token = request.cookies.get("session")
+        admin_storage.destroy_all_sessions(username, except_token=current_token)
+        return {"status": "ok"}
+
+    @app.delete("/api/sessions/{token}")
+    async def logout_session(token: str, username: str = Depends(require_auth)):
+        sessions = admin_storage.list_sessions(username)
+        if not any(s["token"] == token for s in sessions):
+            raise HTTPException(status_code=404, detail="Session not found")
+        admin_storage.destroy_session(token)
+        return {"status": "ok"}
+
+    # ── Onboarding ────────────────────────────────────────────────────────────
+
+    @app.put("/api/onboarding/preferences")
+    async def set_onboarding_preferences(request: Request, username: str = Depends(require_auth)):
+        body = await request.json()
+        admin_storage.update_user(
+            username,
+            wants_gmail=1 if body.get("wants_gmail", True) else 0,
+            wants_apple_wallet=1 if body.get("wants_apple_wallet", True) else 0,
+        )
+        return {"status": "ok"}
+
+    @app.get("/api/onboarding/gmail/connect-url")
+    async def gmail_connect_url(request: Request, username: str = Depends(require_auth)):
+        ctx = user_manager.get(username)
+        redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
+        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=username)
+        return {"url": url}
+
+    @app.post("/api/onboarding/telegram/link-token")
+    async def create_telegram_link_token(username: str = Depends(require_auth)):
+        token = admin_storage.create_telegram_link_token(username)
+        return {"token": token}
+
+    @app.get("/api/onboarding/webhook-url")
+    async def get_webhook_url(username: str = Depends(require_auth)):
+        url = f"{host_base_url.rstrip('/')}/webhook/apple-wallet/{username}"
+        return {"url": url}
+
+    @app.put("/api/onboarding/complete")
+    async def mark_onboarding_complete(username: str = Depends(require_auth)):
+        admin_storage.update_user(username, onboarding_complete=1)
+        return {"status": "ok"}
+
+    # ── Connection management ─────────────────────────────────────────────────
+
+    @app.delete("/api/connections/telegram")
+    async def disconnect_telegram(username: str = Depends(require_auth)):
+        admin_storage.update_user(username, telegram_chat_id=None)
+        return {"status": "ok"}
+
+    @app.delete("/api/connections/gmail")
+    async def disconnect_gmail(username: str = Depends(require_auth)):
+        import httpx
+        ctx = user_manager.get(username)
+        if ctx and ctx.poller and os.path.exists(ctx.poller.token_path):
+            try:
+                import json
+                with open(ctx.poller.token_path) as f:
+                    token_data = json.load(f)
+                access_token = token_data.get("token") or token_data.get("access_token")
+                if access_token:
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            "https://oauth2.googleapis.com/revoke",
+                            params={"token": access_token},
+                            timeout=5.0,
+                        )
+            except Exception as e:
+                logger.warning(f"OAuth revocation failed for {username}: {e}")
+            try:
+                os.remove(ctx.poller.token_path)
+            except Exception:
+                pass
+        if ctx and ctx.poller:
+            ctx.poller.stop()
+        admin_storage.update_user(username, gmail_connected=0)
+        return {"status": "ok"}
+
+    @app.get("/api/connections/gmail/connect-url")
+    async def gmail_reconnect_url(request: Request, username: str = Depends(require_auth)):
+        ctx = user_manager.get(username)
+        redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
+        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=username)
+        return {"url": url}
+
     @app.get("/api/summary")
     async def summary(
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        _auth=Depends(require_auth),
+        username: str = Depends(require_auth),
     ):
+        storage = user_manager.get(username).storage
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
@@ -127,11 +274,12 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         end_date: Optional[str] = None,
         category: Optional[str] = None,
         merchant_search: Optional[str] = None,
-        merchant: Optional[str] = None,  # alias used by frontend
+        merchant: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
-        _auth=Depends(require_auth),
+        username: str = Depends(require_auth),
     ):
+        storage = user_manager.get(username).storage
         return storage.query_transactions(
             start_date=start_date,
             end_date=end_date,
@@ -148,8 +296,9 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         category: Optional[str] = None,
         merchant_search: Optional[str] = None,
         merchant: Optional[str] = None,
-        _auth=Depends(require_auth),
+        username: str = Depends(require_auth),
     ):
+        storage = user_manager.get(username).storage
         rows = storage.query_transactions(
             start_date=start_date,
             end_date=end_date,
@@ -185,14 +334,16 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         )
 
     @app.get("/api/transactions/{tx_id}")
-    async def get_transaction(tx_id: int, _auth=Depends(require_auth)):
+    async def get_transaction(tx_id: int, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
         tx = storage.get_transaction(tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
         return tx
 
     @app.post("/api/transactions")
-    async def create_transaction(request: Request, _auth=Depends(require_auth)):
+    async def create_transaction(request: Request, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
         body = await request.json()
         amount = body.get("amount")
         if amount is None:
@@ -235,7 +386,8 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_transaction(tx_id)
 
     @app.put("/api/transactions/{tx_id}")
-    async def update_transaction(tx_id: int, request: Request, _auth=Depends(require_auth)):
+    async def update_transaction(tx_id: int, request: Request, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
         tx = storage.get_transaction(tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -255,7 +407,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_transaction(tx_id)
 
     @app.delete("/api/transactions/{tx_id}")
-    async def delete_transaction(tx_id: int, _auth=Depends(require_auth)):
+    async def delete_transaction(tx_id: int, storage=Depends(_get_storage)):
         tx = storage.get_transaction(tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -263,7 +415,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return {"status": "ok"}
 
     @app.get("/api/apple-wallet/cards")
-    async def apple_wallet_cards(_auth=Depends(require_auth)):
+    async def apple_wallet_cards(storage=Depends(_get_storage)):
         """Return distinct card names known from Apple Wallet transactions.
 
         Only returns descriptions that have a real card name — i.e. the format
@@ -273,11 +425,11 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_apple_wallet_cards()
 
     @app.get("/api/categories")
-    async def categories(_auth=Depends(require_auth)):
+    async def categories(storage=Depends(_get_storage)):
         return storage.get_categories()
 
     @app.post("/api/categories")
-    async def create_category(request: Request, _auth=Depends(require_auth)):
+    async def create_category(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         name = body.get("name", "").strip()
         keywords = body.get("keywords", "")
@@ -294,7 +446,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return {"status": "ok", "name": name}
 
     @app.put("/api/categories/{name}")
-    async def update_category(name: str, request: Request, _auth=Depends(require_auth)):
+    async def update_category(name: str, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         cat_type = body.get("type")
         try:
@@ -313,7 +465,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return {"status": "ok", "name": name}
 
     @app.delete("/api/categories/{name}")
-    async def delete_category(name: str, _auth=Depends(require_auth)):
+    async def delete_category(name: str, storage=Depends(_get_storage)):
         try:
             count = storage.delete_category(name)
         except ValueError as e:
@@ -321,12 +473,12 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return {"status": "ok", "reassigned": count}
 
     @app.get("/api/merchant-overrides")
-    async def merchant_overrides(_auth=Depends(require_auth)):
+    async def merchant_overrides(storage=Depends(_get_storage)):
         overrides = storage.get_merchant_overrides()
         return [{"merchant": m, "category": c} for m, c in overrides.items()]
 
     @app.delete("/api/merchant-overrides/{merchant}")
-    async def remove_merchant_override(merchant: str, _auth=Depends(require_auth)):
+    async def remove_merchant_override(merchant: str, storage=Depends(_get_storage)):
         storage.remove_merchant_override(merchant)
         return {"status": "ok"}
 
@@ -340,7 +492,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         search: Optional[str] = None,
         limit: int = 25,
         offset: int = 0,
-        _auth=Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
         return storage.get_merchant_list(
             sort_by=sort_by,
@@ -352,11 +504,11 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         )
 
     @app.get("/api/merchant-intelligence/{merchant}/trend")
-    async def merchant_trend(merchant: str, _auth=Depends(require_auth)):
+    async def merchant_trend(merchant: str, storage=Depends(_get_storage)):
         return storage.get_merchant_trend(merchant)
 
     @app.put("/api/merchant-intelligence/{merchant}/tags")
-    async def merchant_set_tags(merchant: str, request: Request, _auth=Depends(require_auth)):
+    async def merchant_set_tags(merchant: str, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         tags = body.get("tags", [])
         invalid = [t for t in tags if t not in VALID_TAGS]
@@ -366,34 +518,34 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_merchant_tags(merchant)
 
     @app.put("/api/merchant-intelligence/{merchant}/notes")
-    async def merchant_set_notes(merchant: str, request: Request, _auth=Depends(require_auth)):
+    async def merchant_set_notes(merchant: str, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         notes = body.get("notes", "")
         storage.set_merchant_notes(merchant, notes)
         return storage.get_merchant_tags(merchant)
 
     @app.get("/api/merchant-intelligence/{merchant}")
-    async def merchant_intelligence_profile(merchant: str, _auth=Depends(require_auth)):
+    async def merchant_intelligence_profile(merchant: str, storage=Depends(_get_storage)):
         profile = storage.get_merchant_profile(merchant)
         if not profile:
             raise HTTPException(status_code=404, detail="Merchant not found")
         return profile
 
     @app.get("/api/balance")
-    async def balance(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+    async def balance(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_balance(start, end)
 
     @app.get("/api/health-score")
-    async def health_score(months: int = 1, _auth=Depends(require_auth)):
+    async def health_score(months: int = 1, storage=Depends(_get_storage)):
         if months < 1 or months > 12:
             raise HTTPException(status_code=400, detail="months must be between 1 and 12")
         return storage.get_health_score(months=months)
 
     @app.get("/api/income-vs-expense")
-    async def income_vs_expense(months: int = 6, _auth=Depends(require_auth)):
+    async def income_vs_expense(months: int = 6, storage=Depends(_get_storage)):
         today = local_now()
         results = []
         for i in range(months):
@@ -412,28 +564,28 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return list(reversed(results))
 
     @app.get("/api/trend")
-    async def trend(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+    async def trend(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_trend(start, end)
 
     @app.get("/api/trend/by-category")
-    async def trend_by_category(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+    async def trend_by_category(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_trend_by_category(start, end)
 
     @app.get("/api/merchants")
-    async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+    async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return storage.get_merchants_in_range(start, end)
 
     @app.get("/api/insights")
-    async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, _auth=Depends(require_auth)):
+    async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
@@ -443,14 +595,14 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         }
 
     @app.get("/api/recurring")
-    async def recurring(_auth=Depends(require_auth)):
+    async def recurring(storage=Depends(_get_storage)):
         return storage.get_recurring_transactions()
 
     @app.get("/api/analytics/comparison")
     async def analytics_comparison(
         period: str = "month",
         date: Optional[str] = None,
-        _auth=Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
         return storage.comparison(period=period, date=date)
 
@@ -459,7 +611,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
     async def analytics_merchants(
         limit: int = 10,
         merchant: Optional[str] = None,
-        _auth=Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
         top = storage.top_merchants_by_period(limit=limit)
         trend = storage.merchant_trend_chart(merchant) if merchant else None
@@ -467,12 +619,12 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
 
 
     @app.get("/api/analytics/velocity")
-    async def analytics_velocity(_auth=Depends(require_auth)):
+    async def analytics_velocity(storage=Depends(_get_storage)):
         return storage.spending_velocity()
 
 
     @app.get("/api/analytics/alerts")
-    async def analytics_alerts(_auth=Depends(require_auth)):
+    async def analytics_alerts(storage=Depends(_get_storage)):
         return {
             "anomalies": storage.spending_anomalies(multiplier=float(storage.get_setting("anomaly_multiplier", "2.0"))),
             "new_merchants": storage.new_merchants(),
@@ -480,14 +632,14 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
 
 
     @app.get("/api/analytics/summaries")
-    async def analytics_summaries(_auth=Depends(require_auth)):
+    async def analytics_summaries(storage=Depends(_get_storage)):
         monthly = load_summary(SUMMARY_CACHE_DIR, "monthly")
         weekly = load_summary(SUMMARY_CACHE_DIR, "weekly")
         return {"monthly": monthly, "weekly": weekly}
 
 
     @app.get("/api/settings")
-    async def get_settings(_auth=Depends(require_auth)):
+    async def get_settings(storage=Depends(_get_storage)):
         return {
             "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
             "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
@@ -497,7 +649,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         }
 
     @app.put("/api/settings")
-    async def update_settings(request: Request, _auth=Depends(require_auth)):
+    async def update_settings(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         errors = {}
         validated = {}
@@ -568,11 +720,11 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
     # ── Budgets ──────────────────────────────────────────────────────────
 
     @app.get("/api/budgets")
-    async def list_budgets(_auth=Depends(require_auth)):
+    async def list_budgets(storage=Depends(_get_storage)):
         return storage.get_budgets()
 
     @app.post("/api/budgets")
-    async def create_budget(request: Request, _auth=Depends(require_auth)):
+    async def create_budget(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         amount = body.get("amount")
         period = body.get("period", "monthly")
@@ -593,11 +745,11 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return dict(row)
 
     @app.get("/api/budgets/progress")
-    async def budget_progress(_auth=Depends(require_auth)):
+    async def budget_progress(storage=Depends(_get_storage)):
         return storage.get_budget_progress()
 
     @app.put("/api/budgets/{budget_id}")
-    async def update_budget(budget_id: int, request: Request, _auth=Depends(require_auth)):
+    async def update_budget(budget_id: int, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         amount = body.get("amount")
         if amount is None:
@@ -614,7 +766,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return dict(row)
 
     @app.delete("/api/budgets/{budget_id}")
-    async def delete_budget(budget_id: int, _auth=Depends(require_auth)):
+    async def delete_budget(budget_id: int, storage=Depends(_get_storage)):
         try:
             storage.delete_budget(budget_id)
         except ValueError as e:
@@ -624,7 +776,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
     # ── Goals ──────────────────────────────────────────────────────────────
 
     @app.get("/api/goals")
-    async def list_goals(_auth=Depends(require_auth)):
+    async def list_goals(storage=Depends(_get_storage)):
         goals = storage.get_goals()
         results = []
         for g in goals:
@@ -633,7 +785,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return results
 
     @app.post("/api/goals")
-    async def create_goal(request: Request, _auth=Depends(require_auth)):
+    async def create_goal(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         name = body.get("name", "").strip()
         target_amount = body.get("target_amount")
@@ -652,7 +804,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_goal_progress(goal_id)
 
     @app.put("/api/goals/{goal_id}")
-    async def update_goal(goal_id: int, request: Request, _auth=Depends(require_auth)):
+    async def update_goal(goal_id: int, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         allowed = {"name", "target_amount", "target_date", "status"}
         fields = {k: v for k, v in body.items() if k in allowed}
@@ -665,7 +817,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_goal_progress(goal_id)
 
     @app.delete("/api/goals/{goal_id}")
-    async def delete_goal(goal_id: int, _auth=Depends(require_auth)):
+    async def delete_goal(goal_id: int, storage=Depends(_get_storage)):
         try:
             storage.delete_goal(goal_id)
         except ValueError as e:
@@ -673,7 +825,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return {"status": "ok"}
 
     @app.post("/api/goals/{goal_id}/contribute")
-    async def contribute_to_goal(goal_id: int, request: Request, _auth=Depends(require_auth)):
+    async def contribute_to_goal(goal_id: int, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         amount = body.get("amount")
         note = body.get("note")
@@ -698,13 +850,13 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_goal_progress(goal_id)
 
     @app.get("/api/goals/{goal_id}/contributions")
-    async def goal_contributions(goal_id: int, _auth=Depends(require_auth)):
+    async def goal_contributions(goal_id: int, storage=Depends(_get_storage)):
         if not storage.get_goal(goal_id):
             raise HTTPException(status_code=404, detail="Goal not found")
         return storage.get_contributions(goal_id)
 
     @app.put("/api/goals/{goal_id}/contributions/{contribution_id}")
-    async def update_contribution(goal_id: int, contribution_id: int, request: Request, _auth=Depends(require_auth)):
+    async def update_contribution(goal_id: int, contribution_id: int, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         allowed = {"amount", "note", "contributed_date"}
         fields = {k: v for k, v in body.items() if k in allowed}
@@ -720,7 +872,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_goal_progress(goal_id)
 
     @app.delete("/api/goals/{goal_id}/contributions/{contribution_id}")
-    async def delete_contribution(goal_id: int, contribution_id: int, _auth=Depends(require_auth)):
+    async def delete_contribution(goal_id: int, contribution_id: int, storage=Depends(_get_storage)):
         try:
             storage.delete_contribution(contribution_id)
         except ValueError as e:
@@ -728,28 +880,28 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_goal_progress(goal_id)
 
     @app.get("/api/savings/overview")
-    async def savings_overview(_auth=Depends(require_auth)):
+    async def savings_overview(storage=Depends(_get_storage)):
         month = local_now().strftime("%Y-%m")
         return storage.get_savings_overview(month)
 
     # ── Trips ───────────────────────────────────────────────────────────────
 
     @app.get("/api/trips")
-    async def list_trips(_auth=Depends(require_auth)):
+    async def list_trips(storage=Depends(_get_storage)):
         return storage.get_trips()
 
     # IMPORTANT: /api/trips/active must be registered before /api/trips/{trip_id}
     # routes. FastAPI resolves top-to-bottom; without this ordering, "active"
     # would be treated as a trip_id and fail int conversion with a 422.
     @app.get("/api/trips/active")
-    async def get_active_trip(_auth=Depends(require_auth)):
+    async def get_active_trip(storage=Depends(_get_storage)):
         active = storage.get_active_trip()
         if not active:
             raise HTTPException(status_code=404, detail="No active trip")
         return active
 
     @app.post("/api/trips")
-    async def create_trip(request: Request, _auth=Depends(require_auth)):
+    async def create_trip(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         name = body.get("name", "").strip()
         start_date = body.get("start_date", "").strip()
@@ -766,7 +918,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_trip(trip_id)
 
     @app.put("/api/trips/{trip_id}")
-    async def update_trip(trip_id: int, request: Request, _auth=Depends(require_auth)):
+    async def update_trip(trip_id: int, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         try:
             storage.update_trip(trip_id, **{k: v for k, v in body.items()})
@@ -775,7 +927,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_trip(trip_id)
 
     @app.post("/api/trips/{trip_id}/activate")
-    async def activate_trip(trip_id: int, _auth=Depends(require_auth)):
+    async def activate_trip(trip_id: int, storage=Depends(_get_storage)):
         try:
             storage.activate_trip(trip_id)
         except ValueError as e:
@@ -783,7 +935,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_trip(trip_id)
 
     @app.post("/api/trips/{trip_id}/deactivate")
-    async def deactivate_trip(trip_id: int, _auth=Depends(require_auth)):
+    async def deactivate_trip(trip_id: int, storage=Depends(_get_storage)):
         try:
             storage.deactivate_trip(trip_id)
         except ValueError as e:
@@ -791,7 +943,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return storage.get_trip(trip_id)
 
     @app.delete("/api/trips/{trip_id}")
-    async def delete_trip(trip_id: int, _auth=Depends(require_auth)):
+    async def delete_trip(trip_id: int, storage=Depends(_get_storage)):
         try:
             storage.delete_trip(trip_id)
         except ValueError as e:
@@ -799,7 +951,7 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return {"status": "ok"}
 
     @app.get("/api/trips/{trip_id}/summary")
-    async def trip_summary(trip_id: int, _auth=Depends(require_auth)):
+    async def trip_summary(trip_id: int, storage=Depends(_get_storage)):
         summary = storage.get_trip_summary(trip_id)
         if summary is None:
             raise HTTPException(status_code=404, detail="Trip not found")
@@ -810,14 +962,14 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         trip_id: int,
         limit: int = 50,
         offset: int = 0,
-        _auth=Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
         if not storage.get_trip(trip_id):
             raise HTTPException(status_code=404, detail="Trip not found")
         return storage.get_trip_transactions(trip_id, limit=limit, offset=offset)
 
     @app.post("/api/trips/{trip_id}/transactions")
-    async def enlist_transaction(trip_id: int, request: Request, _auth=Depends(require_auth)):
+    async def enlist_transaction(trip_id: int, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         tx_id = body.get("transaction_id")
         if tx_id is None:
@@ -828,14 +980,14 @@ def create_dashboard_app(storage: Storage, password_hash: str, poller=None, bot=
         return {"status": "ok"}
 
     @app.delete("/api/trips/{trip_id}/transactions/{tx_id}")
-    async def delist_transaction(trip_id: int, tx_id: int, _auth=Depends(require_auth)):
+    async def delist_transaction(trip_id: int, tx_id: int, storage=Depends(_get_storage)):
         if not storage.get_trip(trip_id):
             raise HTTPException(status_code=404, detail="Trip not found")
         storage.delist_transaction(trip_id, tx_id)
         return {"status": "ok"}
 
     @app.get("/api/trips/{trip_id}/transactions/{tx_id}/membership")
-    async def check_trip_membership(trip_id: int, tx_id: int, _auth=Depends(require_auth)):
+    async def check_trip_membership(trip_id: int, tx_id: int, storage=Depends(_get_storage)):
         return {"in_trip": storage.is_in_trip(trip_id, tx_id)}
 
     # Serve React SPA
