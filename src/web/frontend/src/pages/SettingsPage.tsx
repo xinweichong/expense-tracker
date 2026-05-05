@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,7 +24,7 @@ import {
 import { api, type Category } from '@/api/client';
 import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
-import { Pencil, Trash2, Plus, X, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, Plus, X, CheckCircle2, AlertCircle, AlertTriangle, ChevronDown } from 'lucide-react';
 
 const ICON_OPTIONS = [
   '🍜', '🚗', '🛒', '📄', '🎬', '📌', '💰', '🏥', '✈️', '🎓',
@@ -63,8 +63,17 @@ export function SettingsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }),
   });
 
+  const overridesByCategory = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const ov of overrides ?? []) {
+      map.set(ov.category, [...(map.get(ov.category) ?? []), ov.merchant]);
+    }
+    return map;
+  }, [overrides]);
+
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [newCatName, setNewCatName] = useState('');
   const [newCatKeywords, setNewCatKeywords] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('📌');
@@ -132,6 +141,7 @@ export function SettingsPage() {
 
   const startEdit = (cat: Category) => {
     setEditingCategory(cat.name);
+    setExpandedCategory(null);
     setEditKeywords(cat.keywords ?? '');
     setEditIcon(cat.icon ?? '📌');
     setEditColor(cat.color ?? '');
@@ -181,7 +191,9 @@ export function SettingsPage() {
 
   const handleDeleteCategory = (name: string) => {
     if (confirm(`Delete category "${name}"? Transactions will be moved to "Other".`)) {
-      deleteCat.mutate(name);
+      deleteCat.mutate(name, {
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }),
+      });
     }
   };
 
@@ -345,6 +357,41 @@ export function SettingsPage() {
                         ))}
                       </div>
                     )}
+                    {/* Learned merchant overrides — count badge + expandable chips */}
+                    {(overridesByCategory.get(cat.name)?.length ?? 0) > 0 && (
+                      <div className="mt-1.5 ml-7">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCategory(expandedCategory === cat.name ? null : cat.name)}
+                          className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border text-muted hover:text-foreground hover:border-foreground/50 transition-colors"
+                        >
+                          <span>{overridesByCategory.get(cat.name)!.length} learned</span>
+                          <ChevronDown
+                            className={`w-3 h-3 transition-transform ${expandedCategory === cat.name ? 'rotate-180' : ''}`}
+                          />
+                        </button>
+                        {expandedCategory === cat.name && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {overridesByCategory.get(cat.name)!.map((merchant) => (
+                              <span
+                                key={merchant}
+                                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border bg-card"
+                              >
+                                {merchant}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOverride(merchant)}
+                                  disabled={deleteOverride.isPending}
+                                  className="text-muted hover:text-destructive transition-colors"
+                                >
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
                 </motion.div>
@@ -354,38 +401,6 @@ export function SettingsPage() {
               <div className="p-6 text-center text-muted text-sm">No categories yet</div>
             )}
           </motion.div>
-        </Card>
-
-        {/* Merchant Overrides */}
-        <Card className="border-border">
-          <div className="p-4 border-b border-border">
-            <h2 className="font-medium">Learned Merchant Overrides</h2>
-            <p className="text-xs text-muted mt-0.5">These are merchant-to-category mappings learned from your recategorizations.</p>
-          </div>
-          <div className="divide-y divide-border">
-            {overrides?.map((ov) => (
-              <div key={ov.merchant} className="px-4 py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">{ov.merchant}</p>
-                  <p className="text-xs text-muted">→ {ov.category}</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive"
-                  onClick={() => handleDeleteOverride(ov.merchant)}
-                  disabled={deleteOverride.isPending}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ))}
-            {(!overrides || overrides.length === 0) && (
-              <div className="p-6 text-center text-muted text-sm">
-                No learned overrides yet
-              </div>
-            )}
-          </div>
         </Card>
 
       </div>
