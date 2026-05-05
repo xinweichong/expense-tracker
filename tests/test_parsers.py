@@ -276,6 +276,7 @@ class TestUobParser:
         result = self.parser.parse(body)
         assert result is not None
         assert result.amount == pytest.approx(1.00)
+        assert result.currency == "SGD"
         assert result.merchant == "7-ELEVEN-6 CLEMENTI RD"
         assert result.source == "uob_card"
         assert result.tx_type == "expense"
@@ -289,6 +290,21 @@ class TestUobParser:
         result = self.parser.parse(body)
         assert result is not None
         assert result.amount == pytest.approx(1234.56)
+        assert result.currency == "SGD"
+
+    def test_parse_card_purchase_foreign_currency(self):
+        body = (
+            "A transaction of EUR 150.20 was made with your UOB Card ending 5440 "
+            "on 05/05/26 at BKG*Hotel at Booking.c. If unauthorised, call 24/7 Fraud Hotline now"
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(150.20)
+        assert result.currency == "EUR"
+        assert result.merchant == "BKG*Hotel at Booking.c"
+        assert result.source == "uob_card"
+        assert result.tx_type == "expense"
+        assert result.transaction_date == "2026-05-05T00:00:00"
 
     # --- Pattern 2: Accumulated transit ---
 
