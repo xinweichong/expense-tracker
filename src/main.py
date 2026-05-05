@@ -379,6 +379,7 @@ def main():
         bot_token=bot_token,
         exchange_service=exchange_service,
         dashboard_url=dashboard_url,
+        oauth_redirect_uri=f"{dashboard_url.rstrip('/')}/oauth/callback",
         timezone=config.get("timezone", "Asia/Singapore"),
     )
 

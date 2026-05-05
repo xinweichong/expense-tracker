@@ -87,11 +87,17 @@ def create_dashboard_app(
         )
         return response
 
+    # Endpoints that a force_password_change user may still access.
+    _FORCE_PW_ALLOWED = {"/api/logout", "/api/users/me", "/api/users/me/change-password"}
+
     async def require_auth(request: Request) -> str:
         session = request.cookies.get("session")
         username = verify_session(session) if session else None
         if not username:
             raise HTTPException(status_code=401, detail="Not authenticated")
+        user = admin_storage.get_user(username)
+        if user and user["force_password_change"] and request.url.path not in _FORCE_PW_ALLOWED:
+            raise HTTPException(status_code=403, detail="Password change required")
         return username
 
     def _get_storage(username: str = Depends(require_auth)):
@@ -137,6 +143,8 @@ def create_dashboard_app(
     @app.get("/api/users/me")
     async def get_current_user(username: str = Depends(require_auth)):
         user = admin_storage.get_user(username)
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found")
         return {
             "username": user["username"],
             "gmail_connected": bool(user["gmail_connected"]),
@@ -196,6 +204,8 @@ def create_dashboard_app(
     @app.get("/api/onboarding/gmail/connect-url")
     async def gmail_connect_url(request: Request, username: str = Depends(require_auth)):
         ctx = user_manager.get(username)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="User context not ready — please try again")
         redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
         url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=username)
         return {"url": url}
@@ -253,6 +263,8 @@ def create_dashboard_app(
     @app.get("/api/connections/gmail/connect-url")
     async def gmail_reconnect_url(request: Request, username: str = Depends(require_auth)):
         ctx = user_manager.get(username)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="User context not ready — please try again")
         redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
         url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=username)
         return {"url": url}
@@ -679,29 +691,26 @@ def create_dashboard_app(
                 else:
                     validated["velocity_alert_threshold"] = str(val)
 
-        if errors:
-            raise HTTPException(status_code=422, detail=errors)
-
         if "budgets_enabled" in body:
             val = body["budgets_enabled"]
             if not isinstance(val, bool):
                 errors["budgets_enabled"] = "must be a boolean"
             else:
-                storage.set_setting("budgets_enabled", "true" if val else "false")
+                validated["budgets_enabled"] = "true" if val else "false"
 
         if "goals_enabled" in body:
             val = body["goals_enabled"]
             if not isinstance(val, bool):
                 errors["goals_enabled"] = "must be a boolean"
             else:
-                storage.set_setting("goals_enabled", "true" if val else "false")
+                validated["goals_enabled"] = "true" if val else "false"
 
         if "trips_enabled" in body:
             val = body["trips_enabled"]
             if not isinstance(val, bool):
                 errors["trips_enabled"] = "must be a boolean"
             else:
-                storage.set_setting("trips_enabled", "true" if val else "false")
+                validated["trips_enabled"] = "true" if val else "false"
 
         if errors:
             raise HTTPException(status_code=422, detail=errors)

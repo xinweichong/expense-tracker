@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/api/client';
@@ -25,6 +25,8 @@ export function WelcomeStep({
     try {
       await api.setOnboardingPreferences(wantsGmail, wantsAppleWallet);
       onComplete(wantsGmail, wantsAppleWallet);
+    } catch {
+      // setLoading(false) runs in finally; parent remains on this step
     } finally {
       setLoading(false);
     }
@@ -89,6 +91,13 @@ export function GmailStep({ onComplete, onSkip }: StepProps) {
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current !== null) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const handleConnect = async () => {
     setError(null);
@@ -97,11 +106,12 @@ export function GmailStep({ onComplete, onSkip }: StepProps) {
       const { url } = await api.getOnboardingGmailConnectUrl();
       window.open(url, '_blank');
       // Poll /api/users/me every 2s until gmail_connected = true
-      const interval = setInterval(async () => {
+      pollRef.current = setInterval(async () => {
         try {
           const user = await api.getCurrentUser();
           if (user.gmail_connected) {
-            clearInterval(interval);
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
             setConnected(true);
             setConnecting(false);
           }
@@ -109,7 +119,7 @@ export function GmailStep({ onComplete, onSkip }: StepProps) {
           // ignore transient errors
         }
       }, 2000);
-    } catch (e: any) {
+    } catch {
       setError('Failed to get connect URL. Please try again.');
       setConnecting(false);
     }
@@ -159,31 +169,35 @@ export function TelegramStep({ onComplete, onSkip }: StepProps) {
   const [linked, setLinked] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Generate token on mount and start polling
-  const initStep = async () => {
-    try {
-      const { token: t } = await api.createTelegramLinkToken();
-      setToken(t);
-      // Poll until telegram_chat_id is set
-      const interval = setInterval(async () => {
-        try {
-          const user = await api.getCurrentUser();
-          if (user.telegram_chat_id !== null) {
-            clearInterval(interval);
-            setLinked(true);
+  useEffect(() => {
+    const initStep = async () => {
+      try {
+        const { token: t } = await api.createTelegramLinkToken();
+        setToken(t);
+        // Poll until telegram_chat_id is set
+        pollRef.current = setInterval(async () => {
+          try {
+            const user = await api.getCurrentUser();
+            if (user.telegram_chat_id !== null) {
+              clearInterval(pollRef.current!);
+              pollRef.current = null;
+              setLinked(true);
+            }
+          } catch {
+            // ignore transient errors
           }
-        } catch {
-          // ignore transient errors
-        }
-      }, 2000);
-    } catch {
-      setError('Failed to generate link code. Please refresh the page.');
-    }
-  };
-
-  // Run once on mount
-  useState(() => { initStep(); });
+        }, 2000);
+      } catch {
+        setError('Failed to generate link code. Please refresh the page.');
+      }
+    };
+    initStep();
+    return () => {
+      if (pollRef.current !== null) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const handleCopy = () => {
     if (!token) return;
@@ -252,9 +266,9 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
-  useState(() => {
+  useEffect(() => {
     api.getWebhookUrl().then(({ url }) => setWebhookUrl(url)).catch(() => {});
-  });
+  }, []);
 
   const handleCopyUrl = () => {
     if (!webhookUrl) return;

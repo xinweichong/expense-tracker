@@ -1510,7 +1510,7 @@ class AdminStorage:
         if not row:
             return None
         last_used = datetime.fromisoformat(row["last_used_at"])
-        if datetime.utcnow() - last_used > timedelta(days=30):
+        if datetime.now(timezone.utc).replace(tzinfo=None) - last_used > timedelta(days=30):
             self._conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
             self._conn.commit()
             return None
@@ -1566,7 +1566,7 @@ class AdminStorage:
         if not row:
             return False
         last_used = datetime.fromisoformat(row["last_used_at"])
-        if datetime.utcnow() - last_used > timedelta(hours=2):
+        if datetime.now(timezone.utc).replace(tzinfo=None) - last_used > timedelta(hours=2):
             self._conn.execute(
                 "DELETE FROM admin_sessions WHERE token = ?", (token,)
             )
@@ -1594,7 +1594,7 @@ class AdminStorage:
         )
         suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
         token = f"CASHE-{suffix}"
-        expires_at = (datetime.utcnow() + timedelta(hours=24)).strftime(
+        expires_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=24)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
         self._conn.execute(
@@ -1616,7 +1616,7 @@ class AdminStorage:
         ).fetchone()
         if not row:
             return None
-        if datetime.utcnow() > datetime.fromisoformat(row["expires_at"]):
+        if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.fromisoformat(row["expires_at"]):
             self._conn.execute(
                 "DELETE FROM telegram_link_tokens WHERE token = ?", (token,)
             )
