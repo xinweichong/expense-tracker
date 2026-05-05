@@ -3,6 +3,7 @@ import html
 import logging
 import os
 import re
+import threading
 import time
 from typing import Callable, Optional
 
@@ -35,6 +36,7 @@ class GmailPoller:
         on_transaction: Optional[Callable[[dict], None]] = None,
         on_auth_error: Optional[Callable[[str], None]] = None,
         pipeline=None,
+        poll_interval: int = 120,
     ):
         self.credentials_path = credentials_path
         self.token_path = token_path
@@ -44,9 +46,12 @@ class GmailPoller:
         self.on_transaction = on_transaction
         self.on_auth_error = on_auth_error
         self.pipeline = pipeline
+        self._poll_interval = poll_interval
         self.service = None
         self._pending_flow = None
         self._pending_state = None
+        self._stop_event: Optional[threading.Event] = None
+        self._thread: Optional[threading.Thread] = None
         # Error state — read by /api/status
         self.last_auth_error: Optional[str] = None
         self.last_poll_at: Optional[str] = None
@@ -220,16 +225,45 @@ class GmailPoller:
             except Exception as e:
                 logger.error(f"Failed to store transaction: {e}")
         return count
-        """Generate an OAuth authorization URL. Stores the flow for complete_reauth()."""
+
+    def get_auth_url(self, redirect_uri: str, state: str) -> str:
+        """Generate Google OAuth URL. `state` is the username — passed through to
+        the /oauth/callback so we know which user completed OAuth.
+        Stores self._pending_flow so complete_reauth() can exchange the code.
+        """
         flow = Flow.from_client_secrets_file(
             self.credentials_path,
             scopes=SCOPES,
             redirect_uri=redirect_uri,
         )
-        auth_url, state = flow.authorization_url(access_type="offline", prompt="consent")
+        url, _ = flow.authorization_url(
+            access_type="offline",
+            prompt="consent",
+            state=state,
+        )
         self._pending_flow = flow
         self._pending_state = state
-        return auth_url
+        return url
+
+    def start(self) -> None:
+        """Start the poll_loop in a background daemon thread.
+        Called by UserManager.start_poller() after Gmail OAuth completes.
+        """
+        self._stop_event = threading.Event()
+        t = threading.Thread(
+            target=self.poll_loop,
+            args=(self._poll_interval,),
+            daemon=True,
+        )
+        t.start()
+        self._thread = t
+
+    def stop(self) -> None:
+        """Signal the poll_loop to exit.
+        Best-effort — if poll_loop is blocked in time.sleep(), it will exit on wake.
+        """
+        if self._stop_event:
+            self._stop_event.set()
 
     def complete_reauth(self, code: str, state: str) -> None:
         """Exchange authorization code for tokens, save, and reinitialize the service."""
@@ -247,12 +281,15 @@ class GmailPoller:
         logger.info("Gmail re-authenticated via OAuth callback")
 
     def poll_loop(self, interval_seconds: int = 120) -> None:
+        self._poll_interval = interval_seconds
         try:
             self.authenticate()
         except Exception as e:
             logger.error(f"Gmail initial authentication failed: {e}")
             self.last_auth_error = str(e)
-        while True:
+
+        stop = getattr(self, "_stop_event", None)
+        while not (stop and stop.is_set()):
             try:
                 results = self.poll_once()
                 self.last_poll_at = _now_iso()
@@ -274,4 +311,9 @@ class GmailPoller:
                     if any(kw in str(e).lower() for kw in _AUTH_KEYWORDS):
                         self._auth_error_notified = True
                         self.on_auth_error(str(e))
-            time.sleep(interval_seconds)
+            if stop:
+                stop.wait(timeout=interval_seconds)
+                if stop.is_set():
+                    break
+            else:
+                time.sleep(interval_seconds)
