@@ -244,7 +244,7 @@ export function TelegramStep({ onComplete, onSkip }: StepProps) {
 
 // ── Apple Wallet Step ─────────────────────────────────────────────────────────
 
-const CASHE_SHORTCUT_URL = 'https://www.icloud.com/shortcuts/placeholder';
+const CASHE_SHORTCUT_URL = 'https://www.icloud.com/shortcuts/86350d8fe79c4c1d861eceea80608903';
 // Admin: after publishing the updated Shortcut with the Import Question,
 // paste the new iCloud link here and rebuild/deploy.
 
