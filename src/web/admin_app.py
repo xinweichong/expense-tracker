@@ -48,7 +48,7 @@ def create_admin_app(
             _login_attempts[ip] = (attempts, None)
 
     def require_admin_session(request: Request) -> None:
-        token = request.cookies.get("admin_session")
+        token = request.headers.get("X-Admin-Token")
         if not token or not admin_storage.verify_admin_session(token):
             raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -69,23 +69,14 @@ def create_admin_app(
             raise HTTPException(status_code=401, detail="Incorrect password")
         _login_attempts.pop(ip, None)
         token = admin_storage.create_admin_session()
-        secure_cookies = os.environ.get("SECURE_COOKIES", "true") == "true"
-        response = JSONResponse({"status": "ok"})
-        response.set_cookie(
-            "admin_session", token,
-            httponly=True, samesite="lax", secure=secure_cookies,
-            max_age=7200,
-        )
-        return response
+        return JSONResponse({"status": "ok", "token": token})
 
     @app.post("/api/logout")
     async def admin_logout(request: Request):
-        token = request.cookies.get("admin_session")
+        token = request.headers.get("X-Admin-Token")
         if token:
             admin_storage.destroy_admin_session(token)
-        response = JSONResponse({"status": "ok"})
-        response.delete_cookie("admin_session", httponly=True, samesite="lax")
-        return response
+        return JSONResponse({"status": "ok"})
 
     # ── User management ───────────────────────────────────────────────────────
 

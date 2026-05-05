@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,10 +15,14 @@ import { CasheLogo } from '@/components/ui/CasheLogo';
 
 const ADMIN_BASE = '/admin/api';
 
-async function adminRequest<T>(path: string, opts?: RequestInit): Promise<T> {
+async function adminRequest<T>(path: string, opts?: RequestInit, token?: string): Promise<T> {
   const res = await fetch(`${ADMIN_BASE}${path}`, {
     ...opts,
-    headers: { 'Content-Type': 'application/json', ...opts?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'X-Admin-Token': token } : {}),
+      ...opts?.headers,
+    },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -28,12 +31,9 @@ async function adminRequest<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
-const adminApi = {
-  login: (password: string) =>
-    adminRequest<{ status: string }>('/login', { method: 'POST', body: JSON.stringify({ password }) }),
-
+const makeAdminApi = (token: string) => ({
   logout: () =>
-    adminRequest<{ status: string }>('/logout', { method: 'POST' }),
+    adminRequest<{ status: string }>('/logout', { method: 'POST' }, token),
 
   listUsers: () =>
     adminRequest<Array<{
@@ -42,22 +42,26 @@ const adminApi = {
       telegram_linked: boolean;
       onboarding_complete: boolean;
       created_at: string;
-    }>>('/users'),
+    }>>('/users', undefined, token),
 
   createUser: (username: string) =>
     adminRequest<{ status: string; username: string; password: string; reminder: string }>(
-      '/users', { method: 'POST', body: JSON.stringify({ username }) }
+      '/users', { method: 'POST', body: JSON.stringify({ username }) }, token
     ),
 
   deleteUser: (username: string) =>
-    adminRequest<{ status: string }>(`/users/${username}`, { method: 'DELETE' }),
+    adminRequest<{ status: string }>(`/users/${username}`, { method: 'DELETE' }, token),
 
   resetPassword: (username: string, new_password: string) =>
     adminRequest<{ status: string }>(`/users/${username}/reset-password`, {
       method: 'POST',
       body: JSON.stringify({ new_password }),
-    }),
-};
+    }, token),
+});
+
+// Login is unauthenticated — no token needed
+const adminLogin = (password: string) =>
+  adminRequest<{ status: string; token: string }>('/login', { method: 'POST', body: JSON.stringify({ password }) });
 
 // ── Password generator ────────────────────────────────────────────────────────
 
@@ -74,7 +78,7 @@ function relDate(iso: string): string {
 
 // ── Admin Login ───────────────────────────────────────────────────────────────
 
-function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
+function AdminLogin({ onSuccess }: { onSuccess: (token: string) => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -84,8 +88,8 @@ function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
     setLoading(true);
     setError('');
     try {
-      await adminApi.login(password);
-      onSuccess();
+      const { token } = await adminLogin(password);
+      onSuccess(token);
     } catch (err: any) {
       setError(err.message ?? 'Incorrect password');
       setPassword('');
@@ -132,7 +136,8 @@ type User = {
   created_at: string;
 };
 
-function AdminDashboard({ onLogout }: { onLogout: () => void }) {
+function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => void }) {
+  const adminApi = makeAdminApi(token);
   const [users, setUsers] = useState<User[]>([]);
   const [loadError, setLoadError] = useState('');
 
@@ -407,41 +412,20 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 // ── AdminPage: router ─────────────────────────────────────────────────────────
 
 export function AdminPage() {
-  const navigate = useNavigate();
-  const [authed, setAuthed] = useState<boolean | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
-  // Check if there's an active admin session by attempting to list users
-  useEffect(() => {
-    adminApi.listUsers()
-      .then(() => setAuthed(true))
-      .catch(() => setAuthed(false));
-  }, []);
-
-  if (authed === null) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted text-sm">Loading…</div>
-      </div>
-    );
-  }
-
-  if (!authed) {
+  if (!token) {
     return (
       <AdminLogin
-        onSuccess={() => {
-          setAuthed(true);
-          navigate('/admin/dashboard');
-        }}
+        onSuccess={(t) => setToken(t)}
       />
     );
   }
 
   return (
     <AdminDashboard
-      onLogout={() => {
-        setAuthed(false);
-        navigate('/admin');
-      }}
+      token={token}
+      onLogout={() => setToken(null)}
     />
   );
 }

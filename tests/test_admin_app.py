@@ -93,7 +93,8 @@ async def test_admin_login_success(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
     assert resp.status_code == 200
-    assert "admin_session" in resp.cookies
+    assert "token" in resp.json()
+    assert "admin_session" not in resp.cookies
 
 
 @pytest.mark.asyncio
@@ -101,7 +102,7 @@ async def test_admin_login_wrong_password(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post("/api/login", json={"password": "wrong"})
     assert resp.status_code == 401
-    assert "admin_session" not in resp.cookies
+    assert "token" not in resp.json()
 
 
 @pytest.mark.asyncio
@@ -128,9 +129,8 @@ async def test_admin_list_users_requires_auth(app):
 async def test_admin_create_user(app, admin_db, user_manager):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         login = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
-        session_cookie = login.cookies.get("admin_session")
-        client.cookies.set("admin_session", session_cookie)
-        resp = await client.post("/api/users", json={"username": "alice"})
+        token = login.json()["token"]
+        resp = await client.post("/api/users", json={"username": "alice"}, headers={"X-Admin-Token": token})
     assert resp.status_code == 200
     data = resp.json()
     assert data["username"] == "alice"
@@ -151,8 +151,8 @@ async def test_admin_create_user_duplicate(app, admin_db):
     storage.create_user("alice", "hash")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         login = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
-        client.cookies.set("admin_session", login.cookies.get("admin_session"))
-        resp = await client.post("/api/users", json={"username": "alice", "password": "pass1234"})
+        token = login.json()["token"]
+        resp = await client.post("/api/users", json={"username": "alice", "password": "pass1234"}, headers={"X-Admin-Token": token})
     assert resp.status_code == 409
 
 
@@ -162,8 +162,8 @@ async def test_admin_delete_user(app, admin_db, user_manager):
     storage.create_user("alice", "hash")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         login = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
-        client.cookies.set("admin_session", login.cookies.get("admin_session"))
-        resp = await client.delete("/api/users/alice")
+        token = login.json()["token"]
+        resp = await client.delete("/api/users/alice", headers={"X-Admin-Token": token})
     assert resp.status_code == 200
     assert "alice" in user_manager.deleted
     assert storage.get_user("alice") is None
@@ -176,10 +176,11 @@ async def test_admin_reset_password(app, admin_db):
     old_session = storage.create_session("alice")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         login = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
-        client.cookies.set("admin_session", login.cookies.get("admin_session"))
+        token = login.json()["token"]
         resp = await client.post(
             "/api/users/alice/reset-password",
             json={"new_password": "newpass12"},
+            headers={"X-Admin-Token": token},
         )
     assert resp.status_code == 200
     user = storage.get_user("alice")
@@ -201,6 +202,5 @@ async def test_admin_session_expires(app, admin_db):
     )
     admin_db.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        client.cookies.set("admin_session", token)
-        resp = await client.get("/api/users")
+        resp = await client.get("/api/users", headers={"X-Admin-Token": token})
     assert resp.status_code == 401
