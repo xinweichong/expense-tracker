@@ -137,6 +137,36 @@ class TelegramBotService:
         if self.storage is not None:
             self.storage.set_telegram_chat_id(chat_id)
 
+    def _get_chat_id(self, update) -> Optional[int]:
+        """Extract chat_id from a real Update or the SimpleNamespace proxy used by _cmd_callback."""
+        if hasattr(update, "effective_chat") and update.effective_chat:
+            return update.effective_chat.id
+        if hasattr(update, "message") and update.message and hasattr(update.message, "chat_id"):
+            return update.message.chat_id
+        return None
+
+    async def _require_ctx(self, update):
+        """Resolve UserContext for the calling chat.
+        Multi-user mode: looks up via user_manager.get_by_chat_id().
+        Legacy single-user mode (admin_storage is None): returns self so
+          callers can use ctx.storage / ctx.categorizer transparently.
+        Returns None (and sends an error reply) if the chat is not linked.
+        """
+        if self.admin_storage is None:
+            # Legacy path — self.storage and self.categorizer are set directly
+            return self
+        chat_id = self._get_chat_id(update)
+        ctx = self.user_manager.get_by_chat_id(chat_id) if (chat_id and self.user_manager) else None
+        if ctx is None:
+            try:
+                await update.message.reply_text(
+                    "Send `/start <code>` from the Cashe onboarding page to link your account.",
+                    parse_mode="Markdown",
+                )
+            except Exception:
+                pass
+        return ctx
+
     def _local_now(self) -> datetime:
         """Return current datetime in the configured local timezone."""
         return local_now(self.timezone)
@@ -251,15 +281,16 @@ class TelegramBotService:
             markup = reply_markup if i == len(parts) - 1 else None
             await _send(part, markup)
 
-    def _build_summary_with_transactions(self, header: str, summary: dict, start_date: str, end_date: str) -> str:
-        icon_map = self.storage.get_category_icon_map()
+    def _build_summary_with_transactions(self, header: str, summary: dict, start_date: str, end_date: str, storage=None) -> str:
+        _storage = storage if storage is not None else self.storage
+        icon_map = _storage.get_category_icon_map()
         lines = [header, f"Total: `${summary['total']:.2f}`", ""]
         for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
             icon = icon_map.get(cat, "")
             prefix = f"{icon} " if icon else ""
             lines.append(f"{prefix}{self._escape_md(cat)}: `${total:.2f}`")
 
-        transactions = self.storage.query_transactions(start_date=start_date, end_date=end_date, limit=200)
+        transactions = _storage.query_transactions(start_date=start_date, end_date=end_date, limit=200)
         if transactions:
             lines.append("")
             lines.append("*Transactions:*")
@@ -269,31 +300,36 @@ class TelegramBotService:
 
         return "\n".join(lines)
 
-    def format_daily_summary(self, date: str) -> str:
-        summary = self.storage.get_spending_summary(start_date=date, end_date=date)
+    def format_daily_summary(self, date: str, storage=None) -> str:
+        _storage = storage if storage is not None else self.storage
+        summary = _storage.get_spending_summary(start_date=date, end_date=date)
         if summary["total"] == 0:
             return f"No transactions on {date}"
 
         return self._build_summary_with_transactions(
-            f"*Spending for {date}*", summary, date, date
+            f"*Spending for {date}*", summary, date, date, storage=_storage
         )
 
-    def format_weekly_summary(self, start_date: str, end_date: str) -> str:
-        summary = self.storage.get_spending_summary(start_date=start_date, end_date=end_date)
+    def format_weekly_summary(self, start_date: str, end_date: str, storage=None) -> str:
+        _storage = storage if storage is not None else self.storage
+        summary = _storage.get_spending_summary(start_date=start_date, end_date=end_date)
         if summary["total"] == 0:
             return "No transactions in this period"
 
         return self._build_summary_with_transactions(
-            f"*Weekly Summary ({start_date} to {end_date})*", summary, start_date, end_date
+            f"*Weekly Summary ({start_date} to {end_date})*", summary, start_date, end_date, storage=_storage
         )
 
     async def _delete_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         args = context.args
         if not args or not args[0].isdigit():
             await update.message.reply_text("Usage: /delete <id>")
             return
         tx_id = int(args[0])
-        tx = self.storage.get_transaction(tx_id)
+        tx = ctx.storage.get_transaction(tx_id)
         if not tx:
             await update.message.reply_text("Transaction not found.")
             return
@@ -321,19 +357,26 @@ class TelegramBotService:
             return
         if data.startswith("confirm_delete_"):
             tx_id = int(data.split("_")[-1])
+            ctx = await self._require_ctx(update)
+            if ctx is None:
+                await query.edit_message_text("Account not linked.")
+                return
             try:
-                self.storage.delete_transaction(tx_id)
+                ctx.storage.delete_transaction(tx_id)
                 await query.edit_message_text(f"Transaction #{tx_id} deleted.")
             except ValueError:
                 await query.edit_message_text("Transaction not found (may have already been deleted).")
 
     async def _edit_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return ConversationHandler.END
         args = context.args
         if not args or not args[0].isdigit():
             await update.message.reply_text("Usage: /edit <id>")
             return ConversationHandler.END
         tx_id = int(args[0])
-        tx = self.storage.get_transaction(tx_id)
+        tx = ctx.storage.get_transaction(tx_id)
         if not tx:
             await update.message.reply_text("Transaction not found.")
             return ConversationHandler.END
@@ -378,7 +421,12 @@ class TelegramBotService:
         context.user_data["edit_field"] = field_name
 
         if field_name == "category":
-            cats = self.storage.get_categories()
+            edit_ctx = await self._require_ctx(update)
+            if edit_ctx is None:
+                await query.edit_message_text("Account not linked.")
+                context.user_data.clear()
+                return ConversationHandler.END
+            cats = edit_ctx.storage.get_categories()
             buttons = []
             row = []
             for i, cat in enumerate(cats):
@@ -414,15 +462,20 @@ class TelegramBotService:
 
         category = query.data[3:]  # strip "ec_"
         tx_id = context.user_data.get("edit_tx_id")
-        tx = self.storage.get_transaction(tx_id)
+        edit_ctx = await self._require_ctx(update)
+        if edit_ctx is None:
+            await query.edit_message_text("Account not linked.")
+            context.user_data.clear()
+            return ConversationHandler.END
+        tx = edit_ctx.storage.get_transaction(tx_id)
         if not tx:
             await query.edit_message_text("Transaction no longer exists.")
             context.user_data.clear()
             return ConversationHandler.END
 
-        self.storage.update_transaction(tx_id, category=category)
-        if tx.get("merchant") and self.categorizer:
-            self.categorizer.learn_merchant(tx["merchant"], category, self.storage)
+        edit_ctx.storage.update_transaction(tx_id, category=category)
+        if tx.get("merchant") and edit_ctx.categorizer:
+            edit_ctx.categorizer.learn_merchant(tx["merchant"], category, edit_ctx.storage)
 
         await query.edit_message_text(f"Category updated to *{category}*.", parse_mode="Markdown")
         context.user_data.clear()
@@ -433,7 +486,13 @@ class TelegramBotService:
         field = context.user_data.get("edit_field")
         text = update.message.text.strip()
 
-        tx = self.storage.get_transaction(tx_id)
+        edit_ctx = await self._require_ctx(update)
+        if edit_ctx is None:
+            await update.message.reply_text("Account not linked.")
+            context.user_data.clear()
+            return ConversationHandler.END
+
+        tx = edit_ctx.storage.get_transaction(tx_id)
         if not tx:
             await update.message.reply_text("Transaction no longer exists.")
             context.user_data.clear()
@@ -445,7 +504,7 @@ class TelegramBotService:
             except ValueError:
                 await update.message.reply_text("Invalid amount. Enter a number like 12.50:")
                 return EDIT_ENTER_VALUE
-            self.storage.update_transaction(tx_id, amount=value)
+            edit_ctx.storage.update_transaction(tx_id, amount=value)
             await update.message.reply_text(f"Amount updated to {value:.2f}.")
 
         elif field == "date":
@@ -467,16 +526,16 @@ class TelegramBotService:
             if iso is None:
                 await update.message.reply_text("Invalid date. Use YYYY-MM-DD or DD/MM/YYYY:")
                 return EDIT_ENTER_VALUE
-            self.storage.update_transaction(tx_id, transaction_date=f"{iso}T00:00:00")
+            edit_ctx.storage.update_transaction(tx_id, transaction_date=f"{iso}T00:00:00")
             await update.message.reply_text(f"Date updated to {iso}.")
 
         elif field == "description":
             value = None if text.lower() == "clear" else text
-            self.storage.update_transaction(tx_id, description=value)
+            edit_ctx.storage.update_transaction(tx_id, description=value)
             await update.message.reply_text("Description updated." if value else "Description cleared.")
 
         elif field == "merchant":
-            self.storage.update_transaction(tx_id, merchant=text)
+            edit_ctx.storage.update_transaction(tx_id, merchant=text)
             await update.message.reply_text(f"Merchant updated to *{text}*.", parse_mode="Markdown")
 
         context.user_data.clear()
@@ -608,8 +667,11 @@ class TelegramBotService:
         )
 
     async def _today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         today = self._local_now().strftime("%Y-%m-%d")
-        text = self.format_daily_summary(today)
+        text = self.format_daily_summary(today, storage=ctx.storage)
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("📅 Yesterday", callback_data="cmd_yesterday"),
@@ -622,31 +684,43 @@ class TelegramBotService:
         await self._send_long_message(update, text, reply_markup=keyboard)
 
     async def _yesterday(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         yesterday = (self._local_now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        text = self.format_daily_summary(yesterday)
+        text = self.format_daily_summary(yesterday, storage=ctx.storage)
         await self._send_long_message(update, text)
 
     async def _week(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         today = self._local_now()
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = today.strftime("%Y-%m-%d")
-        text = self.format_weekly_summary(start, end)
+        text = self.format_weekly_summary(start, end, storage=ctx.storage)
         await self._send_long_message(update, text)
 
     async def _month(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         today = self._local_now()
         start = f"{today.year}-{today.month:02d}-01"
         end = today.strftime("%Y-%m-%d")
-        summary = self.storage.get_spending_summary(start_date=start, end_date=end)
+        summary = ctx.storage.get_spending_summary(start_date=start, end_date=end)
         if summary["total"] == 0:
             await update.message.reply_text("No transactions this month")
             return
         text = self._build_summary_with_transactions(
-            f"*Monthly Summary ({start} to {end})*", summary, start, end
+            f"*Monthly Summary ({start} to {end})*", summary, start, end, storage=ctx.storage
         )
         await self._send_long_message(update, text)
 
     async def _add(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         if not context.args:
             await update.message.reply_text("Usage: /add <amount> [currency] <merchant> [category] [date]")
             return
@@ -674,10 +748,10 @@ class TelegramBotService:
         now = self._local_now()
         tx_date = parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S")
         category = parsed["category"]
-        if not category and self.categorizer:
-            category, _ = self.categorizer.categorize(parsed["merchant"])
+        if not category and ctx.categorizer:
+            category, _ = ctx.categorizer.categorize(parsed["merchant"])
 
-        tx_id = self.storage.insert_transaction(
+        tx_id = ctx.storage.insert_transaction(
             source="manual",
             source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
             amount=parsed["amount"],
@@ -687,10 +761,10 @@ class TelegramBotService:
             exchange_rate=exchange_rate,
             transaction_date=tx_date,
         )
-        self.storage.auto_assign_to_active_trip(tx_id)
+        ctx.storage.auto_assign_to_active_trip(tx_id)
 
         sgd_equivalent = parsed["amount"] * exchange_rate
-        icon = self.storage.get_category_icon_map().get(category, "")
+        icon = ctx.storage.get_category_icon_map().get(category, "")
         cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
         msg = f"✅ *Added* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} {currency}`"
         if currency != "SGD":
@@ -698,6 +772,9 @@ class TelegramBotService:
         await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _cash(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         if not context.args:
             await update.message.reply_text(
                 "Usage: /cash <amount> <merchant> [category] [date]\n"
@@ -723,10 +800,10 @@ class TelegramBotService:
         now = self._local_now()
         tx_date = parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S")
         category = parsed["category"]
-        if not category and self.categorizer:
-            category, _ = self.categorizer.categorize(parsed["merchant"])
+        if not category and ctx.categorizer:
+            category, _ = ctx.categorizer.categorize(parsed["merchant"])
 
-        tx_id = self.storage.insert_transaction(
+        tx_id = ctx.storage.insert_transaction(
             source="cash",
             source_id=f"cash-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
             amount=parsed["amount"],
@@ -734,13 +811,16 @@ class TelegramBotService:
             category=category,
             transaction_date=tx_date,
         )
-        self.storage.auto_assign_to_active_trip(tx_id)
-        icon = self.storage.get_category_icon_map().get(category, "")
+        ctx.storage.auto_assign_to_active_trip(tx_id)
+        icon = ctx.storage.get_category_icon_map().get(category, "")
         cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
         msg = f"✅ *Cash* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} SGD`"
         await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _recategorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         if not context.args:
             await update.message.reply_text("Usage: /recategorize <transaction_id>")
             return
@@ -750,7 +830,7 @@ class TelegramBotService:
             await update.message.reply_text("Transaction ID must be a number")
             return
 
-        tx = self.storage.get_transaction(tx_id)
+        tx = ctx.storage.get_transaction(tx_id)
         if not tx:
             await update.message.reply_text(f"Transaction #{tx_id} not found")
             return
@@ -758,7 +838,7 @@ class TelegramBotService:
         # If a category was provided, apply it directly
         if len(context.args) >= 2:
             new_category = context.args[1]
-            valid_categories = [c["name"] for c in self.storage.get_categories()]
+            valid_categories = [c["name"] for c in ctx.storage.get_categories()]
             if new_category not in valid_categories:
                 await update.message.reply_text(
                     f"Invalid category '{new_category}'. Valid: {', '.join(valid_categories)}"
@@ -766,13 +846,13 @@ class TelegramBotService:
                 return
 
             old_category = tx["category"]
-            self.storage.update_transaction(tx_id, category=new_category)
+            ctx.storage.update_transaction(tx_id, category=new_category)
 
             merchant = tx["merchant"]
-            if merchant and self.categorizer:
-                self.categorizer.learn_merchant(merchant, new_category, self.storage)
+            if merchant and ctx.categorizer:
+                ctx.categorizer.learn_merchant(merchant, new_category, ctx.storage)
             elif merchant:
-                self.storage.set_merchant_override(merchant, new_category)
+                ctx.storage.set_merchant_override(merchant, new_category)
 
             await update.message.reply_text(
                 f"Updated #{tx_id}: {old_category} -> {new_category}"
@@ -781,7 +861,7 @@ class TelegramBotService:
             return
 
         # No category provided — show a grid of category buttons
-        categories = self.storage.get_categories()
+        categories = ctx.storage.get_categories()
         keyboard = get_category_keyboard(tx_id, [c["name"] for c in categories])
         merchant = tx["merchant"] or "Unknown"
         current_category = tx["category"] or "Other"
@@ -791,6 +871,9 @@ class TelegramBotService:
         )
 
     async def _income(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         if not context.args:
             await update.message.reply_text(
                 "Usage: /income <amount> <description> [date]\nExample: /income 5000 salary"
@@ -832,7 +915,7 @@ class TelegramBotService:
         now = self._local_now()
         date_str = tx_date or now.strftime("%Y-%m-%dT%H:%M:%S")
 
-        tx_id = self.storage.insert_transaction(
+        tx_id = ctx.storage.insert_transaction(
             source="manual",
             source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{amount}",
             amount=amount,
@@ -846,10 +929,13 @@ class TelegramBotService:
         await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         today = self._local_now()
         start = f"{today.year}-{today.month:02d}-01"
         end = today.strftime("%Y-%m-%d")
-        balance = self.storage.get_balance(start, end)
+        balance = ctx.storage.get_balance(start, end)
 
         if balance["income"] == 0 and balance["expenses"] == 0:
             await update.message.reply_text("No transactions this month")
@@ -875,13 +961,16 @@ class TelegramBotService:
         )
 
     async def _insights(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
         today = self._local_now()
         start = f"{today.year}-{today.month:02d}-01"
         end = today.strftime("%Y-%m-%d")
 
-        summary = self.storage.get_spending_summary(start, end)
-        ranking = self.storage.get_merchant_ranking(start, end, limit=5)
-        avg = self.storage.get_average_daily(start, end)
+        summary = ctx.storage.get_spending_summary(start, end)
+        ranking = ctx.storage.get_merchant_ranking(start, end, limit=5)
+        avg = ctx.storage.get_average_daily(start, end)
 
         if not summary["by_category"]:
             await update.message.reply_text("No spending data this month.")
@@ -906,7 +995,10 @@ class TelegramBotService:
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown", reply_markup=keyboard)
 
     async def _subscriptions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        rows = self.storage.get_recurring_transactions()
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+        rows = ctx.storage.get_recurring_transactions()
         if not rows:
             await update.message.reply_text("No recurring transactions detected yet.")
             return
@@ -936,7 +1028,10 @@ class TelegramBotService:
 
     async def _compare(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Compare this month vs last month."""
-        result = self.storage.comparison(period="month")
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+        result = ctx.storage.comparison(period="month")
         overall = result["overall"]
         categories = result["categories"]
 
@@ -960,7 +1055,10 @@ class TelegramBotService:
 
     async def _merchants(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Show top 5 merchants this month."""
-        merchants = self.storage.top_merchants_by_period(limit=5)
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+        merchants = ctx.storage.top_merchants_by_period(limit=5)
 
         if not merchants:
             await update.message.reply_text("No merchant data this month.")
@@ -976,7 +1074,10 @@ class TelegramBotService:
 
     async def _velocity(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Show spending velocity vs last month."""
-        v = self.storage.spending_velocity()
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+        v = ctx.storage.spending_velocity()
 
         emoji = "\u26a0" if v["status"] == "ahead" else "\u2705"
         lines = [
@@ -991,7 +1092,10 @@ class TelegramBotService:
 
     async def _summary(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Generate on-demand monthly summary report."""
-        report = self.storage.generate_digest(report_type="monthly")
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+        report = ctx.storage.generate_digest(report_type="monthly")
 
         arrow = "\u2191" if report["change"] > 0 else "\u2193"
 
@@ -1016,16 +1120,19 @@ class TelegramBotService:
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     async def _trip(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if self.storage.get_setting("trips_enabled", "false") != "true":
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+        if ctx.storage.get_setting("trips_enabled", "false") != "true":
             await update.message.reply_text("Trips are not enabled. Enable in the dashboard Settings.")
             return
 
-        active = self.storage.get_active_trip()
+        active = ctx.storage.get_active_trip()
         if not active:
             await update.message.reply_text("No active trip. Activate one from the dashboard.")
             return
 
-        summary = self.storage.get_trip_summary(active["id"])
+        summary = ctx.storage.get_trip_summary(active["id"])
         if not summary:
             await update.message.reply_text("Could not load trip summary.")
             return
@@ -1227,12 +1334,12 @@ class TelegramBotService:
         if tx and tx.get("type") != "income":
             try:
                 _sgd = tx["amount"] * (tx.get("exchange_rate") or 1.0)
-                await self._check_and_alert_budgets(category, _sgd, _storage)
+                await self._check_and_alert_budgets(category, _sgd, _storage, chat_id=_chat_id)
             except Exception as _e:
                 logger.warning("Budget alert check failed: %s", _e)
 
     async def _check_and_alert_budgets(
-        self, category: Optional[str], amount_sgd: float, storage=None
+        self, category: Optional[str], amount_sgd: float, storage=None, chat_id: Optional[int] = None
     ) -> None:
         """Check budget thresholds and send alerts if a 80% or 100% boundary was just crossed.
 
@@ -1241,7 +1348,8 @@ class TelegramBotService:
         _storage = storage if storage is not None else self.storage
         if _storage.get_setting("budgets_enabled", "false") != "true":
             return
-        if not self.chat_id or not self.app:
+        _chat_id = chat_id if chat_id is not None else self.chat_id
+        if not _chat_id or not self.app:
             return
 
         progress = _storage.get_budget_progress()
@@ -1284,7 +1392,7 @@ class TelegramBotService:
                     f"${overage:.2f} over budget this {period_word}."
                 )
                 await self.app.bot.send_message(
-                    chat_id=self.chat_id, text=msg, parse_mode="Markdown"
+                    chat_id=_chat_id, text=msg, parse_mode="Markdown"
                 )
             elif effective_prior < 80 <= effective_current < 100:
                 display_spent = max(b["spent"], current_spent)
@@ -1296,23 +1404,25 @@ class TelegramBotService:
                     f"${display_remaining:.2f} remaining for the rest of the {period_word}."
                 )
                 await self.app.bot.send_message(
-                    chat_id=self.chat_id, text=msg, parse_mode="Markdown"
+                    chat_id=_chat_id, text=msg, parse_mode="Markdown"
                 )
 
-    async def _apply_category_update(self, tx_id: int, category: str, query) -> None:
+    async def _apply_category_update(self, tx_id: int, category: str, query, storage=None, categorizer=None) -> None:
         """Shared body for cat: and recat: callbacks — update category, learn override, refresh message."""
-        tx = self.storage.get_transaction(tx_id)
+        _storage = storage if storage is not None else self.storage
+        _categorizer = categorizer if categorizer is not None else self.categorizer
+        tx = _storage.get_transaction(tx_id)
         if not tx:
             await query.edit_message_text("Transaction not found.")
             return
-        self.storage.update_transaction(tx_id, category=category)
+        _storage.update_transaction(tx_id, category=category)
         merchant = tx["merchant"]
-        if merchant and self.categorizer:
-            self.categorizer.learn_merchant(merchant, category, self.storage)
+        if merchant and _categorizer:
+            _categorizer.learn_merchant(merchant, category, _storage)
         elif merchant:
-            self.storage.set_merchant_override(merchant, category)
-        icon_map = self.storage.get_category_icon_map()
-        updated_tx = self.storage.get_transaction(tx_id)
+            _storage.set_merchant_override(merchant, category)
+        icon_map = _storage.get_category_icon_map()
+        updated_tx = _storage.get_transaction(tx_id)
         await query.edit_message_text(
             self._format_tx_block(updated_tx, icon_map),
             parse_mode="Markdown",
@@ -1324,7 +1434,10 @@ class TelegramBotService:
         if not query.data.startswith("cat:"):
             return
         _, tx_id_str, category = query.data.split(":", 2)
-        await self._apply_category_update(int(tx_id_str), category, query)
+        cb_ctx = await self._require_ctx(update)
+        storage = cb_ctx.storage if cb_ctx else None
+        categorizer = cb_ctx.categorizer if cb_ctx else None
+        await self._apply_category_update(int(tx_id_str), category, query, storage=storage, categorizer=categorizer)
 
     async def _recat_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -1332,7 +1445,10 @@ class TelegramBotService:
         if not query.data.startswith("recat:"):
             return
         _, tx_id_str, category = query.data.split(":", 2)
-        await self._apply_category_update(int(tx_id_str), category, query)
+        cb_ctx = await self._require_ctx(update)
+        storage = cb_ctx.storage if cb_ctx else None
+        categorizer = cb_ctx.categorizer if cb_ctx else None
+        await self._apply_category_update(int(tx_id_str), category, query, storage=storage, categorizer=categorizer)
 
     async def _cmd_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -1510,6 +1626,9 @@ class TelegramBotService:
             ctx = self.user_manager.get(username)
             if ctx:
                 storage = ctx.storage
+        if storage is None:
+            logger.warning("Cannot send daily digest: no storage resolved for user %r", username)
+            return
         fut = asyncio.run_coroutine_threadsafe(
             self._send_daily_digest(chat_id=chat_id, storage=storage),
             self._loop,
