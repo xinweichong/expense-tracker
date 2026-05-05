@@ -214,7 +214,7 @@ class TestYesterdayCommand:
 
         await bot_service._yesterday(update, context)
 
-        bot_service.format_daily_summary.assert_called_once_with(yesterday)
+        bot_service.format_daily_summary.assert_called_once_with(yesterday, storage=bot_service.storage)
         update.message.reply_text.assert_called_once()
 
 
