@@ -152,15 +152,16 @@ def in_memory_admin_db():
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript("""
         CREATE TABLE users (
-            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-            username            TEXT UNIQUE NOT NULL,
-            password_hash       TEXT NOT NULL,
-            telegram_chat_id    TEXT,
-            gmail_connected     INTEGER DEFAULT 0,
-            wants_gmail         INTEGER DEFAULT 1,
-            wants_apple_wallet  INTEGER DEFAULT 1,
-            onboarding_complete INTEGER DEFAULT 0,
-            created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            username              TEXT UNIQUE NOT NULL,
+            password_hash         TEXT NOT NULL,
+            telegram_chat_id      TEXT,
+            gmail_connected       INTEGER DEFAULT 0,
+            wants_gmail           INTEGER DEFAULT 1,
+            wants_apple_wallet    INTEGER DEFAULT 1,
+            onboarding_complete   INTEGER DEFAULT 0,
+            force_password_change INTEGER DEFAULT 0,
+            created_at            DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE sessions (
             token           TEXT PRIMARY KEY,

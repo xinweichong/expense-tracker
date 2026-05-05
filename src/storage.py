@@ -1427,10 +1427,12 @@ class AdminStorage:
     # ── Users ──────────────────────────────────────────────────────────────────
 
     def create_user(self, username: str, password_hash: str) -> None:
-        """Insert a new user row. Raises ValueError if username already exists."""
+        """Insert a new user row. Raises ValueError if username already exists.
+        Sets force_password_change=1 so the user must set their own password on first login.
+        """
         try:
             self._conn.execute(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+                "INSERT INTO users (username, password_hash, force_password_change) VALUES (?, ?, 1)",
                 (username, password_hash),
             )
             self._conn.commit()
@@ -1471,6 +1473,7 @@ class AdminStorage:
         allowed = {
             "gmail_connected", "telegram_chat_id", "wants_gmail",
             "wants_apple_wallet", "onboarding_complete", "password_hash",
+            "force_password_change",
         }
         invalid = set(fields) - allowed
         if invalid:

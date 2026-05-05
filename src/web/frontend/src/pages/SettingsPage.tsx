@@ -22,6 +22,7 @@ import {
   useMerchantOverrides,
 } from '@/hooks/useCategories';
 import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
+import { useAuth } from '@/hooks/useAuth';
 import { api, type Category, type SessionInfo } from '@/api/client';
 import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
@@ -75,6 +76,7 @@ export function SettingsPage() {
   const { hash } = useLocation();
   const { data: currentUser } = useCurrentUser();
   const invalidateCurrentUser = useInvalidateCurrentUser();
+  const { logout } = useAuth();
 
   // Smooth-scroll to hash anchor
   useEffect(() => {
@@ -294,6 +296,15 @@ export function SettingsPage() {
               <span className="text-sm text-muted">Username</span>
               <span className="text-sm font-medium text-foreground">{currentUser?.username ?? '—'}</span>
             </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-muted hover:text-foreground -mx-1"
+              onClick={logout}
+            >
+              Sign out
+            </Button>
 
             <Separator />
 

@@ -44,9 +44,9 @@ const adminApi = {
       created_at: string;
     }>>('/users'),
 
-  createUser: (username: string, password: string) =>
+  createUser: (username: string) =>
     adminRequest<{ status: string; username: string; password: string; reminder: string }>(
-      '/users', { method: 'POST', body: JSON.stringify({ username, password }) }
+      '/users', { method: 'POST', body: JSON.stringify({ username }) }
     ),
 
   deleteUser: (username: string) =>
@@ -138,7 +138,6 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   // Create user form
   const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [createError, setCreateError] = useState('');
   const [createResult, setCreateResult] = useState<{ username: string; password: string; reminder: string } | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
@@ -172,10 +171,9 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     setCreateResult(null);
     setCreateLoading(true);
     try {
-      const result = await adminApi.createUser(newUsername, newPassword);
+      const result = await adminApi.createUser(newUsername);
       setCreateResult(result);
       setNewUsername('');
-      setNewPassword('');
       loadUsers();
     } catch (err: any) {
       setCreateError(err.message ?? 'Failed to create user');
@@ -245,24 +243,13 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
               placeholder="Username"
               value={newUsername}
               onChange={(e) => setNewUsername(e.target.value.toLowerCase())}
-              className="bg-background border-border"
+              className="bg-background border-border flex-1"
             />
-            <div className="flex gap-2 flex-1">
-              <Input
-                type="text"
-                placeholder="Password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="bg-background border-border flex-1"
-              />
-              <Button variant="outline" size="sm" onClick={() => setNewPassword(generatePassword())}>
-                Generate
-              </Button>
-            </div>
-            <Button onClick={handleCreate} disabled={createLoading || !newUsername || !newPassword}>
+            <Button onClick={handleCreate} disabled={createLoading || !newUsername}>
               {createLoading ? 'Creating…' : 'Create Account'}
             </Button>
           </div>
+          <p className="text-xs text-muted">A temporary password will be generated and shown once.</p>
           {createError && <p className="text-sm text-destructive">{createError}</p>}
           {createResult && (
             <div className="rounded-lg border border-border bg-card p-4 space-y-2">

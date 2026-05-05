@@ -14,6 +14,7 @@ import { FinancePage } from '@/pages/FinancePage';
 import { TripsPage } from '@/pages/TripsPage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
 import { AdminPage } from '@/pages/AdminPage';
+import { SetPasswordPage } from '@/pages/SetPasswordPage';
 import { api } from '@/api/client';
 import { setCategoryColors } from '@/lib/utils';
 
@@ -50,6 +51,9 @@ function AppContent() {
   }
 
   if (!isAuthenticated) return <LoginScreen />;
+
+  // Forced password change gate (before onboarding)
+  if (currentUser?.force_password_change) return <SetPasswordPage />;
 
   // Redirect to onboarding if not yet complete (and not already there)
   if (currentUser && !currentUser.onboarding_complete) {

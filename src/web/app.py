@@ -144,6 +144,7 @@ def create_dashboard_app(
             "wants_gmail": bool(user["wants_gmail"]),
             "wants_apple_wallet": bool(user["wants_apple_wallet"]),
             "onboarding_complete": bool(user["onboarding_complete"]),
+            "force_password_change": bool(user["force_password_change"]),
         }
 
     @app.put("/api/users/me/password")
@@ -157,7 +158,7 @@ def create_dashboard_app(
         if not verify_password(current_password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="Current password is incorrect")
         new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-        admin_storage.update_user(username, password_hash=new_hash)
+        admin_storage.update_user(username, password_hash=new_hash, force_password_change=0)
         return {"status": "ok"}
 
     # ── Session management ────────────────────────────────────────────────────
