@@ -1,8 +1,11 @@
+import asyncio
 import logging
 import os
 import re
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import partial
 from typing import Optional
 
 import bcrypt
@@ -34,6 +37,16 @@ SUMMARY_CACHE_DIR = os.environ.get(
     os.path.join(os.path.dirname(__file__), "..", "data", "summaries")
 )
 
+# Single-worker executor: serialises all DB work off the event loop.
+# max_workers=1 means the web layer never concurrently accesses the SQLite connection.
+_DB_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
+
+async def _db(fn, *args, **kwargs):
+    """Run a synchronous storage/DB call in the dedicated DB thread pool."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_DB_EXECUTOR, partial(fn, *args, **kwargs))
+
 
 def create_dashboard_app(
     user_manager,
@@ -56,7 +69,8 @@ def create_dashboard_app(
             redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
             ctx.poller.complete_reauth(code, username)
             user_manager.start_poller(username)
-            admin_storage.update_user(username, gmail_connected=1)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=1))
             return Response(
                 content="<h2>Gmail connected. You can close this tab.</h2>",
                 media_type="text/html",
@@ -70,11 +84,15 @@ def create_dashboard_app(
         body = await request.json()
         username = body.get("username", "")
         password = body.get("password", "")
-        user = admin_storage.get_user(username)
-        if not user or not verify_password(password, user["password_hash"]):
+        loop = asyncio.get_event_loop()
+        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+        ok = await loop.run_in_executor(None, verify_password, password, user["password_hash"])
+        if not ok:
             raise HTTPException(status_code=401, detail="Invalid username or password")
         user_agent = request.headers.get("User-Agent", "")
-        token = create_session(username, user_agent)
+        token = await loop.run_in_executor(_DB_EXECUTOR, create_session, username, user_agent)
         secure_cookies = os.environ.get("SECURE_COOKIES", "true") == "true"
         response = JSONResponse({"status": "ok"})
         response.set_cookie(
@@ -92,10 +110,11 @@ def create_dashboard_app(
 
     async def require_auth(request: Request) -> str:
         session = request.cookies.get("session")
-        username = verify_session(session) if session else None
+        loop = asyncio.get_event_loop()
+        username = await loop.run_in_executor(_DB_EXECUTOR, verify_session, session) if session else None
         if not username:
             raise HTTPException(status_code=401, detail="Not authenticated")
-        user = admin_storage.get_user(username)
+        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         if user and user["force_password_change"] and request.url.path not in _FORCE_PW_ALLOWED:
             raise HTTPException(status_code=403, detail="Password change required")
         return username
@@ -146,7 +165,8 @@ def create_dashboard_app(
 
     @app.get("/api/users/me")
     async def get_current_user(username: str = Depends(require_auth)):
-        user = admin_storage.get_user(username)
+        loop = asyncio.get_event_loop()
+        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
         return {
@@ -166,31 +186,36 @@ def create_dashboard_app(
         new_password = body.get("new_password", "")
         if not new_password or len(new_password) < 8:
             raise HTTPException(status_code=422, detail="new_password must be at least 8 characters")
-        user = admin_storage.get_user(username)
-        if not verify_password(current_password, user["password_hash"]):
+        loop = asyncio.get_event_loop()
+        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        ok = await loop.run_in_executor(None, verify_password, current_password, user["password_hash"])
+        if not ok:
             raise HTTPException(status_code=401, detail="Current password is incorrect")
-        new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-        admin_storage.update_user(username, password_hash=new_hash, force_password_change=0)
+        new_hash = await loop.run_in_executor(None, lambda: bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode())
+        await loop.run_in_executor(_DB_EXECUTOR, lambda: admin_storage.update_user(username, password_hash=new_hash, force_password_change=0))
         return {"status": "ok"}
 
     # ── Session management ────────────────────────────────────────────────────
 
     @app.get("/api/sessions")
     async def list_sessions(request: Request, username: str = Depends(require_auth)):
-        return admin_storage.list_sessions(username)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
 
     @app.delete("/api/sessions")
     async def logout_all_other_sessions(request: Request, username: str = Depends(require_auth)):
         current_token = request.cookies.get("session")
-        admin_storage.destroy_all_sessions(username, except_token=current_token)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.destroy_all_sessions, username, except_token=current_token))
         return {"status": "ok"}
 
     @app.delete("/api/sessions/{token}")
     async def logout_session(token: str, username: str = Depends(require_auth)):
-        sessions = admin_storage.list_sessions(username)
+        loop = asyncio.get_event_loop()
+        sessions = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
         if not any(s["token"] == token for s in sessions):
             raise HTTPException(status_code=404, detail="Session not found")
-        admin_storage.destroy_session(token)
+        await loop.run_in_executor(_DB_EXECUTOR, admin_storage.destroy_session, token)
         return {"status": "ok"}
 
     # ── Onboarding ────────────────────────────────────────────────────────────
@@ -198,11 +223,12 @@ def create_dashboard_app(
     @app.put("/api/onboarding/preferences")
     async def set_onboarding_preferences(request: Request, username: str = Depends(require_auth)):
         body = await request.json()
-        admin_storage.update_user(
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(_DB_EXECUTOR, lambda: admin_storage.update_user(
             username,
             wants_gmail=1 if body.get("wants_gmail", True) else 0,
             wants_apple_wallet=1 if body.get("wants_apple_wallet", True) else 0,
-        )
+        ))
         return {"status": "ok"}
 
     @app.get("/api/onboarding/gmail/connect-url")
@@ -216,7 +242,8 @@ def create_dashboard_app(
 
     @app.post("/api/onboarding/telegram/link-token")
     async def create_telegram_link_token(username: str = Depends(require_auth)):
-        token = admin_storage.create_telegram_link_token(username)
+        loop = asyncio.get_event_loop()
+        token = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.create_telegram_link_token, username)
         return {"token": token}
 
     @app.get("/api/onboarding/webhook-url")
@@ -226,14 +253,16 @@ def create_dashboard_app(
 
     @app.put("/api/onboarding/complete")
     async def mark_onboarding_complete(username: str = Depends(require_auth)):
-        admin_storage.update_user(username, onboarding_complete=1)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, onboarding_complete=1))
         return {"status": "ok"}
 
     # ── Connection management ─────────────────────────────────────────────────
 
     @app.delete("/api/connections/telegram")
     async def disconnect_telegram(username: str = Depends(require_auth)):
-        admin_storage.update_user(username, telegram_chat_id=None)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, telegram_chat_id=None))
         return {"status": "ok"}
 
     @app.delete("/api/connections/gmail")
@@ -261,7 +290,8 @@ def create_dashboard_app(
                 pass
         if ctx and ctx.poller:
             ctx.poller.stop()
-        admin_storage.update_user(username, gmail_connected=0)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=0))
         return {"status": "ok"}
 
     @app.get("/api/connections/gmail/connect-url")
@@ -283,7 +313,7 @@ def create_dashboard_app(
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
-        return storage.get_spending_summary(start_date=start, end_date=end)
+        return await _db(storage.get_spending_summary, start_date=start, end_date=end)
 
     @app.get("/api/transactions")
     async def transactions(
@@ -297,7 +327,7 @@ def create_dashboard_app(
         username: str = Depends(require_auth),
     ):
         storage = user_manager.get(username).storage
-        return storage.query_transactions(
+        return await _db(storage.query_transactions,
             start_date=start_date,
             end_date=end_date,
             category=category,
@@ -316,7 +346,7 @@ def create_dashboard_app(
         username: str = Depends(require_auth),
     ):
         storage = user_manager.get(username).storage
-        rows = storage.query_transactions(
+        rows = await _db(storage.query_transactions,
             start_date=start_date,
             end_date=end_date,
             category=category,
@@ -353,7 +383,7 @@ def create_dashboard_app(
     @app.get("/api/transactions/{tx_id}")
     async def get_transaction(tx_id: int, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
-        tx = storage.get_transaction(tx_id)
+        tx = await _db(storage.get_transaction, tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
         return tx
@@ -385,7 +415,7 @@ def create_dashboard_app(
         transaction_date = _normalise_transaction_date(transaction_date)
 
         try:
-            tx_id = storage.insert_transaction(
+            tx_id = await _db(storage.insert_transaction,
                 source=source,
                 source_id=source_id,
                 amount=amount,
@@ -400,12 +430,12 @@ def create_dashboard_app(
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
 
-        return storage.get_transaction(tx_id)
+        return await _db(storage.get_transaction, tx_id)
 
     @app.put("/api/transactions/{tx_id}")
     async def update_transaction(tx_id: int, request: Request, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
-        tx = storage.get_transaction(tx_id)
+        tx = await _db(storage.get_transaction, tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
         body = await request.json()
@@ -415,20 +445,20 @@ def create_dashboard_app(
             fields["transaction_date"] = _normalise_transaction_date(fields["transaction_date"])
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
-        storage.update_transaction(tx_id, **fields)
+        await _db(storage.update_transaction, tx_id, **fields)
         # Auto-learn merchant override when category changes
         if "category" in fields and fields["category"] != tx.get("category"):
             merchant = fields.get("merchant") or tx.get("merchant")
             if merchant:
-                storage.set_merchant_override(merchant, fields["category"])
-        return storage.get_transaction(tx_id)
+                await _db(storage.set_merchant_override, merchant, fields["category"])
+        return await _db(storage.get_transaction, tx_id)
 
     @app.delete("/api/transactions/{tx_id}")
     async def delete_transaction(tx_id: int, storage=Depends(_get_storage)):
-        tx = storage.get_transaction(tx_id)
+        tx = await _db(storage.get_transaction, tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        storage.delete_transaction(tx_id)
+        await _db(storage.delete_transaction, tx_id)
         return {"status": "ok"}
 
     @app.get("/api/apple-wallet/cards")
@@ -439,11 +469,11 @@ def create_dashboard_app(
         'Apple Wallet - <something>' where <something> is non-empty.  Used to
         populate the description dropdown in the transaction edit form.
         """
-        return storage.get_apple_wallet_cards()
+        return await _db(storage.get_apple_wallet_cards)
 
     @app.get("/api/categories")
     async def categories(storage=Depends(_get_storage)):
-        return storage.get_categories()
+        return await _db(storage.get_categories)
 
     @app.post("/api/categories")
     async def create_category(request: Request, storage=Depends(_get_storage)):
@@ -456,7 +486,7 @@ def create_dashboard_app(
         if not name:
             raise HTTPException(status_code=400, detail="Category name is required")
         try:
-            storage.add_category(name, keywords, icon, color, cat_type=cat_type)
+            await _db(storage.add_category, name, keywords, icon, color, cat_type=cat_type)
         except ValueError as e:
             status_code = 422 if "cat_type" in str(e) else 409
             raise HTTPException(status_code=status_code, detail=str(e))
@@ -467,7 +497,7 @@ def create_dashboard_app(
         body = await request.json()
         cat_type = body.get("type")
         try:
-            storage.update_category(
+            await _db(storage.update_category,
                 name,
                 keywords=body.get("keywords"),
                 icon=body.get("icon"),
@@ -484,19 +514,19 @@ def create_dashboard_app(
     @app.delete("/api/categories/{name}")
     async def delete_category(name: str, storage=Depends(_get_storage)):
         try:
-            count = storage.delete_category(name)
+            count = await _db(storage.delete_category, name)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return {"status": "ok", "reassigned": count}
 
     @app.get("/api/merchant-overrides")
     async def merchant_overrides(storage=Depends(_get_storage)):
-        overrides = storage.get_merchant_overrides()
+        overrides = await _db(storage.get_merchant_overrides)
         return [{"merchant": m, "category": c} for m, c in overrides.items()]
 
     @app.delete("/api/merchant-overrides/{merchant}")
     async def remove_merchant_override(merchant: str, storage=Depends(_get_storage)):
-        storage.remove_merchant_override(merchant)
+        await _db(storage.remove_merchant_override, merchant)
         return {"status": "ok"}
 
     VALID_TAGS = {"online", "subscription", "foreign", "essential", "recurring"}
@@ -511,7 +541,7 @@ def create_dashboard_app(
         offset: int = 0,
         storage=Depends(_get_storage),
     ):
-        return storage.get_merchant_list(
+        return await _db(storage.get_merchant_list,
             sort_by=sort_by,
             tag_filter=tag,
             category_filter=category,
@@ -522,7 +552,7 @@ def create_dashboard_app(
 
     @app.get("/api/merchant-intelligence/{merchant}/trend")
     async def merchant_trend(merchant: str, storage=Depends(_get_storage)):
-        return storage.get_merchant_trend(merchant)
+        return await _db(storage.get_merchant_trend, merchant)
 
     @app.put("/api/merchant-intelligence/{merchant}/tags")
     async def merchant_set_tags(merchant: str, request: Request, storage=Depends(_get_storage)):
@@ -531,19 +561,19 @@ def create_dashboard_app(
         invalid = [t for t in tags if t not in VALID_TAGS]
         if invalid:
             raise HTTPException(status_code=422, detail=f"Invalid tags: {invalid}. Valid: {sorted(VALID_TAGS)}")
-        storage.set_merchant_tags(merchant, tags)
-        return storage.get_merchant_tags(merchant)
+        await _db(storage.set_merchant_tags, merchant, tags)
+        return await _db(storage.get_merchant_tags, merchant)
 
     @app.put("/api/merchant-intelligence/{merchant}/notes")
     async def merchant_set_notes(merchant: str, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         notes = body.get("notes", "")
-        storage.set_merchant_notes(merchant, notes)
-        return storage.get_merchant_tags(merchant)
+        await _db(storage.set_merchant_notes, merchant, notes)
+        return await _db(storage.get_merchant_tags, merchant)
 
     @app.get("/api/merchant-intelligence/{merchant}")
     async def merchant_intelligence_profile(merchant: str, storage=Depends(_get_storage)):
-        profile = storage.get_merchant_profile(merchant)
+        profile = await _db(storage.get_merchant_profile, merchant)
         if not profile:
             raise HTTPException(status_code=404, detail="Merchant not found")
         return profile
@@ -553,13 +583,13 @@ def create_dashboard_app(
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
-        return storage.get_balance(start, end)
+        return await _db(storage.get_balance, start, end)
 
     @app.get("/api/health-score")
     async def health_score(months: int = 1, storage=Depends(_get_storage)):
         if months < 1 or months > 12:
             raise HTTPException(status_code=400, detail="months must be between 1 and 12")
-        return storage.get_health_score(months=months)
+        return await _db(storage.get_health_score, months=months)
 
     @app.get("/api/income-vs-expense")
     async def income_vs_expense(months: int = 6, storage=Depends(_get_storage)):
@@ -576,7 +606,7 @@ def create_dashboard_app(
                 m_end = f"{y+1}-01-01"
             else:
                 m_end = f"{y}-{m+1:02d}-01"
-            b = storage.get_balance(m_start, m_end)
+            b = await _db(storage.get_balance, m_start, m_end)
             results.append({"month": m_start[:7], "income": b["income"], "expenses": b["expenses"]})
         return list(reversed(results))
 
@@ -585,21 +615,21 @@ def create_dashboard_app(
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
-        return storage.get_trend(start, end)
+        return await _db(storage.get_trend, start, end)
 
     @app.get("/api/trend/by-category")
     async def trend_by_category(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
-        return storage.get_trend_by_category(start, end)
+        return await _db(storage.get_trend_by_category, start, end)
 
     @app.get("/api/merchants")
     async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
         today = local_now()
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
-        return storage.get_merchants_in_range(start, end)
+        return await _db(storage.get_merchants_in_range, start, end)
 
     @app.get("/api/insights")
     async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
@@ -607,13 +637,13 @@ def create_dashboard_app(
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return {
-            "merchants": storage.get_merchant_ranking(start, end),
-            "average_daily": storage.get_average_daily(start, end),
+            "merchants": await _db(storage.get_merchant_ranking, start, end),
+            "average_daily": await _db(storage.get_average_daily, start, end),
         }
 
     @app.get("/api/recurring")
     async def recurring(storage=Depends(_get_storage)):
-        return storage.get_recurring_transactions()
+        return await _db(storage.get_recurring_transactions)
 
     @app.get("/api/analytics/comparison")
     async def analytics_comparison(
@@ -621,7 +651,7 @@ def create_dashboard_app(
         date: Optional[str] = None,
         storage=Depends(_get_storage),
     ):
-        return storage.comparison(period=period, date=date)
+        return await _db(storage.comparison, period=period, date=date)
 
 
     @app.get("/api/analytics/merchants")
@@ -630,39 +660,41 @@ def create_dashboard_app(
         merchant: Optional[str] = None,
         storage=Depends(_get_storage),
     ):
-        top = storage.top_merchants_by_period(limit=limit)
-        trend = storage.merchant_trend_chart(merchant) if merchant else None
+        top = await _db(storage.top_merchants_by_period, limit=limit)
+        trend = await _db(storage.merchant_trend_chart, merchant) if merchant else None
         return {"top": top, "trend": trend}
 
 
     @app.get("/api/analytics/velocity")
     async def analytics_velocity(storage=Depends(_get_storage)):
-        return storage.spending_velocity()
+        return await _db(storage.spending_velocity)
 
 
     @app.get("/api/analytics/alerts")
     async def analytics_alerts(storage=Depends(_get_storage)):
+        multiplier = float(await _db(storage.get_setting, "anomaly_multiplier", "2.0"))
         return {
-            "anomalies": storage.spending_anomalies(multiplier=float(storage.get_setting("anomaly_multiplier", "2.0"))),
-            "new_merchants": storage.new_merchants(),
+            "anomalies": await _db(storage.spending_anomalies, multiplier=multiplier),
+            "new_merchants": await _db(storage.new_merchants),
         }
 
 
     @app.get("/api/analytics/summaries")
     async def analytics_summaries(storage=Depends(_get_storage)):
-        monthly = load_summary(SUMMARY_CACHE_DIR, "monthly")
-        weekly = load_summary(SUMMARY_CACHE_DIR, "weekly")
+        loop = asyncio.get_event_loop()
+        monthly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "monthly")
+        weekly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "weekly")
         return {"monthly": monthly, "weekly": weekly}
 
 
     @app.get("/api/settings")
     async def get_settings(storage=Depends(_get_storage)):
         return {
-            "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
-            "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
-            "budgets_enabled": storage.get_setting("budgets_enabled", "false") == "true",
-            "goals_enabled": storage.get_setting("goals_enabled", "false") == "true",
-            "trips_enabled": storage.get_setting("trips_enabled", "false") == "true",
+            "anomaly_multiplier": float(await _db(storage.get_setting, "anomaly_multiplier", "2.0")),
+            "velocity_alert_threshold": int(await _db(storage.get_setting, "velocity_alert_threshold", "110")),
+            "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
+            "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
+            "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
         }
 
     @app.put("/api/settings")
@@ -721,21 +753,21 @@ def create_dashboard_app(
 
         # Write all-or-nothing after validation
         for key, value in validated.items():
-            storage.set_setting(key, value)
+            await _db(storage.set_setting, key, value)
 
         return {
-            "anomaly_multiplier": float(storage.get_setting("anomaly_multiplier", "2.0")),
-            "velocity_alert_threshold": int(storage.get_setting("velocity_alert_threshold", "110")),
-            "budgets_enabled": storage.get_setting("budgets_enabled", "false") == "true",
-            "goals_enabled": storage.get_setting("goals_enabled", "false") == "true",
-            "trips_enabled": storage.get_setting("trips_enabled", "false") == "true",
+            "anomaly_multiplier": float(await _db(storage.get_setting, "anomaly_multiplier", "2.0")),
+            "velocity_alert_threshold": int(await _db(storage.get_setting, "velocity_alert_threshold", "110")),
+            "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
+            "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
+            "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
         }
 
     # ── Budgets ──────────────────────────────────────────────────────────
 
     @app.get("/api/budgets")
     async def list_budgets(storage=Depends(_get_storage)):
-        return storage.get_budgets()
+        return await _db(storage.get_budgets)
 
     @app.post("/api/budgets")
     async def create_budget(request: Request, storage=Depends(_get_storage)):
@@ -752,15 +784,15 @@ def create_dashboard_app(
         if period not in ("monthly", "weekly"):
             raise HTTPException(status_code=422, detail="period must be 'monthly' or 'weekly'")
         try:
-            budget_id = storage.create_budget(category=category, amount=amount, period=period)
+            budget_id = await _db(storage.create_budget, category=category, amount=amount, period=period)
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
-        row = storage.get_budget(budget_id)
+        row = await _db(storage.get_budget, budget_id)
         return dict(row)
 
     @app.get("/api/budgets/progress")
     async def budget_progress(storage=Depends(_get_storage)):
-        return storage.get_budget_progress()
+        return await _db(storage.get_budget_progress)
 
     @app.put("/api/budgets/{budget_id}")
     async def update_budget(budget_id: int, request: Request, storage=Depends(_get_storage)):
@@ -773,16 +805,16 @@ def create_dashboard_app(
         except (TypeError, ValueError):
             raise HTTPException(status_code=422, detail="amount must be a number")
         try:
-            storage.update_budget(budget_id, amount=amount)
+            await _db(storage.update_budget, budget_id, amount=amount)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        row = storage.get_budget(budget_id)
+        row = await _db(storage.get_budget, budget_id)
         return dict(row)
 
     @app.delete("/api/budgets/{budget_id}")
     async def delete_budget(budget_id: int, storage=Depends(_get_storage)):
         try:
-            storage.delete_budget(budget_id)
+            await _db(storage.delete_budget, budget_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return {"status": "ok"}
@@ -791,10 +823,10 @@ def create_dashboard_app(
 
     @app.get("/api/goals")
     async def list_goals(storage=Depends(_get_storage)):
-        goals = storage.get_goals()
+        goals = await _db(storage.get_goals)
         results = []
         for g in goals:
-            progress = storage.get_goal_progress(g["id"])
+            progress = await _db(storage.get_goal_progress, g["id"])
             results.append(progress if progress else g)
         return results
 
@@ -812,10 +844,10 @@ def create_dashboard_app(
             target_amount = float(target_amount)
         except (TypeError, ValueError):
             raise HTTPException(status_code=422, detail="target_amount must be a number")
-        goal_id = storage.create_goal(
+        goal_id = await _db(storage.create_goal,
             name=name, target_amount=target_amount, target_date=target_date
         )
-        return storage.get_goal_progress(goal_id)
+        return await _db(storage.get_goal_progress, goal_id)
 
     @app.put("/api/goals/{goal_id}")
     async def update_goal(goal_id: int, request: Request, storage=Depends(_get_storage)):
@@ -825,15 +857,15 @@ def create_dashboard_app(
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
         try:
-            storage.update_goal(goal_id, **fields)
+            await _db(storage.update_goal, goal_id, **fields)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        return storage.get_goal_progress(goal_id)
+        return await _db(storage.get_goal_progress, goal_id)
 
     @app.delete("/api/goals/{goal_id}")
     async def delete_goal(goal_id: int, storage=Depends(_get_storage)):
         try:
-            storage.delete_goal(goal_id)
+            await _db(storage.delete_goal, goal_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return {"status": "ok"}
@@ -851,7 +883,7 @@ def create_dashboard_app(
             raise HTTPException(status_code=422, detail="amount must be a number")
         today = local_now()
         try:
-            storage.add_contribution(
+            await _db(storage.add_contribution,
                 goal_id,
                 amount=amount,
                 month=today.strftime("%Y-%m"),
@@ -861,13 +893,13 @@ def create_dashboard_app(
             )
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        return storage.get_goal_progress(goal_id)
+        return await _db(storage.get_goal_progress, goal_id)
 
     @app.get("/api/goals/{goal_id}/contributions")
     async def goal_contributions(goal_id: int, storage=Depends(_get_storage)):
-        if not storage.get_goal(goal_id):
+        if not await _db(storage.get_goal, goal_id):
             raise HTTPException(status_code=404, detail="Goal not found")
-        return storage.get_contributions(goal_id)
+        return await _db(storage.get_contributions, goal_id)
 
     @app.put("/api/goals/{goal_id}/contributions/{contribution_id}")
     async def update_contribution(goal_id: int, contribution_id: int, request: Request, storage=Depends(_get_storage)):
@@ -880,36 +912,36 @@ def create_dashboard_app(
             except (TypeError, ValueError):
                 raise HTTPException(status_code=422, detail="amount must be a number")
         try:
-            storage.update_contribution(contribution_id, **fields)
+            await _db(storage.update_contribution, contribution_id, **fields)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        return storage.get_goal_progress(goal_id)
+        return await _db(storage.get_goal_progress, goal_id)
 
     @app.delete("/api/goals/{goal_id}/contributions/{contribution_id}")
     async def delete_contribution(goal_id: int, contribution_id: int, storage=Depends(_get_storage)):
         try:
-            storage.delete_contribution(contribution_id)
+            await _db(storage.delete_contribution, contribution_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        return storage.get_goal_progress(goal_id)
+        return await _db(storage.get_goal_progress, goal_id)
 
     @app.get("/api/savings/overview")
     async def savings_overview(storage=Depends(_get_storage)):
         month = local_now().strftime("%Y-%m")
-        return storage.get_savings_overview(month)
+        return await _db(storage.get_savings_overview, month)
 
     # ── Trips ───────────────────────────────────────────────────────────────
 
     @app.get("/api/trips")
     async def list_trips(storage=Depends(_get_storage)):
-        return storage.get_trips()
+        return await _db(storage.get_trips)
 
     # IMPORTANT: /api/trips/active must be registered before /api/trips/{trip_id}
     # routes. FastAPI resolves top-to-bottom; without this ordering, "active"
     # would be treated as a trip_id and fail int conversion with a 422.
     @app.get("/api/trips/active")
     async def get_active_trip(storage=Depends(_get_storage)):
-        active = storage.get_active_trip()
+        active = await _db(storage.get_active_trip)
         if not active:
             raise HTTPException(status_code=404, detail="No active trip")
         return active
@@ -923,50 +955,50 @@ def create_dashboard_app(
             raise HTTPException(status_code=400, detail="name is required")
         if not start_date:
             raise HTTPException(status_code=400, detail="start_date is required")
-        trip_id = storage.create_trip(
+        trip_id = await _db(storage.create_trip,
             name=name,
             start_date=start_date,
             destination=body.get("destination"),
             primary_currency=body.get("primary_currency", "SGD"),
         )
-        return storage.get_trip(trip_id)
+        return await _db(storage.get_trip, trip_id)
 
     @app.put("/api/trips/{trip_id}")
     async def update_trip(trip_id: int, request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         try:
-            storage.update_trip(trip_id, **{k: v for k, v in body.items()})
+            await _db(storage.update_trip, trip_id, **{k: v for k, v in body.items()})
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        return storage.get_trip(trip_id)
+        return await _db(storage.get_trip, trip_id)
 
     @app.post("/api/trips/{trip_id}/activate")
     async def activate_trip(trip_id: int, storage=Depends(_get_storage)):
         try:
-            storage.activate_trip(trip_id)
+            await _db(storage.activate_trip, trip_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        return storage.get_trip(trip_id)
+        return await _db(storage.get_trip, trip_id)
 
     @app.post("/api/trips/{trip_id}/deactivate")
     async def deactivate_trip(trip_id: int, storage=Depends(_get_storage)):
         try:
-            storage.deactivate_trip(trip_id)
+            await _db(storage.deactivate_trip, trip_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
-        return storage.get_trip(trip_id)
+        return await _db(storage.get_trip, trip_id)
 
     @app.delete("/api/trips/{trip_id}")
     async def delete_trip(trip_id: int, storage=Depends(_get_storage)):
         try:
-            storage.delete_trip(trip_id)
+            await _db(storage.delete_trip, trip_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return {"status": "ok"}
 
     @app.get("/api/trips/{trip_id}/summary")
     async def trip_summary(trip_id: int, storage=Depends(_get_storage)):
-        summary = storage.get_trip_summary(trip_id)
+        summary = await _db(storage.get_trip_summary, trip_id)
         if summary is None:
             raise HTTPException(status_code=404, detail="Trip not found")
         return summary
@@ -978,9 +1010,9 @@ def create_dashboard_app(
         offset: int = 0,
         storage=Depends(_get_storage),
     ):
-        if not storage.get_trip(trip_id):
+        if not await _db(storage.get_trip, trip_id):
             raise HTTPException(status_code=404, detail="Trip not found")
-        return storage.get_trip_transactions(trip_id, limit=limit, offset=offset)
+        return await _db(storage.get_trip_transactions, trip_id, limit=limit, offset=offset)
 
     @app.post("/api/trips/{trip_id}/transactions")
     async def enlist_transaction(trip_id: int, request: Request, storage=Depends(_get_storage)):
@@ -988,21 +1020,21 @@ def create_dashboard_app(
         tx_id = body.get("transaction_id")
         if tx_id is None:
             raise HTTPException(status_code=400, detail="transaction_id is required")
-        if not storage.get_trip(trip_id):
+        if not await _db(storage.get_trip, trip_id):
             raise HTTPException(status_code=404, detail="Trip not found")
-        storage.enlist_transaction(trip_id, int(tx_id), added_by="manual")
+        await _db(storage.enlist_transaction, trip_id, int(tx_id), added_by="manual")
         return {"status": "ok"}
 
     @app.delete("/api/trips/{trip_id}/transactions/{tx_id}")
     async def delist_transaction(trip_id: int, tx_id: int, storage=Depends(_get_storage)):
-        if not storage.get_trip(trip_id):
+        if not await _db(storage.get_trip, trip_id):
             raise HTTPException(status_code=404, detail="Trip not found")
-        storage.delist_transaction(trip_id, tx_id)
+        await _db(storage.delist_transaction, trip_id, tx_id)
         return {"status": "ok"}
 
     @app.get("/api/trips/{trip_id}/transactions/{tx_id}/membership")
     async def check_trip_membership(trip_id: int, tx_id: int, storage=Depends(_get_storage)):
-        return {"in_trip": storage.is_in_trip(trip_id, tx_id)}
+        return {"in_trip": await _db(storage.is_in_trip, trip_id, tx_id)}
 
     # Serve React SPA
 
