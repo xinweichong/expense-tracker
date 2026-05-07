@@ -268,7 +268,7 @@ class GmailPoller:
     def complete_reauth(self, code: str, state: str) -> None:
         """Exchange authorization code for tokens, save, and reinitialize the service."""
         if not self._pending_flow:
-            raise RuntimeError("No pending OAuth flow. Call start_reauth() first.")
+            raise RuntimeError("No pending OAuth flow. Call get_auth_url() first.")
         if state != self._pending_state:
             raise ValueError("OAuth state mismatch.")
         self._pending_flow.fetch_token(code=code)

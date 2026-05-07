@@ -1594,8 +1594,15 @@ class TelegramBotService:
         if not poller or not self.oauth_redirect_uri:
             await update.message.reply_text("Gmail not configured.")
             return
+        # Resolve username for OAuth state parameter (used by /oauth/callback to look up user)
+        state = "default"
+        if self.user_manager:
+            chat_id = self._get_chat_id(update)
+            ctx = self.user_manager.get_by_chat_id(chat_id) if chat_id else None
+            if ctx:
+                state = ctx.username
         try:
-            auth_url = poller.start_reauth(self.oauth_redirect_uri)
+            auth_url = poller.get_auth_url(self.oauth_redirect_uri, state)
             await update.message.reply_text(
                 f"Click the link below to re-authorize Gmail:\n{auth_url}",
                 disable_web_page_preview=True,
