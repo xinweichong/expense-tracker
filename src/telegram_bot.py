@@ -1,5 +1,6 @@
 import asyncio
 import calendar
+import functools
 import logging
 import re
 from datetime import datetime, timedelta
@@ -1272,8 +1273,9 @@ class TelegramBotService:
     async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str, chat_id: Optional[int] = None, storage=None) -> None:
         _chat_id = chat_id if chat_id is not None else self.chat_id
         _storage = storage if storage is not None else self.storage
-        icon_map = _storage.get_category_icon_map()
-        tx = _storage.get_transaction(tx_id)
+        loop = asyncio.get_running_loop()
+        icon_map = await loop.run_in_executor(None, _storage.get_category_icon_map)
+        tx = await loop.run_in_executor(None, _storage.get_transaction, tx_id)
         # For Apple Wallet, show the card name stored in description
         if source == "apple_wallet":
             _desc = (tx.get("description") or "") if tx else ""
@@ -1411,18 +1413,19 @@ class TelegramBotService:
         """Shared body for cat: and recat: callbacks — update category, learn override, refresh message."""
         _storage = storage if storage is not None else self.storage
         _categorizer = categorizer if categorizer is not None else self.categorizer
-        tx = _storage.get_transaction(tx_id)
+        loop = asyncio.get_running_loop()
+        tx = await loop.run_in_executor(None, _storage.get_transaction, tx_id)
         if not tx:
             await query.edit_message_text("Transaction not found.")
             return
-        _storage.update_transaction(tx_id, category=category)
+        await loop.run_in_executor(None, functools.partial(_storage.update_transaction, tx_id, category=category))
         merchant = tx["merchant"]
         if merchant and _categorizer:
-            _categorizer.learn_merchant(merchant, category, _storage)
+            await loop.run_in_executor(None, _categorizer.learn_merchant, merchant, category, _storage)
         elif merchant:
-            _storage.set_merchant_override(merchant, category)
-        icon_map = _storage.get_category_icon_map()
-        updated_tx = _storage.get_transaction(tx_id)
+            await loop.run_in_executor(None, _storage.set_merchant_override, merchant, category)
+        icon_map = await loop.run_in_executor(None, _storage.get_category_icon_map)
+        updated_tx = await loop.run_in_executor(None, _storage.get_transaction, tx_id)
         await query.edit_message_text(
             self._format_tx_block(updated_tx, icon_map),
             parse_mode="Markdown",

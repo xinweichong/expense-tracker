@@ -1,11 +1,22 @@
 import calendar
+import functools
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 from src.config import local_now
 
 _VALID_TYPES: frozenset[str] = frozenset({"needs", "wants", "neutral"})
+
+
+def _locked(method):
+    """Serialize method calls on the instance's RLock to prevent concurrent SQLite access."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return wrapper
 
 
 def _get_budget_period(period: str) -> tuple[str, str]:
@@ -23,7 +34,9 @@ class Storage:
     def __init__(self, connection: sqlite3.Connection):
         self._conn = connection
         self._conn.row_factory = sqlite3.Row
+        self._lock = threading.RLock()
 
+    @_locked
     def insert_transaction(
         self,
         source: str,
@@ -52,12 +65,14 @@ class Storage:
         except sqlite3.IntegrityError:
             raise ValueError(f"duplicate source_id: {source_id}")
 
+    @_locked
     def get_transaction(self, tx_id: int) -> Optional[dict]:
         row = self._conn.execute(
             "SELECT * FROM transactions WHERE id = ?", (tx_id,)
         ).fetchone()
         return dict(row) if row else None
 
+    @_locked
     def update_transaction(self, tx_id: int, **fields) -> None:
         if not fields:
             return
@@ -70,12 +85,14 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def delete_transaction(self, tx_id: int) -> None:
         if self.get_transaction(tx_id) is None:
             raise ValueError(f"transaction {tx_id} not found")
         self._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         self._conn.commit()
 
+    @_locked
     def query_transactions(
         self,
         start_date: Optional[str] = None,
@@ -111,6 +128,7 @@ class Storage:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def get_spending_summary(
         self, start_date: str, end_date: str
     ) -> dict:
@@ -128,6 +146,7 @@ class Storage:
             "by_category": by_category,
         }
 
+    @_locked
     def load_categories(self, categories: list[dict]) -> None:
         for cat in categories:
             self._conn.execute(
@@ -141,6 +160,7 @@ class Storage:
             )
         self._conn.commit()
 
+    @_locked
     def get_income_summary(self, start_date: str, end_date: str) -> dict:
         rows = self._conn.execute(
             """SELECT category, SUM(amount * exchange_rate) as total
@@ -153,11 +173,13 @@ class Storage:
         by_category = {r["category"] or "Uncategorized": r["total"] for r in rows}
         return {"total": sum(by_category.values()), "by_category": by_category}
 
+    @_locked
     def get_balance(self, start_date: str, end_date: str) -> dict:
         expenses = self.get_spending_summary(start_date, end_date)["total"]
         income = self.get_income_summary(start_date, end_date)["total"]
         return {"income": income, "expenses": expenses, "net": income - expenses}
 
+    @_locked
     def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10) -> list[dict]:
         rows = self._conn.execute(
             """SELECT merchant, COUNT(*) as visits, SUM(amount * exchange_rate) as total
@@ -169,6 +191,7 @@ class Storage:
         ).fetchall()
         return [{"merchant": r["merchant"], "visits": r["visits"], "total": r["total"]} for r in rows]
 
+    @_locked
     def get_average_daily(self, start_date: str, end_date: str) -> float:
         row = self._conn.execute(
             """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
@@ -183,6 +206,7 @@ class Storage:
         days = max((end - start).days + 1, 1)
         return total / days
 
+    @_locked
     def get_trend(self, start_date: str, end_date: str) -> list[dict]:
         rows = self._conn.execute(
             """SELECT DATE(transaction_date) as date, SUM(amount * exchange_rate) as amount
@@ -194,6 +218,7 @@ class Storage:
         ).fetchall()
         return [{"date": r["date"], "amount": r["amount"]} for r in rows]
 
+    @_locked
     def get_trend_by_category(self, start_date: str, end_date: str) -> list[dict]:
         rows = self._conn.execute(
             """SELECT DATE(transaction_date) as date,
@@ -224,6 +249,7 @@ class Storage:
                     row[cat] = None
         return list(by_date.values())
 
+    @_locked
     def get_period_comparison(self, current_start: str, current_end: str, prev_start: str, prev_end: str) -> dict:
         curr_rows = self._conn.execute(
             """SELECT category, SUM(amount * exchange_rate) as total FROM transactions
@@ -244,10 +270,12 @@ class Storage:
             "previous": {"total": sum(prev_by_cat.values()), "by_category": prev_by_cat},
         }
 
+    @_locked
     def get_categories(self) -> list[dict]:
         rows = self._conn.execute("SELECT * FROM categories ORDER BY ROWID").fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def get_category_icon_map(self) -> dict[str, str]:
         """Returns {category_name: icon} for all categories that have an icon."""
         rows = self._conn.execute(
@@ -255,12 +283,14 @@ class Storage:
         ).fetchall()
         return {row["name"]: row["icon"] for row in rows}
 
+    @_locked
     def get_ingestion_state(self, source: str) -> Optional[dict]:
         row = self._conn.execute(
             "SELECT * FROM ingestion_state WHERE source = ?", (source,)
         ).fetchone()
         return dict(row) if row else None
 
+    @_locked
     def update_ingestion_state(
         self, source: str, last_id: str, last_at: str
     ) -> None:
@@ -272,6 +302,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def is_duplicate(self, source: str, source_id: str) -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM transactions WHERE source = ? AND source_id = ?",
@@ -279,12 +310,14 @@ class Storage:
         ).fetchone()
         return row is not None
 
+    @_locked
     def source_id_exists(self, source_id: str) -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM transactions WHERE source_id = ?", (source_id,)
         ).fetchone()
         return row is not None
 
+    @_locked
     def recent_transaction_exists(
         self, merchant: str, amount: float, minutes: int = 5
     ) -> bool:
@@ -297,6 +330,7 @@ class Storage:
         ).fetchone()
         return row is not None
 
+    @_locked
     def add_category(self, name: str, keywords: str, icon: str = "📌", color: Optional[str] = None, cat_type: str = "neutral") -> None:
         existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if existing:
@@ -310,6 +344,7 @@ class Storage:
         self._conn.execute("INSERT INTO categories (name, keywords, icon, color, type) VALUES (?, ?, ?, ?, ?)", (name, keywords, icon, color, cat_type))
         self._conn.commit()
 
+    @_locked
     def update_category(self, name: str, keywords: Optional[str] = None, icon: Optional[str] = None, color: Optional[str] = None, cat_type: Optional[str] = None) -> None:
         existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if not existing:
@@ -340,6 +375,7 @@ class Storage:
         self._conn.execute(f"UPDATE categories SET {', '.join(updates)} WHERE name = ?", params)
         self._conn.commit()
 
+    @_locked
     def delete_category(self, name: str) -> int:
         existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if not existing:
@@ -350,6 +386,7 @@ class Storage:
         self._conn.commit()
         return count
 
+    @_locked
     def set_merchant_override(self, merchant: str, category: str) -> None:
         self._conn.execute(
             "INSERT OR REPLACE INTO merchant_overrides (merchant, category, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
@@ -357,14 +394,17 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def get_merchant_overrides(self) -> dict[str, str]:
         rows = self._conn.execute("SELECT merchant, category FROM merchant_overrides").fetchall()
         return {r["merchant"]: r["category"] for r in rows}
 
+    @_locked
     def remove_merchant_override(self, merchant: str) -> None:
         self._conn.execute("DELETE FROM merchant_overrides WHERE merchant = ?", (merchant,))
         self._conn.commit()
 
+    @_locked
     def find_cross_source_duplicate(
         self, merchant: str, amount: float, source: str, within_minutes: int = 10
     ) -> Optional[dict]:
@@ -381,6 +421,7 @@ class Storage:
         ).fetchone()
         return dict(row) if row else None
 
+    @_locked
     def get_setting(self, key: str, default: str | None = None) -> str | None:
         row = self._conn.execute(
             "SELECT value FROM app_settings WHERE key = ?", (key,)
@@ -389,6 +430,7 @@ class Storage:
             return default
         return row["value"]
 
+    @_locked
     def set_setting(self, key: str, value: str) -> None:
         self._conn.execute(
             """INSERT INTO app_settings (key, value, updated_at)
@@ -399,6 +441,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def get_merchant_list(
         self,
         sort_by: str = "total_spent",
@@ -472,6 +515,7 @@ class Storage:
             result.append(d)
         return result
 
+    @_locked
     def get_merchant_profile(self, merchant: str) -> dict | None:
         """Return full stats for a single merchant, or None if merchant has no transactions."""
         row = self._conn.execute(
@@ -503,6 +547,7 @@ class Storage:
             profile["notes"] = tags_row["notes"] or ""
         return profile
 
+    @_locked
     def get_merchant_tags(self, merchant: str) -> dict:
         """Return tags and notes for a merchant (empty defaults if not set)."""
         row = self._conn.execute(
@@ -516,6 +561,7 @@ class Storage:
             "notes": row["notes"] or "",
         }
 
+    @_locked
     def set_merchant_tags(self, merchant: str, tags: list[str]) -> None:
         """Upsert tags for a merchant (does not touch notes)."""
         tags_str = ",".join(tags)
@@ -529,6 +575,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def set_merchant_notes(self, merchant: str, notes: str) -> None:
         """Upsert notes for a merchant (does not touch tags)."""
         self._conn.execute(
@@ -541,6 +588,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def get_merchant_trend(self, merchant: str, months: int = 6) -> dict:
         """Return monthly spend totals for a merchant over the last N months."""
         rows = self._conn.execute(
@@ -577,6 +625,7 @@ class Storage:
 
     # ── Budgets ────────────────────────────────────────────────────────────
 
+    @_locked
     def create_budget(self, category: Optional[str], amount: float, period: str) -> int:
         if period not in ("monthly", "weekly"):
             raise ValueError(f"period must be 'monthly' or 'weekly', got '{period}'")
@@ -599,10 +648,12 @@ class Storage:
             label = category if category else "Overall"
             raise ValueError(f"Budget for '{label}' ({period}) already exists")
 
+    @_locked
     def get_budgets(self) -> list[dict]:
         rows = self._conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def update_budget(self, budget_id: int, amount: float) -> None:
         row = self._conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
         if not row:
@@ -613,6 +664,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def delete_budget(self, budget_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
         if not row:
@@ -620,6 +672,7 @@ class Storage:
         self._conn.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
         self._conn.commit()
 
+    @_locked
     def get_budget_progress(self) -> list[dict]:
         """Return all budgets with current-period spending stats."""
         budgets = self._conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
@@ -682,6 +735,7 @@ class Storage:
 
     # ── Goals ──────────────────────────────────────────────────────────────
 
+    @_locked
     def create_goal(
         self,
         name: str,
@@ -696,12 +750,14 @@ class Storage:
         self._conn.commit()
         return cursor.lastrowid
 
+    @_locked
     def get_goals(self) -> list[dict]:
         rows = self._conn.execute(
             "SELECT * FROM goals ORDER BY created_at ASC"
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def update_goal(self, goal_id: int, **fields) -> None:
         allowed = {"name", "target_amount", "target_date", "status"}
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -718,6 +774,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def delete_goal(self, goal_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
@@ -726,6 +783,7 @@ class Storage:
         self._conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
         self._conn.commit()
 
+    @_locked
     def add_contribution(
         self,
         goal_id: int,
@@ -762,6 +820,7 @@ class Storage:
         self._conn.commit()
         return cursor.lastrowid
 
+    @_locked
     def get_contributions(self, goal_id: int) -> list[dict]:
         rows = self._conn.execute(
             "SELECT * FROM goal_contributions WHERE goal_id = ? ORDER BY contributed_date ASC, month ASC",
@@ -769,6 +828,7 @@ class Storage:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def update_contribution(self, contribution_id: int, **fields) -> None:
         allowed = {"amount", "note", "contributed_date"}
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -811,6 +871,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def delete_contribution(self, contribution_id: int) -> None:
         row = self._conn.execute(
             "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
@@ -833,6 +894,7 @@ class Storage:
             )
         self._conn.commit()
 
+    @_locked
     def get_goal_progress(self, goal_id: int) -> Optional[dict]:
         row = self._conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
@@ -871,6 +933,7 @@ class Storage:
             "contributions": contributions,
         }
 
+    @_locked
     def get_savings_overview(self, month: str) -> dict:
         """Return income, expenses, savings, and how much has been manually allocated to goals for the given month."""
         import calendar as _cal
@@ -907,6 +970,7 @@ class Storage:
 
     # ── Financial Health Score ──────────────────────────────────────────────
 
+    @_locked
     def get_health_score(self, months: int = 1) -> dict:
         """Compute 0-100 financial health score using the 50/30/20 rule.
 
@@ -1090,6 +1154,7 @@ class Storage:
 
     # ── Trips ───────────────────────────────────────────────────────────────
 
+    @_locked
     def create_trip(
         self,
         name: str,
@@ -1105,18 +1170,21 @@ class Storage:
         self._conn.commit()
         return cursor.lastrowid
 
+    @_locked
     def get_trips(self) -> list[dict]:
         rows = self._conn.execute(
             "SELECT * FROM trips ORDER BY created_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def get_trip(self, trip_id: int) -> Optional[dict]:
         row = self._conn.execute(
             "SELECT * FROM trips WHERE id = ?", (trip_id,)
         ).fetchone()
         return dict(row) if row else None
 
+    @_locked
     def update_trip(self, trip_id: int, **fields) -> None:
         allowed = {"name", "destination", "start_date", "end_date", "primary_currency"}
         updates = {k: v for k, v in fields.items() if k in allowed}
@@ -1133,6 +1201,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def delete_trip(self, trip_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
@@ -1141,6 +1210,7 @@ class Storage:
         self._conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
         self._conn.commit()
 
+    @_locked
     def activate_trip(self, trip_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
@@ -1155,6 +1225,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def deactivate_trip(self, trip_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
@@ -1165,12 +1236,14 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def get_active_trip(self) -> Optional[dict]:
         row = self._conn.execute(
             "SELECT * FROM trips WHERE status = 'active' LIMIT 1"
         ).fetchone()
         return dict(row) if row else None
 
+    @_locked
     def enlist_transaction(self, trip_id: int, tx_id: int, added_by: str = "auto") -> None:
         """Add a transaction to a trip. Idempotent — does nothing if already enlisted."""
         self._conn.execute(
@@ -1180,6 +1253,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def delist_transaction(self, trip_id: int, tx_id: int) -> None:
         """Remove a transaction from a trip. No-op if not enlisted."""
         self._conn.execute(
@@ -1188,6 +1262,7 @@ class Storage:
         )
         self._conn.commit()
 
+    @_locked
     def get_trip_transactions(
         self,
         trip_id: int,
@@ -1205,6 +1280,7 @@ class Storage:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def auto_assign_to_active_trip(self, tx_id: int) -> None:
         """If trips_enabled and an active trip exists, add tx_id to it. No-op otherwise."""
         if self.get_setting("trips_enabled", "false") != "true":
@@ -1214,6 +1290,7 @@ class Storage:
             return
         self.enlist_transaction(active["id"], tx_id, added_by="auto")
 
+    @_locked
     def is_in_trip(self, trip_id: int, tx_id: int) -> bool:
         """Return True if transaction tx_id is enlisted in trip trip_id."""
         row = self._conn.execute(
@@ -1222,6 +1299,7 @@ class Storage:
         ).fetchone()
         return row is not None
 
+    @_locked
     def get_trip_summary(self, trip_id: int) -> Optional[dict]:
         """Full analytics for a trip: total, count, days, daily average, by category, by day."""
         trip = self.get_trip(trip_id)
@@ -1280,6 +1358,7 @@ class Storage:
 
     # ── Recurring ─────────────────────────────────────────────────────────────
 
+    @_locked
     def get_merchant_history(self, merchant: str, days: int = 90) -> list[dict]:
         """Return expense transactions for a merchant within the past *days* days."""
         rows = self._conn.execute(
@@ -1291,6 +1370,7 @@ class Storage:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def save_recurring(
         self, merchant: str, avg_amount: float, frequency: str, category: Optional[str] = None
     ) -> None:
@@ -1314,6 +1394,7 @@ class Storage:
             )
         self._conn.commit()
 
+    @_locked
     def get_recurring_transactions(self) -> list[dict]:
         rows = self._conn.execute(
             "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
@@ -1322,6 +1403,7 @@ class Storage:
 
     # ── Telegram chat ID ──────────────────────────────────────────────────────
 
+    @_locked
     def get_telegram_chat_id(self) -> Optional[int]:
         value = self.get_setting("telegram_chat_id")
         if value:
@@ -1336,11 +1418,13 @@ class Storage:
             return chat_id
         return None
 
+    @_locked
     def set_telegram_chat_id(self, chat_id: int) -> None:
         self.set_setting("telegram_chat_id", str(chat_id))
 
     # ── Apple Wallet cards ────────────────────────────────────────────────────
 
+    @_locked
     def get_apple_wallet_cards(self) -> list[str]:
         rows = self._conn.execute(
             """SELECT DISTINCT description FROM transactions
@@ -1351,6 +1435,7 @@ class Storage:
 
     # ── Merchant list helper ──────────────────────────────────────────────────
 
+    @_locked
     def get_merchants_in_range(self, start: str, end: str) -> list[str]:
         """Return distinct merchant names with transactions in [start, end]."""
         rows = self._conn.execute(
@@ -1364,16 +1449,19 @@ class Storage:
 
     # ── Budget / Goal single-row fetch ────────────────────────────────────────
 
+    @_locked
     def get_budget(self, budget_id: int) -> Optional[dict]:
         row = self._conn.execute("SELECT * FROM budgets WHERE id = ?", (budget_id,)).fetchone()
         return dict(row) if row else None
 
+    @_locked
     def get_goal(self, goal_id: int) -> Optional[dict]:
         row = self._conn.execute("SELECT * FROM goals WHERE id = ?", (goal_id,)).fetchone()
         return dict(row) if row else None
 
     # ── Analytics wrappers ────────────────────────────────────────────────────
 
+    @_locked
     def comparison(self, period: str = "month", date: Optional[str] = None) -> dict:
         """Return overall + per-category period comparison delegating to analytics."""
         from src.analytics import get_period_comparison, get_category_comparison
@@ -1382,28 +1470,34 @@ class Storage:
             "categories": get_category_comparison(self._conn, period, date),
         }
 
+    @_locked
     def top_merchants_by_period(
         self, limit: int = 10, period: str = "month", date: Optional[str] = None
     ) -> list[dict]:
         from src.analytics import get_top_merchants
         return get_top_merchants(self._conn, limit, period, date)
 
+    @_locked
     def merchant_trend_chart(self, merchant: str) -> dict:
         from src.analytics import get_merchant_trend
         return get_merchant_trend(self._conn, merchant)
 
+    @_locked
     def spending_velocity(self) -> dict:
         from src.analytics import get_spending_velocity
         return get_spending_velocity(self._conn)
 
+    @_locked
     def spending_anomalies(self, multiplier: float = 2.0) -> list[dict]:
         from src.analytics import get_anomalies
         return get_anomalies(self._conn, multiplier)
 
+    @_locked
     def new_merchants(self) -> list[dict]:
         from src.analytics import check_new_merchants
         return check_new_merchants(self._conn)
 
+    @_locked
     def generate_digest(self, report_type: str = "monthly") -> dict:
         from src.analytics import generate_summary
         return generate_summary(self._conn, report_type)
