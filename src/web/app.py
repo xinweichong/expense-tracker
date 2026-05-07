@@ -106,6 +106,10 @@ def create_dashboard_app(
             raise HTTPException(status_code=500, detail="User context not found")
         return ctx.storage
 
+    @app.get("/health")
+    async def health():
+        return {"status": "ok"}
+
     @app.get("/api/ping")
     async def ping(username: str = Depends(require_auth)):
         return {"status": "ok"}
