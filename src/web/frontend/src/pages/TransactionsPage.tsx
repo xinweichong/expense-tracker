@@ -92,8 +92,15 @@ export function TransactionsPage() {
           selectedTransaction ? 'hidden md:block' : ''
         }`}
       >
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">Transactions</h1>
+        <div className="flex items-start justify-between pb-5 border-b border-border">
+          <div className="flex flex-col gap-1">
+            <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
+              Transactions
+            </div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
+              Every dollar tracked
+            </h1>
+          </div>
           <Button size="sm" onClick={() => setShowForm(!showForm)}>
             <Plus className="w-4 h-4 mr-1" />
             Add

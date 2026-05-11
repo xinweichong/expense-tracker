@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { type Transaction } from '@/api/client';
-import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
-import { useIconMap } from '@/hooks/useIconMap';
-import { Badge } from '@/components/ui/badge';
+import { cn, formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
+import { SourceGlyph } from '@/components/icons/sources';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 
@@ -21,51 +19,51 @@ export function TransactionRow({
   onRemove?: () => void;
   removeDisabled?: boolean;
 }) {
-  const [hovered, setHovered] = useState(false);
-  const categoryColor = getCategoryColor(tx.category ?? '');
-  const iconMap = useIconMap();
-  const categoryIcon = tx.category ? (iconMap[tx.category] ?? [...tx.category][0] ?? '•') : '•';
-
+  const isIncome = tx.type === 'income';
+  const categoryColor = getCategoryColor(tx.category ?? 'Other');
+  const sign = isIncome ? '+' : '';
   const isClickable = !readOnly && !!onClick;
 
   return (
     <div
-      className={`px-4 py-3 flex items-center gap-3 border-b border-border transition-colors last:border-b-0 ${isClickable ? 'cursor-pointer' : ''}`}
-      style={{ backgroundColor: `${categoryColor}${selected || hovered ? '1A' : '0D'}` }}
       onClick={isClickable ? onClick : undefined}
-      onMouseEnter={isClickable ? () => setHovered(true) : undefined}
-      onMouseLeave={isClickable ? () => setHovered(false) : undefined}
+      className={cn(
+        'grid gap-3 items-center px-3.5 py-2.5 rounded-md transition-colors',
+        onRemove ? 'grid-cols-[36px_1fr_auto_auto]' : 'grid-cols-[36px_1fr_auto]',
+        isClickable && 'cursor-pointer',
+      )}
+      style={{ background: `${categoryColor}${selected ? '1A' : '0D'}` }}
+      onMouseEnter={isClickable ? (e) => (e.currentTarget.style.background = `${categoryColor}1A`) : undefined}
+      onMouseLeave={isClickable ? (e) => (e.currentTarget.style.background = `${categoryColor}${selected ? '1A' : '0D'}`) : undefined}
     >
       <div
-        className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-base"
-        style={{ backgroundColor: `${categoryColor}33` }}
+        className="w-8 h-8 rounded-md flex items-center justify-center text-sm font-bold shrink-0"
+        style={{ background: `${categoryColor}33`, color: categoryColor }}
       >
-        {categoryIcon}
+        {isIncome ? '+' : tx.category?.charAt(0) ?? '·'}
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">
+      <div className="min-w-0">
+        <div className="text-sm font-medium tracking-[-0.005em] truncate">
           {tx.merchant || tx.description || 'Transaction'}
-        </p>
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-xs text-muted">{formatDateTime(tx.transaction_date)}</p>
-          {tx.category && (
-            <Badge variant="outline" className="text-xs px-1.5 py-0 h-4 border-border">
-              {tx.category}
-            </Badge>
-          )}
+        </div>
+        <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 flex items-center gap-1.5">
+          <span>{formatDateTime(tx.transaction_date)}</span>
+          {tx.category && <span>· {tx.category}</span>}
+          <SourceGlyph source={tx.source} />
         </div>
       </div>
-      <div className="text-right">
-        <p className={`text-sm font-semibold whitespace-nowrap ${tx.type === 'income' ? 'text-success' : ''}`}>
-          {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, tx.currency)}
-        </p>
+      <div
+        data-testid="tx-amount"
+        className={cn('font-bold tracking-tight text-sm text-right font-display', isIncome && 'text-teal')}
+      >
+        {sign}{formatCurrency(tx.amount, tx.currency)}
       </div>
       {onRemove && (
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7 shrink-0 text-destructive"
-          onClick={e => { e.stopPropagation(); onRemove(); }}
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
           disabled={removeDisabled}
         >
           <Trash2 className="w-3.5 h-3.5" />
