@@ -9,6 +9,12 @@ import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/animations';
 import { Search } from 'lucide-react';
 import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
+import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
+
+function merchantInitialColor(name: string): string {
+  const idx = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % SPECTRUM_PALETTE.length;
+  return SPECTRUM_PALETTE[idx];
+}
 
 const SORT_OPTIONS = [
   { value: 'total_spent',       label: 'Total Spent' },
@@ -133,6 +139,7 @@ export function MerchantsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs text-muted">
+                    <th className="pl-3 pr-1 py-3" />
                     <th className="text-left px-4 py-3 font-medium">Merchant</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Category</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Tags</th>
@@ -150,6 +157,17 @@ export function MerchantsPage() {
                         selectedMerchant === m.merchant ? 'bg-foreground/10' : ''
                       }`}
                     >
+                      <td className="py-2.5 pl-3 pr-1">
+                        <div
+                          className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold font-mono"
+                          style={{
+                            background: `${merchantInitialColor(m.merchant)}22`,
+                            color: merchantInitialColor(m.merchant),
+                          }}
+                        >
+                          {m.merchant.charAt(0).toUpperCase()}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-foreground truncate max-w-[180px]">{m.merchant}</div>
                         <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">

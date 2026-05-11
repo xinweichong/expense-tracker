@@ -155,13 +155,18 @@ export function MerchantProfile({
               <button
                 key={tag}
                 onClick={() => toggleTag(tag)}
-                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  active
-                    ? TAG_COLORS[tag]
-                    : 'border-border text-muted hover:text-foreground'
-                }`}
+                className="cursor-pointer"
               >
-                {tag}
+                <Badge
+                  variant={active ? 'default' : 'outline'}
+                  className={`transition-colors ${
+                    active
+                      ? TAG_COLORS[tag]
+                      : 'border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  {tag}
+                </Badge>
               </button>
             );
           })}
