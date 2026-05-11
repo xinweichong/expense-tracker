@@ -100,7 +100,7 @@ export function MerchantProfile({
       {/* Header — pinned above scroll area */}
       <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
         <div>
-          <h2 className="text-lg font-bold text-foreground">{profile.merchant}</h2>
+          <h2 className="text-lg font-bold font-display tracking-tight text-foreground">{profile.merchant}</h2>
           {profile.category && (
             <Badge variant="outline" className="mt-1 text-xs">{profile.category}</Badge>
           )}
@@ -121,8 +121,8 @@ export function MerchantProfile({
           { label: 'Last Seen', value: profile.last_seen ?? '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-background rounded-lg p-3 border border-border">
-            <p className="text-xs text-muted">{label}</p>
-            <p className="text-sm font-semibold text-foreground mt-0.5">{value}</p>
+            <p className="text-[10px] font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
+            <p className="text-sm font-display font-bold text-foreground mt-0.5">{value}</p>
           </div>
         ))}
       </div>
@@ -147,7 +147,7 @@ export function MerchantProfile({
 
       {/* Tags */}
       <div>
-        <p className="text-xs font-medium text-muted mb-2">TAGS</p>
+        <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Tags</p>
         <div className="flex flex-wrap gap-2">
           {ALL_TAGS.map((tag) => {
             const active = (profile.tags ?? []).includes(tag);
@@ -155,13 +155,18 @@ export function MerchantProfile({
               <button
                 key={tag}
                 onClick={() => toggleTag(tag)}
-                className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
-                  active
-                    ? TAG_COLORS[tag]
-                    : 'border-border text-muted hover:text-foreground'
-                }`}
+                className="cursor-pointer"
               >
-                {tag}
+                <Badge
+                  variant={active ? 'default' : 'outline'}
+                  className={`transition-colors ${
+                    active
+                      ? TAG_COLORS[tag]
+                      : 'border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  {tag}
+                </Badge>
               </button>
             );
           })}
@@ -170,7 +175,7 @@ export function MerchantProfile({
 
       {/* Notes */}
       <div>
-        <p className="text-xs font-medium text-muted mb-2">NOTES</p>
+        <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Notes</p>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

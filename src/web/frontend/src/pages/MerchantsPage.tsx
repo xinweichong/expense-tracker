@@ -4,10 +4,17 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api, type MerchantSummary } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/animations';
 import { Search } from 'lucide-react';
 import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
+import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
+
+function merchantInitialColor(name: string): string {
+  const idx = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % SPECTRUM_PALETTE.length;
+  return SPECTRUM_PALETTE[idx];
+}
 
 const SORT_OPTIONS = [
   { value: 'total_spent',       label: 'Total Spent' },
@@ -64,9 +71,13 @@ export function MerchantsPage() {
           selectedMerchant ? 'hidden md:block' : ''
         }`}
       >
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-foreground">Merchants</h1>
-          <span className="text-sm text-muted">{merchants.length} merchants</span>
+        <div className="flex flex-col gap-1 pb-5 border-b border-border">
+          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
+            Merchants
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
+            {merchants.length} tracked
+          </h1>
         </div>
 
         {/* Filters */}
@@ -97,13 +108,18 @@ export function MerchantsPage() {
               <button
                 key={tag}
                 onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-                className={`px-2 py-1 text-xs rounded-full border transition-colors ${
-                  tagFilter === tag
-                    ? `${TAG_COLORS[tag]} border-current`
-                    : 'border-border text-muted hover:text-foreground'
-                }`}
+                className="focus:outline-none"
               >
-                {tag}
+                <Badge
+                  variant="outline"
+                  className={`cursor-pointer transition-colors ${
+                    tagFilter === tag
+                      ? `${TAG_COLORS[tag]} border-current`
+                      : 'border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  {tag}
+                </Badge>
               </button>
             ))}
           </div>
@@ -123,6 +139,7 @@ export function MerchantsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs text-muted">
+                    <th className="pl-3 pr-1 py-3" />
                     <th className="text-left px-4 py-3 font-medium">Merchant</th>
                     <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Category</th>
                     <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Tags</th>
@@ -140,23 +157,40 @@ export function MerchantsPage() {
                         selectedMerchant === m.merchant ? 'bg-foreground/10' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 font-medium text-foreground">{m.merchant}</td>
+                      <td className="py-2.5 pl-3 pr-1">
+                        <div
+                          className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold font-mono"
+                          style={{
+                            background: `${merchantInitialColor(m.merchant)}22`,
+                            color: merchantInitialColor(m.merchant),
+                          }}
+                        >
+                          {m.merchant.charAt(0).toUpperCase()}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-foreground truncate max-w-[180px]">{m.merchant}</div>
+                        <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">
+                          {m.transaction_count} txns · {m.last_seen ?? '—'}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-muted hidden sm:table-cell">
                         {m.category ?? '—'}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {(m.tags ?? []).map((tag) => (
-                            <span
+                            <Badge
                               key={tag}
-                              className={`px-1.5 py-0.5 text-xs rounded-full ${TAG_COLORS[tag] ?? 'bg-zinc-500/20 text-zinc-400'}`}
+                              variant="outline"
+                              className={`text-[10px] px-1.5 py-0 ${TAG_COLORS[tag] ?? 'text-muted'}`}
                             >
                               {tag}
-                            </span>
+                            </Badge>
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-foreground">
+                      <td className="px-4 py-3 text-right font-display font-bold text-foreground">
                         {formatSGD(m.total_sgd)}
                       </td>
                       <td className="px-4 py-3 text-right text-muted hidden sm:table-cell">
