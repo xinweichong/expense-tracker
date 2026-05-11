@@ -117,3 +117,11 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
 export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/** Map spending pace % to a spectrum colour. */
+export function getPaceColor(percent: number): string {
+  if (percent < 80)  return '#34D399'; // mint — on track
+  if (percent <= 100) return '#00D4AA'; // teal — moderate
+  if (percent <= 115) return '#FB923C'; // tangerine — over pace
+  return '#FF6B6B';                     // coral — significantly over
+}
