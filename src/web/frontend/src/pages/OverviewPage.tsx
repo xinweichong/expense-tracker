@@ -392,7 +392,7 @@ export function OverviewPage() {
                   </div>
                   <div>
                     <p className="text-xs text-muted uppercase tracking-wide font-mono mb-0.5">Saved</p>
-                    <p className={cn('text-sm font-semibold', saved >= 0 ? 'text-success' : 'text-destructive')}>
+                    <p className={cn('text-sm font-semibold', saved >= 0 ? 'text-teal' : 'text-destructive')}>
                       <AnimatedCurrency value={saved} />
                     </p>
                   </div>
