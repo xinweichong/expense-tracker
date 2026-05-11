@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CasheLogo } from '@/components/ui/CasheLogo';
+import { CasheWordmark } from '@/components/ui/Brand';
 import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
 import { api } from '@/api/client';
 import {
@@ -108,8 +108,7 @@ export function OnboardingPage() {
       <div className="relative w-full max-w-md space-y-6">
         {/* Branding header */}
         <div className="flex items-center gap-3">
-          <CasheLogo size={32} />
-          <span className="text-lg font-semibold text-foreground">Cashe</span>
+          <CasheWordmark size={32} />
         </div>
 
         {/* Progress dots */}
