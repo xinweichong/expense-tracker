@@ -17,6 +17,7 @@ import { AdminPage } from '@/pages/AdminPage';
 import { SetPasswordPage } from '@/pages/SetPasswordPage';
 import { api } from '@/api/client';
 import { setCategoryColors, nearestSpectrum } from '@/lib/utils';
+import { CasheWordmark } from '@/components/ui/Brand';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
 
 const queryClient = new QueryClient({
@@ -92,8 +93,11 @@ function AppContent() {
 
   if (loading || (isAuthenticated && userLoading)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-muted">Loading...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-background">
+        <CasheWordmark size={42} />
+        <span className="text-xs text-muted font-mono uppercase tracking-[0.22em]">
+          Catching up…
+        </span>
       </div>
     );
   }
