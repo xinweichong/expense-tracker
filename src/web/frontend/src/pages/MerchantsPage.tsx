@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api, type MerchantSummary } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/animations';
 import { Search } from 'lucide-react';
@@ -64,9 +65,13 @@ export function MerchantsPage() {
           selectedMerchant ? 'hidden md:block' : ''
         }`}
       >
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-foreground">Merchants</h1>
-          <span className="text-sm text-muted">{merchants.length} merchants</span>
+        <div className="flex flex-col gap-1 pb-5 border-b border-border">
+          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
+            Merchants
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
+            {merchants.length} tracked
+          </h1>
         </div>
 
         {/* Filters */}
@@ -97,13 +102,18 @@ export function MerchantsPage() {
               <button
                 key={tag}
                 onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-                className={`px-2 py-1 text-xs rounded-full border transition-colors ${
-                  tagFilter === tag
-                    ? `${TAG_COLORS[tag]} border-current`
-                    : 'border-border text-muted hover:text-foreground'
-                }`}
+                className="focus:outline-none"
               >
-                {tag}
+                <Badge
+                  variant="outline"
+                  className={`cursor-pointer transition-colors ${
+                    tagFilter === tag
+                      ? `${TAG_COLORS[tag]} border-current`
+                      : 'border-border text-muted hover:text-foreground'
+                  }`}
+                >
+                  {tag}
+                </Badge>
               </button>
             ))}
           </div>
@@ -140,23 +150,29 @@ export function MerchantsPage() {
                         selectedMerchant === m.merchant ? 'bg-foreground/10' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 font-medium text-foreground">{m.merchant}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-foreground truncate max-w-[180px]">{m.merchant}</div>
+                        <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">
+                          {m.transaction_count} txns · {m.last_seen ?? '—'}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-muted hidden sm:table-cell">
                         {m.category ?? '—'}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {(m.tags ?? []).map((tag) => (
-                            <span
+                            <Badge
                               key={tag}
-                              className={`px-1.5 py-0.5 text-xs rounded-full ${TAG_COLORS[tag] ?? 'bg-zinc-500/20 text-zinc-400'}`}
+                              variant="outline"
+                              className={`text-[10px] px-1.5 py-0 ${TAG_COLORS[tag] ?? 'text-muted'}`}
                             >
                               {tag}
-                            </span>
+                            </Badge>
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-foreground">
+                      <td className="px-4 py-3 text-right font-display font-bold text-foreground">
                         {formatSGD(m.total_sgd)}
                       </td>
                       <td className="px-4 py-3 text-right text-muted hidden sm:table-cell">
