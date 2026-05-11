@@ -1,24 +1,48 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0D0D0F;
-  --color-card: #16161A;
-  --color-card-hover: #1C1C22;
-  --color-border: #2A2A32;
-  --color-foreground: #E8E8ED;
-  --color-muted: #72727E;
-  --color-accent: #00D4AA;
-  --color-accent-foreground: #0D0D0F;
-  --color-popover: #16161A;
-  --color-popover-foreground: #E8E8ED;
-  --color-primary: #00D4AA;
-  --color-primary-foreground: #0D0D0F;
-  --color-destructive: #FF453A;
+  /* Brand spectrum */
+  --color-teal:       #00D4AA;
+  --color-mint:       #34D399;
+  --color-honey:      #FBBF24;
+  --color-tangerine:  #FB923C;
+  --color-coral:      #FF6B6B;
+
+  /* System */
+  --color-background:        #0B0B14;
+  --color-card:              #161624;
+  --color-card-elev:         #1B1B2C;
+  --color-card-hover:        #1C1C22;
+  --color-border:            #2A2A3F;
+  --color-foreground:        #EEEAF5;
+  --color-muted:             #7A7488;
+  --color-destructive:       #FF453A;
   --color-destructive-foreground: #FFFFFF;
-  --color-success: #30D158;
-  --color-warning: #FFD60A;
-  --color-info: #64D2FF;
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Legacy aliases (kept for migration; remove in Phase 4) */
+  --color-accent:            #00D4AA;
+  --color-accent-foreground: #0B0B14;
+  --color-primary:           #00D4AA;
+  --color-primary-foreground:#0B0B14;
+  --color-popover:           #161624;
+  --color-popover-foreground:#EEEAF5;
+  --color-success:           #00D4AA;
+  --color-warning:           #FBBF24;
+  --color-info:              #34D399;
+
+  /* Fonts */
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-body:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
+
+  /* Radii */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   14px;
+  --radius-2xl:  24px;
+  --radius-pill: 9999px;
 }
 
 body {
