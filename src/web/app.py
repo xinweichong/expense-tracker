@@ -695,6 +695,7 @@ def create_dashboard_app(
             "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
             "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
+            "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 
     @app.put("/api/settings")
@@ -748,6 +749,12 @@ def create_dashboard_app(
             else:
                 validated["trips_enabled"] = "true" if val else "false"
 
+        if "category_colors_snapped_v2" in body:
+            validated["category_colors_snapped_v2"] = str(body["category_colors_snapped_v2"])
+
+        if "category_colors_pre_v2" in body:
+            validated["category_colors_pre_v2"] = str(body["category_colors_pre_v2"])
+
         if errors:
             raise HTTPException(status_code=422, detail=errors)
 
@@ -761,6 +768,7 @@ def create_dashboard_app(
             "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
             "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
+            "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 
     # ── Budgets ──────────────────────────────────────────────────────────
