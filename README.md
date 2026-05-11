@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="cashe-telegram-banner.png" alt="Cashe" width="640" />
+<img src="cashe-banner.png" alt="cashe" width="640" />
 
-# Cashe
+# cashe
 
-### Know where every dollar goes.
+### cash, caught.
 
 A privacy-first personal finance app that **automatically captures every transaction** from your bank emails and Apple Wallet — no manual logging, no subscription fees, no data leaving your server.
 
