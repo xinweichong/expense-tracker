@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { SPECTRUM_PALETTE } from './chartTheme'
+import { SPECTRUM_PALETTE, COLOR_MINT, COLOR_TEAL, COLOR_TANGERINE, COLOR_CORAL } from './chartTheme'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -120,8 +120,8 @@ export function toDateStr(d: Date): string {
 
 /** Map spending pace % to a spectrum colour. */
 export function getPaceColor(percent: number): string {
-  if (percent < 80)  return '#34D399'; // mint — on track
-  if (percent <= 100) return '#00D4AA'; // teal — moderate
-  if (percent <= 115) return '#FB923C'; // tangerine — over pace
-  return '#FF6B6B';                     // coral — significantly over
+  if (percent < 80)  return COLOR_MINT;
+  if (percent <= 100) return COLOR_TEAL;
+  if (percent <= 115) return COLOR_TANGERINE;
+  return COLOR_CORAL;
 }
