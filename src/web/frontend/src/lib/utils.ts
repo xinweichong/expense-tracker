@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { SPECTRUM_PALETTE } from './chartTheme'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -63,16 +64,15 @@ export function formatDateTime(date: string | null | undefined): string {
 }
 
 const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
-  'Food': '#FF6B6B',
-  'Transport': '#64D2FF',
-  'Shopping': '#BF5AF2',
-  'Bills': '#FFD60A',
-  'Entertainment': '#30D158',
-  'Other': '#72727E',
-  'Income': '#34C759',
+  'Food':          '#FB923C', // tangerine
+  'Transport':     '#34D399', // mint
+  'Shopping':      '#FF6B6B', // coral
+  'Bills':         '#FBBF24', // honey
+  'Entertainment': '#2DD4BF', // mint-teal
+  'Other':         '#7A7488', // muted
+  'Income':        '#00D4AA', // teal
 };
 
-// Runtime color overrides — populated when categories load from DB
 const _categoryColorOverrides: Record<string, string> = {};
 
 export function setCategoryColors(categories: { name: string; color: string | null }[]) {
@@ -86,15 +86,32 @@ export function setCategoryColors(categories: { name: string; color: string | nu
 
 export function getCategoryColor(category: string): string {
   if (_categoryColorOverrides[category]) return _categoryColorOverrides[category];
-  return DEFAULT_CATEGORY_COLORS[category] ?? '#72727E';
+  return DEFAULT_CATEGORY_COLORS[category] ?? '#7A7488';
 }
 
-export const PALETTE = [
-  '#FF6B6B', '#64D2FF', '#BF5AF2', '#FFD60A', '#30D158',
-  '#FF9F0A', '#FF375F', '#7D7AFF', '#5AC8FA', '#FF6482',
-  '#63E6BE', '#DAEFBD', '#B4A7FF', '#FFA07A', '#98D8C8',
-  '#F7DC6F', '#BB8FCE', '#85C1E9', '#F0B27A', '#AED6F1',
-];
+/** Re-exported palette for the category color picker in Settings. */
+export const PALETTE = SPECTRUM_PALETTE;
+
+/** Find the nearest spectrum color to `hex` by Euclidean distance in RGB. */
+export function nearestSpectrum(hex: string): string {
+  const target = hexToRgb(hex);
+  if (!target) return SPECTRUM_PALETTE[0];
+  let best = SPECTRUM_PALETTE[0];
+  let bestDist = Infinity;
+  for (const candidate of SPECTRUM_PALETTE) {
+    const c = hexToRgb(candidate)!;
+    const d = (target.r - c.r) ** 2 + (target.g - c.g) ** 2 + (target.b - c.b) ** 2;
+    if (d < bestDist) { bestDist = d; best = candidate; }
+  }
+  return best;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const m = hex.replace('#', '').match(/^([0-9a-f]{6})$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
+}
 
 /** Format a Date to "YYYY-MM-DD" in local time. */
 export function toDateStr(d: Date): string {
