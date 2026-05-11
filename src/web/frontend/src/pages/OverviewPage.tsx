@@ -14,7 +14,7 @@ import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
-import { StatCard, PageCard } from '@/components/ui/cards';
+import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { springs, staggerContainerVariants, staggerItemVariants, AnimatedCurrency } from '@/lib/animations';
 
@@ -106,6 +106,61 @@ function HealthScoreCard() {
   const topWeakness = data.components
     ? Object.values(data.components).sort((a, b) => (a.score / a.max) - (b.score / b.max))[0]
     : null;
+
+  const scoreContent = (
+    <div
+      className="flex items-center gap-4 cursor-pointer"
+      onClick={() => navigate('/analytics')}
+    >
+      {/* Score ring */}
+      <svg width="56" height="56" className="shrink-0">
+        <circle cx="28" cy="28" r={r} fill="none" stroke="#2A2A32" strokeWidth="4" />
+        <motion.circle
+          cx="28" cy="28" r={r} fill="none"
+          stroke={ringColor}
+          strokeWidth="4"
+          strokeDasharray={circ}
+          strokeLinecap="round"
+          transform="rotate(-90 28 28)"
+          initial={{ strokeDashoffset: circ }}
+          animate={{ strokeDashoffset }}
+          transition={springs.gentle}
+        />
+        <text x="28" y="32" textAnchor="middle" fontSize="11" fontWeight="700" fill="#E8E8ED">
+          {score}
+        </text>
+      </svg>
+
+      {/* Text */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2">
+          {score < 70 && (
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Health Score</p>
+          )}
+          <span
+            className="text-xs font-medium"
+            style={{ color: ringColor }}
+          >
+            {data.grade}
+          </span>
+        </div>
+        {topWeakness && topWeakness.score < topWeakness.max && (
+          <p className="text-xs text-muted mt-0.5 truncate">
+            {topWeakness.description.split(' ').slice(0, 8).join(' ')}
+          </p>
+        )}
+        <p className="text-xs text-muted/60 mt-0.5">See breakdown →</p>
+      </div>
+    </div>
+  );
+
+  if (score >= 70) {
+    return (
+      <HighlightCard title="Financial Health">
+        {scoreContent}
+      </HighlightCard>
+    );
+  }
 
   return (
     <Card
@@ -248,10 +303,17 @@ export function OverviewPage() {
     <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-overview">
 
       {/* ── Header area (period selector) ── */}
-      <div className="area-header">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold">Overview</h1>
-          <div className="flex items-center gap-2">
+      <div className="area-header flex justify-between items-end pb-5 border-b border-border">
+        <div>
+          <div className="text-xs uppercase tracking-[0.22em] text-muted mb-2 font-mono font-semibold">
+            Overview · {new Date(start).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' })}
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+            Where the dollars go
+          </h1>
+        </div>
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={goBack}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -262,7 +324,7 @@ export function OverviewPage() {
             <Button variant="ghost" size="icon" onClick={goForward}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <span className="text-sm text-muted min-w-[140px] text-center">{getRangeLabel(date, period)}</span>
+            <span className="text-sm text-muted min-w-[120px] text-center">{getRangeLabel(date, period)}</span>
           </div>
           <div className="flex rounded-lg border border-border overflow-hidden flex-shrink-0">
             {PERIOD_OPTIONS.map((p) => (
@@ -291,12 +353,53 @@ export function OverviewPage() {
         animate="animate"
       >
 
-        {/* Balance Cards */}
+        {/* Hero spend card */}
         <motion.div variants={staggerItemVariants}>
-          <div className="grid grid-cols-2 gap-4">
-            <StatCard label="Spent" value={<AnimatedCurrency value={expenses} />} variant="expense" />
-            <StatCard label="Income" value={<AnimatedCurrency value={income} />} variant="income" />
-          </div>
+          {(() => {
+            const now = new Date();
+            const dayOfMonth = now.getDate();
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const dailyAvg = dayOfMonth > 0 ? expenses / dayOfMonth : 0;
+            const projection = dailyAvg * daysInMonth;
+            const saved = income - expenses;
+            return (
+              <HeroCard title={`This Month · Day ${dayOfMonth} of ${daysInMonth}`}>
+                {/* Big spend figure */}
+                <div
+                  className="text-4xl md:text-5xl font-bold tracking-tight mb-1"
+                  style={{
+                    background: 'linear-gradient(90deg, #FBBF24 0%, #FB923C 50%, #FF6B6B 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
+                >
+                  <AnimatedCurrency value={expenses} />
+                </div>
+                {/* Daily avg + projection */}
+                <p className="text-xs text-muted mb-4">
+                  {formatCurrency(dailyAvg)}/day avg · {formatCurrency(projection)} projected
+                </p>
+                {/* 3-col summary */}
+                <div className="border-t border-dashed border-border/60 pt-3 grid grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-xs text-muted uppercase tracking-wide font-mono mb-0.5">Income</p>
+                    <p className="text-sm font-semibold text-success"><AnimatedCurrency value={income} /></p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted uppercase tracking-wide font-mono mb-0.5">Spent</p>
+                    <p className="text-sm font-semibold text-destructive"><AnimatedCurrency value={expenses} /></p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted uppercase tracking-wide font-mono mb-0.5">Saved</p>
+                    <p className={cn('text-sm font-semibold', saved >= 0 ? 'text-success' : 'text-destructive')}>
+                      <AnimatedCurrency value={saved} />
+                    </p>
+                  </div>
+                </div>
+              </HeroCard>
+            );
+          })()}
         </motion.div>
 
         {/* Active trip */}
