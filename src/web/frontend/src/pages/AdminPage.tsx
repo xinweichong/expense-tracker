@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { CasheLogo } from '@/components/ui/CasheLogo';
+import { CasheWordmark } from '@/components/ui/Brand';
 
 // ── Admin API client (calls /admin/api/*) ─────────────────────────────────────
 
@@ -102,8 +102,7 @@ function AdminLogin({ onSuccess }: { onSuccess: (token: string) => void }) {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex items-center gap-3">
-          <CasheLogo size={28} />
-          <span className="text-base font-semibold text-foreground">Cashe Admin</span>
+          <CasheWordmark size={22} />
         </div>
         <Card className="p-6">
           <form onSubmit={handleSubmit} className="space-y-3">
@@ -233,8 +232,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <CasheLogo size={28} />
-          <span className="text-base font-semibold text-foreground">Cashe Admin</span>
+          <CasheWordmark size={22} />
         </div>
         <Button variant="ghost" size="sm" onClick={handleLogout}>Sign out</Button>
       </div>
