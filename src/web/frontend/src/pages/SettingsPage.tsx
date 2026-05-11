@@ -282,7 +282,14 @@ export function SettingsPage() {
 
       {/* ── Title ── */}
       <div className="area-title">
-        <h1 className="text-xl font-bold">Settings</h1>
+        <div className="flex flex-col gap-1 pb-5 border-b border-border">
+          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
+            Settings
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
+            Preferences
+          </h1>
+        </div>
       </div>
 
       {/* ── LEFT PANEL: Account + Connections ── */}
@@ -300,7 +307,7 @@ export function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="w-full border-destructive text-destructive hover:bg-destructive hover:text-white"
+              className="w-full border-destructive/40 text-destructive hover:bg-destructive/10"
               onClick={logout}
             >
               Sign out
