@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, getPaceColor } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
@@ -19,10 +19,7 @@ export function VelocityRing({ data }: { data: VelocityData }) {
   const progress = Math.min(pace_percent, 100) / 100;
   const strokeDashoffset = circumference - progress * circumference;
 
-  const color =
-    status === 'ahead' ? '#FF453A' :
-    status === 'on_track' ? '#30D158' :
-    '#64D2FF';
+  const color = getPaceColor(pace_percent);
 
   return (
     <div className="flex items-center gap-6">

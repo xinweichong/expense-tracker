@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
-import { PageCard, ChartCard } from '@/components/ui/cards';
+import { PageCard, ChartCard, HighlightCard } from '@/components/ui/cards';
 import { ComparisonBarChart } from '@/components/charts/ComparisonBarChart';
 import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { MerchantTable } from '@/components/charts/MerchantTable';
@@ -30,6 +30,7 @@ function HealthScoreBreakdown() {
   });
 
   const score = data?.score ?? null;
+  const isHighlighted = score != null && score >= 70;
   const ringColor =
     !score ? '#2A2A32' :
     score >= 80 ? '#30D158' :
@@ -54,93 +55,99 @@ function HealthScoreBreakdown() {
     </select>
   );
 
-  return (
-    <PageCard title="Financial Health Score" action={monthSelect}>
-      {isLoading ? (
-        <div className="h-48 animate-pulse bg-foreground/10 rounded-md" />
-      ) : !data?.has_income_data ? (
-        <div className="py-8 text-center">
-          <p className="text-muted text-sm">No income transactions found for this period.</p>
-          <p className="text-muted/60 text-xs mt-1">Add income transactions to calculate your health score.</p>
+  const scoreContent = isLoading ? (
+    <div className="h-48 animate-pulse bg-foreground/10 rounded-md" />
+  ) : !data?.has_income_data ? (
+    <div className="py-8 text-center">
+      <p className="text-muted text-sm">No income transactions found for this period.</p>
+      <p className="text-muted/60 text-xs mt-1">Add income transactions to calculate your health score.</p>
+    </div>
+  ) : (
+    <div className="space-y-6">
+      {/* Score header */}
+      <div className="flex items-center gap-6">
+        <svg width="96" height="96" className="shrink-0">
+          <circle cx="48" cy="48" r={r} fill="none" stroke="#2A2A32" strokeWidth="6" />
+          <motion.circle
+            cx="48" cy="48" r={r} fill="none"
+            stroke={ringColor}
+            strokeWidth="6"
+            strokeDasharray={circ}
+            strokeLinecap="round"
+            transform="rotate(-90 48 48)"
+            initial={{ strokeDashoffset: circ }}
+            animate={{ strokeDashoffset }}
+            transition={springs.gentle}
+          />
+          <text x="48" y="52" textAnchor="middle" fontSize="20" fontWeight="700" fill="#E8E8ED">
+            {score}
+          </text>
+        </svg>
+        <div>
+          <p className="text-2xl font-bold text-foreground">{data.grade}</p>
+          <p className="text-sm text-muted mt-1">Score for {data.period}</p>
+          <p className="text-xs text-muted/70 mt-0.5">Based on the 50/30/20 rule</p>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Score header */}
-          <div className="flex items-center gap-6">
-            <svg width="96" height="96" className="shrink-0">
-              <circle cx="48" cy="48" r={r} fill="none" stroke="#2A2A32" strokeWidth="6" />
-              <motion.circle
-                cx="48" cy="48" r={r} fill="none"
-                stroke={ringColor}
-                strokeWidth="6"
-                strokeDasharray={circ}
-                strokeLinecap="round"
-                transform="rotate(-90 48 48)"
-                initial={{ strokeDashoffset: circ }}
-                animate={{ strokeDashoffset }}
-                transition={springs.gentle}
-              />
-              <text x="48" y="52" textAnchor="middle" fontSize="20" fontWeight="700" fill="#E8E8ED">
-                {score}
-              </text>
-            </svg>
-            <div>
-              <p className="text-2xl font-bold text-foreground">{data.grade}</p>
-              <p className="text-sm text-muted mt-1">Score for {data.period}</p>
-              <p className="text-xs text-muted/70 mt-0.5">Based on the 50/30/20 rule</p>
-            </div>
-          </div>
+      </div>
 
-          {/* Pillar breakdown */}
-          <div className="space-y-4">
-            {PILLAR_ORDER.map((key) => {
-              const comp = data.components[key];
-              if (!comp) return null;
-              const pct = comp.score / comp.max;
-              const barColor =
-                pct >= 0.8  ? '#30D158' :
-                pct >= 0.5  ? '#64D2FF' :
-                pct >= 0.25 ? '#FFD60A' :
-                '#FF453A';
+      {/* Pillar breakdown */}
+      <div className="space-y-4">
+        {PILLAR_ORDER.map((key) => {
+          const comp = data.components[key];
+          if (!comp) return null;
+          const pct = comp.score / comp.max;
+          const barColor =
+            pct >= 0.8  ? '#30D158' :
+            pct >= 0.5  ? '#64D2FF' :
+            pct >= 0.25 ? '#FFD60A' :
+            '#FF453A';
 
-              // Format the value label
-              let valueLabel = '';
-              if (key === 'anomaly_frequency') {
-                valueLabel = `${comp.value} anomalies`;
-              } else if (key === 'budget_adherence') {
-                valueLabel = `${Math.round(comp.value * 100)}% within limit`;
-              } else {
-                const benchmarkStr = comp.benchmark != null ? ` / target ${Math.round(comp.benchmark * 100)}%` : '';
-                valueLabel = `${Math.round((comp.value as number) * 100)}%${benchmarkStr}`;
-              }
+          // Format the value label
+          let valueLabel = '';
+          if (key === 'anomaly_frequency') {
+            valueLabel = `${comp.value} anomalies`;
+          } else if (key === 'budget_adherence') {
+            valueLabel = `${Math.round(comp.value * 100)}% within limit`;
+          } else {
+            const benchmarkStr = comp.benchmark != null ? ` / target ${Math.round(comp.benchmark * 100)}%` : '';
+            valueLabel = `${Math.round((comp.value as number) * 100)}%${benchmarkStr}`;
+          }
 
-              return (
-                <div key={key} className="space-y-1.5">
-                  <div className="flex items-baseline justify-between">
-                    <div>
-                      <span className="text-sm font-medium text-foreground">{comp.label}</span>
-                      <span className="text-xs text-muted ml-2">{valueLabel}</span>
-                    </div>
-                    <span className="text-sm font-semibold tabular-nums" style={{ color: barColor }}>
-                      {comp.score}/{comp.max}
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden">
-                    <motion.div
-                      className="h-full rounded-full"
-                      style={{ backgroundColor: barColor }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${pct * 100}%` }}
-                      transition={springs.gentle}
-                    />
-                  </div>
-                  <p className="text-xs text-muted/70">{comp.description}</p>
+          return (
+            <div key={key} className="space-y-1.5">
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <span className="text-sm font-medium text-foreground">{comp.label}</span>
+                  <span className="text-xs text-muted ml-2">{valueLabel}</span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                <span className="text-sm font-semibold tabular-nums" style={{ color: barColor }}>
+                  {comp.score}/{comp.max}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ backgroundColor: barColor }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct * 100}%` }}
+                  transition={springs.gentle}
+                />
+              </div>
+              <p className="text-xs text-muted/70">{comp.description}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return isHighlighted ? (
+    <HighlightCard title="Financial Health" action={monthSelect}>
+      {scoreContent}
+    </HighlightCard>
+  ) : (
+    <PageCard title="Financial Health Score" action={monthSelect}>
+      {scoreContent}
     </PageCard>
   );
 }
@@ -182,7 +189,14 @@ export function AnalyticsPage() {
 
       {/* ── Header area ── */}
       <div className="area-header">
-        <h1 className="text-xl font-bold">Analytics</h1>
+        <div className="flex flex-col gap-1 pb-5 border-b border-border">
+          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
+            Analytics
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
+            Spending velocity, patterns, comparisons.
+          </h1>
+        </div>
       </div>
 
       {/* ── Left panel: health score + alerts ── */}
@@ -190,9 +204,9 @@ export function AnalyticsPage() {
         <HealthScoreBreakdown />
 
         {hasAlerts && (
-          <Card className="p-4 border-warning/30">
+          <Card className="p-4 border-tangerine/30">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-tangerine shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <p className="text-xs text-muted mb-2">
                   Unusual = transaction is over 2× the category average (last 30 days, min 3 transactions).
@@ -205,8 +219,9 @@ export function AnalyticsPage() {
                   </p>
                 ))}
                 {alerts.new_merchants?.slice(0, 3).map((m: any) => (
-                  <p key={m.merchant} className="text-sm">
-                    New merchant: <span className="font-medium">{m.merchant}</span>
+                  <p key={m.merchant} className="text-sm flex items-center gap-2">
+                    <Badge variant="default" className="text-[10px] px-1.5 py-0">New</Badge>
+                    <span className="font-medium">{m.merchant}</span>
                   </p>
                 ))}
               </div>
