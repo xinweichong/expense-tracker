@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { SPECTRUM_PALETTE, COLOR_MINT, COLOR_TEAL, COLOR_TANGERINE, COLOR_CORAL } from './chartTheme'
+import { SPECTRUM_PALETTE, COLOR_MINT, COLOR_TEAL, COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL } from './chartTheme'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -124,4 +124,20 @@ export function getPaceColor(percent: number): string {
   if (percent <= 100) return COLOR_TEAL;
   if (percent <= 115) return COLOR_TANGERINE;
   return COLOR_CORAL;
+}
+
+/** Map budget utilisation % to a spectrum colour. */
+export function getBudgetTone(percent: number): { color: string; toneName: 'calm' | 'active' | 'notable' | 'warn' } {
+  if (percent < 50)  return { color: COLOR_MINT,      toneName: 'calm' };
+  if (percent < 80)  return { color: COLOR_HONEY,     toneName: 'active' };
+  if (percent < 100) return { color: COLOR_TANGERINE, toneName: 'notable' };
+  return              { color: COLOR_CORAL,            toneName: 'warn' };
+}
+
+/** Map goal completion % to a spectrum colour (higher = better for goals). */
+export function getGoalTone(percent: number): { color: string } {
+  if (percent < 25) return { color: COLOR_TANGERINE };
+  if (percent < 50) return { color: COLOR_HONEY };
+  if (percent < 75) return { color: COLOR_MINT };
+  return             { color: COLOR_TEAL };
 }
