@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { SPECTRUM_PALETTE } from './chartTheme'
+import { SPECTRUM_PALETTE, COLOR_TEAL, COLOR_MINT, COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL } from './chartTheme'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -116,4 +116,20 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
 /** Format a Date to "YYYY-MM-DD" in local time. */
 export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Map budget utilisation % to a spectrum colour. */
+export function getBudgetTone(percent: number): { color: string; toneName: 'calm' | 'active' | 'notable' | 'warn' } {
+  if (percent < 50)  return { color: COLOR_MINT,      toneName: 'calm' };
+  if (percent < 80)  return { color: COLOR_HONEY,     toneName: 'active' };
+  if (percent < 100) return { color: COLOR_TANGERINE, toneName: 'notable' };
+  return              { color: COLOR_CORAL,            toneName: 'warn' };
+}
+
+/** Map goal completion % to a spectrum colour (higher = better for goals). */
+export function getGoalTone(percent: number): { color: string } {
+  if (percent < 25) return { color: COLOR_TANGERINE };
+  if (percent < 50) return { color: COLOR_HONEY };
+  if (percent < 75) return { color: COLOR_MINT };
+  return             { color: COLOR_TEAL };
 }

@@ -3,9 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgress, type Category, type GoalProgress } from '@/api/client';
-import { PageCard } from '@/components/ui/cards';
+import { PageCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn, getBudgetTone, getGoalTone } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
 import { Pencil, Trash2, X, Check } from 'lucide-react';
 
@@ -21,7 +21,7 @@ function SavingsOverviewCard() {
   const monthLabel = new Date(overview.month + '-01').toLocaleString('en', { month: 'long', year: 'numeric' });
 
   return (
-    <PageCard title={`Savings — ${monthLabel}`}>
+    <HighlightCard title={`Savings — ${monthLabel}`}>
       <div className="grid grid-cols-3 gap-3 py-1">
         <div>
           <p className="text-xs text-muted mb-0.5">Saved</p>
@@ -39,19 +39,16 @@ function SavingsOverviewCard() {
           <p className="text-xs text-muted">free to allocate</p>
         </div>
       </div>
-    </PageCard>
+    </HighlightCard>
   );
 }
 
-function ProgressBar({ percent, status }: { percent: number; status: string }) {
-  const color =
-    status === 'over_budget' ? 'bg-destructive' :
-    status === 'warning'     ? 'bg-warning' :
-                               'bg-success';
+function ProgressBar({ percent, color }: { percent: number; color: string }) {
   return (
     <div className="w-full h-2 bg-foreground/10 rounded-full overflow-hidden">
       <motion.div
-        className={`h-full rounded-full ${color}`}
+        className="h-full rounded-full"
+        style={{ background: color }}
         initial={{ width: 0 }}
         animate={{ width: `${Math.min(percent, 100)}%` }}
         transition={springs.gentle}
@@ -80,6 +77,8 @@ function BudgetRow({
     setEditing(false);
   };
 
+  const { color } = getBudgetTone(b.percent);
+
   return (
     <div className="py-3 space-y-1.5 border-b border-border last:border-b-0">
       <div className="flex items-center justify-between">
@@ -107,9 +106,12 @@ function BudgetRow({
           )}
         </div>
       </div>
-      <ProgressBar percent={b.percent} status={b.status} />
+      <ProgressBar percent={b.percent} color={color} />
       <div className="flex justify-between text-xs text-muted">
-        <span>${b.spent.toFixed(2)} spent of ${b.budget_amount.toFixed(2)}</span>
+        <span>
+          <span style={{ color }} className="font-medium">${b.spent.toFixed(2)}</span>
+          {' '}spent of ${b.budget_amount.toFixed(2)}
+        </span>
         <span>
           {b.status === 'over_budget'
             ? `$${(b.spent - b.budget_amount).toFixed(2)} over`
@@ -187,7 +189,7 @@ function AddBudgetForm({ categories, onAdd }: { categories: Category[]; onAdd: (
   );
 }
 
-function ProgressRing({ percent }: { percent: number }) {
+function ProgressRing({ percent, color }: { percent: number; color: string }) {
   const r = 36;
   const circ = 2 * Math.PI * r;
   const filled = (Math.min(percent, 100) / 100) * circ;
@@ -197,7 +199,7 @@ function ProgressRing({ percent }: { percent: number }) {
       <circle cx="44" cy="44" r={r} fill="none" stroke="var(--color-border)" strokeWidth="6" />
       <motion.circle
         cx="44" cy="44" r={r} fill="none"
-        stroke={percent >= 100 ? 'var(--color-success)' : 'var(--color-primary)'}
+        stroke={color}
         strokeWidth="6"
         strokeDasharray={circ}
         strokeLinecap="round"
@@ -303,6 +305,9 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
     g.on_track === 'behind'   ? 'Behind 🔴' :
     g.on_track === 'on_track' ? 'On Track ✓' : null;
 
+  const { color: goalColor } = getGoalTone(g.percent);
+  const isComplete = g.status === 'completed' || g.percent >= 100;
+
   if (editing) {
     return (
       <div className="py-4 border-b border-border last:border-b-0 space-y-2">
@@ -357,10 +362,10 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
     );
   }
 
-  return (
-    <div className="py-4 border-b border-border last:border-b-0 space-y-3">
+  const goalCardContent = (
+    <div className={cn('space-y-3', !isComplete && 'py-4 border-b border-border last:border-b-0')}>
       <div className="flex items-start gap-4">
-        <ProgressRing percent={g.percent} />
+        <ProgressRing percent={g.percent} color={goalColor} />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -561,6 +566,18 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
       )}
     </div>
   );
+
+  if (isComplete) {
+    return (
+      <div className="py-4 border-b border-border last:border-b-0">
+        <HighlightCard title="Goal Complete">
+          {goalCardContent}
+        </HighlightCard>
+      </div>
+    );
+  }
+
+  return goalCardContent;
 }
 
 function GoalsSection() {
@@ -751,7 +768,14 @@ export function FinancePage() {
 
       {/* ── Top area: title ── */}
       <div className="area-top">
-        <h1 className="text-xl font-bold text-foreground">Finance</h1>
+        <div className="flex flex-col gap-1 pb-5 border-b border-border">
+          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
+            Finance
+          </div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
+            Budgets &amp; Goals
+          </h1>
+        </div>
       </div>
 
       {/* ── Left panel: budgets ── */}
