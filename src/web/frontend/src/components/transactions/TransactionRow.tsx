@@ -21,7 +21,7 @@ export function TransactionRow({
 }) {
   const isIncome = tx.type === 'income';
   const categoryColor = getCategoryColor(tx.category ?? 'Other');
-  const sign = isIncome ? '+' : '';
+  const sign = isIncome ? '+' : '-';
   const isClickable = !readOnly && !!onClick;
 
   return (
