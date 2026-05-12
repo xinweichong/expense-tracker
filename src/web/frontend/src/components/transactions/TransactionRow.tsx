@@ -28,7 +28,7 @@ export function TransactionRow({
     <div
       onClick={isClickable ? onClick : undefined}
       className={cn(
-        'grid gap-3 items-center px-3.5 py-2.5 rounded-md transition-colors',
+        'grid gap-3 items-center px-3.5 py-2.5 border-b border-border/30 last:border-b-0 transition-colors',
         onRemove ? 'grid-cols-[36px_1fr_auto_auto]' : 'grid-cols-[36px_1fr_auto]',
         isClickable && 'cursor-pointer',
       )}
