@@ -27,7 +27,7 @@ export function CasheWordmark({ size = 22, className }: CasheWordmarkProps) {
   const rootStyle: CSSProperties = {
     fontFamily: "'Plus Jakarta Sans', sans-serif",
     fontWeight: 800,
-    letterSpacing: '-0.068em',
+    letterSpacing: '-0.045em',
     lineHeight: 0.9,
     fontSize: `${size}px`,
     display: 'inline-flex',
@@ -120,12 +120,11 @@ export function CasheBrandLockup({ size = 160, className }: CasheBrandLockupProp
   const wordmarkStyle: CSSProperties = {
     fontFamily: "'Plus Jakarta Sans', sans-serif",
     fontWeight: 800,
-    letterSpacing: '-0.068em',
+    letterSpacing: '-0.045em',
     lineHeight: 0.9,
     fontSize: `${wmSize}px`,
     display: 'inline-flex',
     alignItems: 'baseline',
-    transform: 'translateX(-1px)',
   };
 
   const taglineStyle: CSSProperties = {

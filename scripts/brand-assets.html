@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0B0B14; padding: 40px; display: flex; flex-direction: column; gap: 40px; align-items: flex-start; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // Verbatim from src/web/frontend/src/components/ui/Brand.tsx
+
+    const B1_WASH =
+      'linear-gradient(135deg, rgba(0,212,170,.38) 0%, rgba(11,11,20,.94) 35%, rgba(11,11,20,.98) 58%, rgba(234,88,12,.34) 82%, rgba(220,38,38,.3) 100%), #0B0B14';
+
+    const WARM_GRADIENT = 'linear-gradient(135deg, #D97706, #EA580C 50%, #DC2626)';
+
+    const dollarStyle = {
+      background: WARM_GRADIENT,
+      WebkitBackgroundClip: 'text',
+      backgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      color: 'transparent',
+      margin: '0 -0.02em',
+    };
+
+    const tealStyle = { color: '#00D4AA' };
+
+    function CasheWordmark({ size = 22 }) {
+      const rootStyle = {
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+        fontWeight: 800,
+        letterSpacing: '-0.045em',
+        lineHeight: 0.9,
+        fontSize: `${size}px`,
+        display: 'inline-flex',
+        alignItems: 'baseline',
+      };
+      return (
+        <span style={rootStyle} aria-label="cashe">
+          <span style={tealStyle}>ca</span>
+          <span style={dollarStyle}>$</span>
+          <span style={tealStyle}>he</span>
+        </span>
+      );
+    }
+
+    function CasheIcon({ size = 32 }) {
+      const wrapStyle = {
+        width: `${size}px`,
+        height: `${size}px`,
+        background: B1_WASH,
+        border: '1px solid #2A2A3F',
+        borderRadius: '25.5%',
+        boxShadow: '0 18px 40px -30px rgba(0,212,170,.85)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        flexShrink: 0,
+      };
+      const glyphStyle = {
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+        fontWeight: 800,
+        fontSize: `${Math.round(size * 0.724)}px`,
+        letterSpacing: '-0.05em',
+        lineHeight: 0.9,
+        background: WARM_GRADIENT,
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        color: 'transparent',
+        transform: 'translate(-1px, -1px)',
+      };
+      return (
+        <span style={wrapStyle} aria-label="cashe">
+          <span style={glyphStyle}>$</span>
+        </span>
+      );
+    }
+
+    function CasheBrandLockup({ size = 160, showTagline = true }) {
+      const wmSize = Math.round(size * 34 / 116);
+      const tlSize = Math.round(size * 8.5 / 116);
+      const gap    = showTagline ? Math.round(size * 8 / 116) : 0;
+
+      const wrapStyle = {
+        width: `${size}px`,
+        height: `${size}px`,
+        background: B1_WASH,
+        border: '1px solid #2A2A3F',
+        borderRadius: '25.5%',
+        boxShadow: '0 18px 40px -30px rgba(0,212,170,.85)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        flexShrink: 0,
+      };
+      const stackStyle = {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: `${gap}px`,
+        transform: 'translateY(-1px)',
+      };
+      const wordmarkStyle = {
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+        fontWeight: 800,
+        letterSpacing: '-0.045em',
+        lineHeight: 0.9,
+        fontSize: `${wmSize}px`,
+        display: 'inline-flex',
+        alignItems: 'baseline',
+      };
+      const taglineStyle = {
+        color: 'rgba(238, 234, 245, 0.68)',
+        fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
+        fontSize: `${tlSize}px`,
+        fontWeight: 600,
+        letterSpacing: '0.24em',
+        lineHeight: 1,
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+      };
+
+      return (
+        <span style={wrapStyle} aria-label={showTagline ? "cashe — cash, caught" : "cashe"}>
+          <span style={stackStyle}>
+            <span style={wordmarkStyle}>
+              <span style={tealStyle}>ca</span>
+              <span style={dollarStyle}>$</span>
+              <span style={tealStyle}>he</span>
+            </span>
+            {showTagline && <span style={taglineStyle}>CASH, CAUGHT.</span>}
+          </span>
+        </span>
+      );
+    }
+
+    function Banner({ id, width, height, wmSize, tlSize, gap }) {
+      const taglineStyle = {
+        color: 'rgba(238, 234, 245, 0.68)',
+        fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
+        fontSize: `${tlSize}px`,
+        fontWeight: 600,
+        letterSpacing: '0.24em',
+        lineHeight: 1,
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+      };
+      return (
+        <div id={id} style={{
+          width: `${width}px`,
+          height: `${height}px`,
+          background: B1_WASH,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: `${gap}px`,
+        }}>
+          <CasheWordmark size={wmSize} />
+          <span style={taglineStyle}>CASH, CAUGHT.</span>
+        </div>
+      );
+    }
+
+    function App() {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '40px', alignItems: 'flex-start' }}>
+          <span id="icon-192" style={{ display: 'inline-flex' }}><CasheBrandLockup size={192} showTagline={false} /></span>
+          <span id="icon-512" style={{ display: 'inline-flex' }}><CasheBrandLockup size={512} showTagline={false} /></span>
+          <span id="icon-180" style={{ display: 'inline-flex' }}><CasheBrandLockup size={180} showTagline={false} /></span>
+          <span id="favicon-32"  style={{ display: 'inline-flex' }}><CasheIcon size={32} /></span>
+          <span id="favicon-192" style={{ display: 'inline-flex' }}><CasheIcon size={192} /></span>
+          <span id="favicon-512" style={{ display: 'inline-flex' }}><CasheIcon size={512} /></span>
+          <Banner id="banner-1280" width={1280} height={420} wmSize={160} tlSize={20} gap={26} />
+          <Banner id="banner-1200" width={1200} height={630} wmSize={200} tlSize={26} gap={34} />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
