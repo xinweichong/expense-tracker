@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock, Plane } from 'lucide-react';
+import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { CasheWordmark } from '@/components/ui/Brand';
@@ -10,8 +10,7 @@ export function Sidebar() {
     queryFn: () => api.getSettings(),
     staleTime: 30_000,
   });
-  const financeEnabled = settings?.budgets_enabled || settings?.goals_enabled;
-  const tripsEnabled = settings?.trips_enabled;
+  const financeEnabled = settings?.budgets_enabled || settings?.goals_enabled || settings?.trips_enabled;
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -40,7 +39,7 @@ export function Sidebar() {
             }
           >
             <Icon className="w-5 h-5 shrink-0" />
-            <span className="hidden lg:inline">{label}</span>
+            <span className="hidden lg:inline font-display">{label}</span>
           </NavLink>
         ))}
 
@@ -56,27 +55,9 @@ export function Sidebar() {
           }
         >
           <Wallet className="w-5 h-5 shrink-0" />
-          <span className="hidden lg:flex items-center gap-1">
+          <span className="hidden lg:flex items-center gap-1 font-display">
             Finance
             {!financeEnabled && <Lock className="w-3 h-3 ml-1" />}
-          </span>
-        </NavLink>
-
-        {/* Trips — always visible; dimmed when toggle is off */}
-        <NavLink
-          to="/trips"
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
-              isActive
-                ? 'bg-foreground/10 text-foreground font-medium'
-                : 'text-muted hover:text-foreground hover:bg-foreground/5'
-            } ${!tripsEnabled ? 'opacity-40' : ''}`
-          }
-        >
-          <Plane className="w-5 h-5 shrink-0" />
-          <span className="hidden lg:flex items-center gap-1">
-            Trips
-            {!tripsEnabled && <Lock className="w-3 h-3 ml-1" />}
           </span>
         </NavLink>
 
@@ -92,7 +73,7 @@ export function Sidebar() {
           }
         >
           <Settings className="w-5 h-5 shrink-0" />
-          <span className="hidden lg:inline">Settings</span>
+          <span className="hidden lg:inline font-display">Settings</span>
         </NavLink>
       </nav>
     </aside>

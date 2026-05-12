@@ -85,7 +85,7 @@ function HealthScoreCard() {
       <Card>
         <CardContent className="p-4 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Health Score</p>
+            <p className="text-xs font-semibold font-mono text-muted uppercase tracking-[0.22em]">Health Score</p>
             <p className="text-sm text-muted mt-0.5">Add income transactions to calculate your score.</p>
           </div>
         </CardContent>
@@ -136,7 +136,7 @@ function HealthScoreCard() {
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
           {score < 70 && (
-            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Health Score</p>
+            <p className="text-xs font-semibold font-mono text-muted uppercase tracking-[0.22em]">Health Score</p>
           )}
           <span
             className="text-xs font-medium"
@@ -295,7 +295,7 @@ export function OverviewPage() {
             Overview · {new Date(start).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' })}
           </div>
           <h1 className="text-xl md:text-3xl font-bold tracking-tight text-foreground font-display">
-            Where the dollars go
+            Where the dollars go.
           </h1>
         </div>
         <div className="flex flex-row items-center gap-2 flex-wrap shrink-0">

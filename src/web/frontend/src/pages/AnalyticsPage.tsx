@@ -85,7 +85,7 @@ function HealthScoreBreakdown() {
         </svg>
         <div>
           <p className="text-2xl font-bold text-foreground">{data.grade}</p>
-          <p className="text-sm text-muted mt-1">Score for {data.period}</p>
+          <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mt-1">Score for {data.period}</p>
           <p className="text-xs text-muted/70 mt-0.5">Based on the 50/30/20 rule</p>
         </div>
       </div>
@@ -118,7 +118,7 @@ function HealthScoreBreakdown() {
               <div className="flex items-baseline justify-between">
                 <div>
                   <span className="text-sm font-medium text-foreground">{comp.label}</span>
-                  <span className="text-xs text-muted ml-2">{valueLabel}</span>
+                  <span className="text-xs text-muted font-mono ml-2">{valueLabel}</span>
                 </div>
                 <span className="text-sm font-semibold tabular-nums" style={{ color: barColor }}>
                   {comp.score}/{comp.max}

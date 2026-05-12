@@ -76,7 +76,7 @@ export function MerchantsPage() {
             Merchants
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
-            {merchants.length} tracked
+            {merchants.length} tracked.
           </h1>
         </div>
 

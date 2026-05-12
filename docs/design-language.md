@@ -280,14 +280,14 @@ Example: a "Dining" row with category colour `#FBBF24` would have background `#F
 
 | Family | Role | Source |
 |---|---|---|
-| **Plus Jakarta Sans** | Display — wordmark, page H1/H2, hero numerics, card titles | Google Fonts |
-| **Inter** | Body — paragraphs, buttons, labels, navigation | Google Fonts |
-| **JetBrains Mono** | Mono — eyebrows, transaction IDs, timestamps, small uppercase labels | Google Fonts |
+| **Plus Jakarta Sans** | Display — wordmark, page H1/H2, hero numerics, all card titles (`PageCard`, `ChartCard`), sidebar nav labels | Google Fonts |
+| **Inter** | Body — paragraphs, buttons, action labels, form fields | Google Fonts |
+| **JetBrains Mono** | Mono — page eyebrow kickers, stat/KPI labels, inline data descriptors, transaction IDs, timestamps | Google Fonts |
 
 Three families chosen for clear functional separation:
-- **Plus Jakarta** carries personality — the brand's friendly-confident voice.
-- **Inter** carries clarity — Cashe today is built on it, body legibility is excellent.
-- **JetBrains Mono** carries precision — anywhere we say "this is data" (IDs, timestamps, eyebrow labels).
+- **Plus Jakarta** carries personality — the brand's friendly-confident voice. Used at every level that names something (page, section, card).
+- **Inter** carries clarity — body legibility, interactive chrome.
+- **JetBrains Mono** carries precision — anywhere we say "this is data" (IDs, timestamps, stat labels, eyebrow labels).
 
 ### 3.2 Modular scale — 1.250 (major third)
 
@@ -310,7 +310,8 @@ Three families chosen for clear functional separation:
 - **Display sizes (≥ 25px)** use `letter-spacing: -0.025em` to `-0.05em` (tighter at larger sizes).
 - **Hero numerics** (≥ 49px) use `letter-spacing: -0.04em` to `-0.05em`, `line-height: 0.92` to `0.95`, and the spending sub-gradient (soft) as the `background-clip: text` fill.
 - **Body** uses `line-height: 1.55` to `1.65`.
-- **Mono eyebrows** use `font-size: 10-11px`, `text-transform: uppercase`, `letter-spacing: 0.18em-0.22em`, `font-weight: 600`.
+- **Mono Eyebrow (Tier A — full):** `font-mono text-xs font-semibold uppercase tracking-[0.22em] text-muted`. For page kicker lines, `HeroCard`/`HighlightCard` titles, `StatCard` labels, and standalone KPI stat labels (INCOME · SPENT · SAVED, SAVED · TOWARD GOALS · UNALLOCATED, CONTRIBUTION HISTORY, etc.).
+- **Mono Eyebrow (Tier B — inline):** `font-mono text-xs text-muted`. For inline data descriptors that annotate a value without heading authority — budget period, goal deadline, velocity sub-stat, connection status, feature toggle descriptions.
 
 ### 3.4 Weights
 
@@ -320,7 +321,7 @@ Three families chosen for clear functional separation:
 | Inter | 400, 500, 600, 700 |
 | JetBrains Mono | 400, 500, 600 |
 
-Page H1s and hero numerics use Plus Jakarta 800. Card titles use Plus Jakarta 700. Inter is reserved for 400-600 weights — never use Inter 700+ for hero content (it competes with Plus Jakarta).
+Page H1s and hero numerics use Plus Jakarta 800. Card titles (`PageCard`, `ChartCard` title spans) use Plus Jakarta 700 (`font-semibold`). Sidebar nav labels use Plus Jakarta (`font-display`). Inter is reserved for 400-600 weights — never use Inter 700+ for hero content (it competes with Plus Jakarta).
 
 ---
 
@@ -510,7 +511,7 @@ All Recharts configuration centralised in `src/lib/chartTheme.ts`. Never inline 
 
 - **Brand name in product copy:** lowercase `cashe` (always).
 - **Brand name in formal documentation / legal:** lowercase `cashe` (same).
-- **Headings:** sentence case, not title case. ("Where the dollars go" — not "Where The Dollars Go.")
+- **Headings:** sentence case, not title case. ("Where the dollars go." — not "Where The Dollars Go.")
 - **Action labels (buttons):** title case. ("Add Transaction", "Sign In", "Delete".)
 - **Eyebrow labels (mono):** uppercase with letter-spacing. ("THIS MONTH · DAY 11 OF 30".)
 - **Tagline:** all lowercase. ("cash, caught.")

@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api, type BudgetProgress, type Category, type GoalProgress } from '@/api/client';
+import { api, type BudgetProgress, type Category, type GoalProgress, type Trip } from '@/api/client';
 import { PageCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { cn, getBudgetTone, getGoalTone } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
-import { Pencil, Trash2, X, Check } from 'lucide-react';
+import { Pencil, Trash2, X, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
+import { TransactionRow } from '@/components/transactions/TransactionRow';
 
 function SavingsOverviewCard() {
   const { data: overview } = useQuery({
@@ -24,19 +26,19 @@ function SavingsOverviewCard() {
     <HighlightCard title={`Savings — ${monthLabel}`}>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 py-1">
         <div>
-          <p className="text-xs text-muted mb-0.5">Saved</p>
+          <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Saved</p>
           <p className="text-lg font-semibold text-success">${overview.savings.toFixed(0)}</p>
-          <p className="text-xs text-muted">income − expenses</p>
+          <p className="text-xs text-muted font-mono">income − expenses</p>
         </div>
         <div>
-          <p className="text-xs text-muted mb-0.5">Toward Goals</p>
+          <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Toward Goals</p>
           <p className="text-lg font-semibold text-accent">${overview.allocated_to_goals.toFixed(0)}</p>
-          <p className="text-xs text-muted">manually added</p>
+          <p className="text-xs text-muted font-mono">manually added</p>
         </div>
         <div>
-          <p className="text-xs text-muted mb-0.5">Unallocated</p>
+          <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Unallocated</p>
           <p className="text-lg font-semibold text-foreground">${overview.unallocated.toFixed(0)}</p>
-          <p className="text-xs text-muted">free to allocate</p>
+          <p className="text-xs text-muted font-mono">free to allocate</p>
         </div>
       </div>
     </HighlightCard>
@@ -84,7 +86,7 @@ function BudgetRow({
       <div className="flex items-center justify-between">
         <div>
           <span className="text-sm font-medium text-foreground">{b.label}</span>
-          <span className="ml-2 text-xs text-muted capitalize">{b.period}</span>
+          <span className="ml-2 text-xs text-muted font-mono capitalize">{b.period}</span>
         </div>
         <div className="flex items-center gap-2">
           {editing ? (
@@ -107,7 +109,7 @@ function BudgetRow({
         </div>
       </div>
       <ProgressBar percent={b.percent} color={color} />
-      <div className="flex justify-between text-xs text-muted">
+      <div className="flex justify-between text-xs text-muted font-mono">
         <span>
           <span style={{ color }} className="font-medium">${b.spent.toFixed(2)}</span>
           {' '}spent of ${b.budget_amount.toFixed(2)}
@@ -371,7 +373,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
             <div>
               <p className="text-sm font-semibold text-foreground">{g.name}</p>
               {g.target_date && (
-                <p className="text-xs text-muted">Deadline: {g.target_date}</p>
+                <p className="text-xs text-muted font-mono">Deadline: {g.target_date}</p>
               )}
             </div>
             {onTrackLabel && (
@@ -382,7 +384,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
             ${g.saved_amount.toFixed(0)} saved of ${g.target_amount.toFixed(0)}
           </p>
           {g.monthly_rate > 0 && (
-            <p className="text-xs text-muted mt-0.5">
+            <p className="text-xs text-muted font-mono mt-0.5">
               ~${g.monthly_rate.toFixed(0)}/mo
               {g.months_to_target != null && ` · ${g.months_to_target.toFixed(0)} months to target`}
             </p>
@@ -443,7 +445,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
       {/* Contribution history */}
       {g.contributions.length > 0 ? (
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted">Contribution History</p>
+          <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">Contribution History</p>
           {g.contributions.slice(-6).reverse().map((c) => (
             <div key={c.id}>
               {editingContribId === c.id ? (
@@ -710,6 +712,289 @@ function GoalsSection() {
   );
 }
 
+// ── Trips ─────────────────────────────────────────────────────────────────────
+
+const TX_PAGE_SIZE = 20;
+
+function TripRow({ trip }: { trip: Trip }) {
+  const qc = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [txPage, setTxPage] = useState(1);
+  const [delistingId, setDelistingId] = useState<number | null>(null);
+
+  const { data: summary } = useQuery({
+    queryKey: ['trip-summary', trip.id],
+    queryFn: () => api.getTripSummary(trip.id),
+    enabled: expanded,
+    staleTime: 60_000,
+  });
+
+  const { data: txs = [] } = useQuery({
+    queryKey: ['trip-transactions', trip.id],
+    queryFn: () => api.getTripTransactions(trip.id, 1000),
+    enabled: expanded,
+    staleTime: 30_000,
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: () => api.activateTrip(trip.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips'] });
+      qc.invalidateQueries({ queryKey: ['trips-active'] });
+    },
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: () => api.deactivateTrip(trip.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips'] });
+      qc.invalidateQueries({ queryKey: ['trips-active'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteTrip(trip.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['trips'] }),
+  });
+
+  const delistMutation = useMutation({
+    mutationFn: (txId: number) => api.delistTransaction(trip.id, txId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trip-transactions', trip.id] });
+      qc.invalidateQueries({ queryKey: ['trip-summary', trip.id] });
+      qc.invalidateQueries({ queryKey: ['trip-membership', trip.id] });
+    },
+  });
+
+  const isActive = trip.status === 'active';
+  const isPendingToggle = activateMutation.isPending || deactivateMutation.isPending;
+
+  const handleToggle = () => {
+    if (isPendingToggle) return;
+    if (isActive) deactivateMutation.mutate();
+    else activateMutation.mutate();
+  };
+
+  const totalTxPages = Math.ceil(txs.length / TX_PAGE_SIZE);
+  const pageTxs = txs.slice((txPage - 1) * TX_PAGE_SIZE, txPage * TX_PAGE_SIZE);
+  const dateLabel = trip.end_date
+    ? `${trip.start_date} → ${trip.end_date}`
+    : trip.start_date;
+
+  return (
+    <div className="py-3 border-b border-border last:border-b-0">
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={() => { setExpanded((v) => !v); if (expanded) setTxPage(1); }}
+        >
+          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </Button>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground leading-tight">{trip.name}</p>
+          <p className="text-xs text-muted">
+            {trip.destination ? `${trip.destination} · ` : ''}{dateLabel}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-xs text-muted hidden sm:inline">Auto-assign</span>
+          <button
+            onClick={handleToggle}
+            disabled={isPendingToggle}
+            className={`relative w-10 h-5 rounded-full transition-colors disabled:opacity-50 ${
+              isActive ? 'toggle-on' : 'bg-foreground/20'
+            }`}
+            title={isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                isActive ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-destructive shrink-0"
+          onClick={() => { if (confirm(`Delete trip "${trip.name}"?`)) deleteMutation.mutate(); }}
+          disabled={deleteMutation.isPending}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+
+      {expanded && (
+        <>
+          <div className="mt-3 ml-9 space-y-3">
+            {summary && (
+              <p className="text-xs text-muted font-mono">
+                S${summary.total_sgd.toFixed(2)} · {summary.transaction_count} transactions ·
+                S${summary.daily_average_sgd.toFixed(2)}/day
+              </p>
+            )}
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">Transactions</p>
+              {totalTxPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-6 w-6"
+                    onClick={() => setTxPage((p) => Math.max(1, p - 1))} disabled={txPage === 1}>
+                    <ChevronLeft className="h-3 w-3" />
+                  </Button>
+                  <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6"
+                    onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))} disabled={txPage === totalTxPages}>
+                    <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {txs.length === 0 ? (
+            <p className="ml-9 mt-1 text-xs text-muted">Nothing captured this period.</p>
+          ) : (
+            <div className="mt-2 border-t border-border">
+              {pageTxs.map((tx) => (
+                <TransactionRow
+                  key={tx.id}
+                  tx={tx}
+                  readOnly
+                  onRemove={() => {
+                    setDelistingId(tx.id);
+                    delistMutation.mutate(tx.id, { onSettled: () => setDelistingId(null) });
+                  }}
+                  removeDisabled={delistingId === tx.id}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function TripsSection() {
+  const qc = useQueryClient();
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newEndDate, setNewEndDate] = useState('');
+  const [newDest, setNewDest] = useState('');
+
+  const { data: trips = [], isLoading } = useQuery({
+    queryKey: ['trips'],
+    queryFn: () => api.getTrips(),
+    staleTime: 30_000,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const trip = await api.createTrip({
+        name: newName,
+        start_date: newStartDate,
+        destination: newDest || undefined,
+      });
+      if (newEndDate) {
+        await api.updateTrip(trip.id, { end_date: newEndDate }).catch(() => {});
+      }
+      return trip;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['trips'] });
+      setShowCreateForm(false);
+      setNewName('');
+      setNewDest('');
+      setNewEndDate('');
+    },
+  });
+
+  return (
+    <>
+      <ActiveTripCard showEndButton />
+      <PageCard
+        title="Trips"
+        action={
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setShowCreateForm((v) => !v)}
+          >
+            {showCreateForm ? 'Cancel' : '+ New Trip'}
+          </Button>
+        }
+      >
+        {showCreateForm && (
+          <div className="space-y-3 pb-4 border-b border-border mb-2">
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Trip name"
+                className="input-field flex-1 min-w-40"
+              />
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted font-mono">Start date</span>
+                <input
+                  type="date"
+                  value={newStartDate}
+                  onChange={(e) => setNewStartDate(e.target.value)}
+                  className="input-field"
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input
+                type="text"
+                value={newDest}
+                onChange={(e) => setNewDest(e.target.value)}
+                placeholder="Destination (optional)"
+                className="input-field flex-1 min-w-32"
+              />
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted font-mono">End date (optional)</span>
+                <input
+                  type="date"
+                  value={newEndDate}
+                  onChange={(e) => setNewEndDate(e.target.value)}
+                  className="input-field"
+                />
+              </label>
+            </div>
+            <button
+              onClick={() => createMutation.mutate()}
+              disabled={!newName || !newStartDate || createMutation.isPending}
+              className="btn-action disabled:opacity-40"
+            >
+              {createMutation.isPending ? 'Creating…' : 'Create Trip'}
+            </button>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="h-24 animate-pulse bg-foreground/10 rounded-md" />
+        ) : trips.length === 0 ? (
+          <p className="text-muted text-sm text-center py-8">
+            No trips yet. Create one to start grouping transactions.
+          </p>
+        ) : (
+          trips.map((trip) => <TripRow key={trip.id} trip={trip} />)
+        )}
+      </PageCard>
+    </>
+  );
+}
+
+// ── FinancePage ───────────────────────────────────────────────────────────────
+
 export function FinancePage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -747,11 +1032,11 @@ export function FinancePage() {
 
   if (!settings) return null;
 
-  if (!settings.budgets_enabled && !settings.goals_enabled) {
+  if (!settings.budgets_enabled && !settings.goals_enabled && !settings.trips_enabled) {
     return (
       <div className="p-6 flex flex-col items-center justify-center min-h-48 text-center gap-3">
         <p className="text-muted text-sm">
-          Enable Budgets or Goals in Settings to get started.
+          Enable Budgets, Goals, or Trips in Settings to get started.
         </p>
         <button
           onClick={() => navigate('/settings')}
@@ -773,7 +1058,7 @@ export function FinancePage() {
             Finance
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
-            Budgets &amp; Goals
+            Finance.
           </h1>
         </div>
       </div>
@@ -782,7 +1067,7 @@ export function FinancePage() {
       {settings.budgets_enabled ? (
         <div
           className="area-left grid-scroll-panel space-y-4"
-          style={!settings.goals_enabled ? { gridColumn: '1 / -1' } : undefined}
+          style={(!settings.goals_enabled && !settings.trips_enabled) ? { gridColumn: '1 / -1' } : undefined}
         >
           <PageCard
             title="Budgets"
@@ -832,14 +1117,15 @@ export function FinancePage() {
         <div className="area-left" />
       )}
 
-      {/* ── Right panel: savings overview + goals ── */}
-      {settings.goals_enabled ? (
+      {/* ── Right panel: savings overview + goals + trips ── */}
+      {(settings.goals_enabled || settings.trips_enabled) ? (
         <div
           className="area-right grid-scroll-panel space-y-4"
           style={!settings.budgets_enabled ? { gridColumn: '1 / -1' } : undefined}
         >
-          <SavingsOverviewCard />
-          <GoalsSection />
+          {settings.goals_enabled && <SavingsOverviewCard />}
+          {settings.goals_enabled && <GoalsSection />}
+          {settings.trips_enabled && <TripsSection />}
         </div>
       ) : (
         <div className="area-right" />

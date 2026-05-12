@@ -429,7 +429,7 @@ export function SettingsPage() {
                   )}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">Gmail</p>
-                    <p className="text-xs text-muted">
+                    <p className="text-xs text-muted font-mono">
                       {currentUser?.gmail_connected ? 'Connected' : 'Not connected'}
                     </p>
                   </div>
@@ -466,7 +466,7 @@ export function SettingsPage() {
                   )}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">Telegram</p>
-                    <p className="text-xs text-muted">
+                    <p className="text-xs text-muted font-mono">
                       {currentUser?.telegram_chat_id ? 'Linked' : 'Not linked'}
                     </p>
                   </div>
@@ -499,7 +499,7 @@ export function SettingsPage() {
                   <Wifi className="w-4 h-4 text-muted shrink-0" />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">Apple Wallet</p>
-                    <p className="text-xs text-muted">Passive — via iOS Shortcut</p>
+                    <p className="text-xs text-muted font-mono">Passive — via iOS Shortcut</p>
                   </div>
                 </div>
                 <Button
@@ -698,7 +698,7 @@ export function SettingsPage() {
                 <div key={key} className="flex items-center justify-between py-4">
                   <div>
                     <p className="text-sm font-medium text-foreground">{label}</p>
-                    <p className="text-xs text-muted">{desc}</p>
+                    <p className="text-xs text-muted font-mono">{desc}</p>
                   </div>
                   <button
                     onClick={() => toggleSetting(key, !settings?.[key])}

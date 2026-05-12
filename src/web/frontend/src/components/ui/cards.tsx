@@ -71,7 +71,7 @@ export function StatCard({ label, value, variant = 'neutral' }: StatCardProps) {
     <motion.div whileHover={{ y: -2 }} transition={springs.snappy}>
       <Card>
         <CardHeader className="pb-1">
-          <CardTitle className="text-sm font-medium text-muted">{label}</CardTitle>
+          <CardTitle className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">{label}</CardTitle>
         </CardHeader>
         <CardContent>
           <p className={cn(fontSizeClass, 'font-bold truncate', VARIANT_CLASS[variant])}>{value}</p>
