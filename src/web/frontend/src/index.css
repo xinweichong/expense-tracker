@@ -24,9 +24,9 @@
   --color-accent-foreground:  #EEEAF5;
   --color-input:              #2A2A3F;
   --color-ring:               #00D4AA;
-  --color-success:            #30D158;
-  --color-warning:            #FFD60A;
-  --color-info:               #64D2FF;
+  --color-success:            var(--color-teal);
+  --color-warning:            var(--color-honey);
+  --color-info:               var(--color-mint);
 
   /* Fonts */
   --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;

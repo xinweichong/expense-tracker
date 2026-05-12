@@ -11,12 +11,13 @@ interface PageCardProps {
   children: ReactNode;
   className?: string;
   contentClassName?: string;
+  headerClassName?: string;
 }
 
-export function PageCard({ title, action, children, className, contentClassName }: PageCardProps) {
+export function PageCard({ title, action, children, className, contentClassName, headerClassName }: PageCardProps) {
   return (
     <Card className={cn(className)}>
-      <div className="flex flex-row items-center justify-between p-4 gap-2">
+      <div className={cn('flex flex-row items-center justify-between p-4 gap-2', headerClassName)}>
         <span className="min-w-0 truncate text-base font-semibold text-foreground">{title}</span>
         {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>

@@ -34,7 +34,7 @@ The wordmark is **ca$he** — the literal "s" replaced by a warm-gradient "$" gl
 |---|---|
 | Family | Plus Jakarta Sans |
 | Weight | 800 (ExtraBold — the max available weight) |
-| Letter-spacing | `-0.068em` |
+| Letter-spacing | `-0.045em` |
 | Line-height | `0.9` |
 | "ca" + "he" color | `#00D4AA` (teal) |
 | "$" fill | Warm gradient (see §2.3) |
@@ -46,7 +46,7 @@ Reference CSS:
 .cashe-mark {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-weight: 800;
-  letter-spacing: -0.068em;
+  letter-spacing: -0.045em;
   line-height: 0.9;
   display: inline-flex;
   align-items: baseline;
@@ -232,6 +232,20 @@ background: linear-gradient(135deg,
   #FF6B6B 100% /* coral */
 );
 ```
+
+**App-Shell Wash (B2)** — applied to the authenticated app shell root as a fixed background. Same diagonal hue stops as B1 but at ~20% of the login-screen opacity, so it reads as atmosphere rather than statement. Card surfaces (`--color-card`) remain visually elevated above it.
+
+```css
+background: linear-gradient(135deg,
+  rgba(0,212,170,.08)  0%,    /* teal hint */
+  transparent         30%,
+  transparent         68%,
+  rgba(234,88,12,.07) 86%,    /* tangerine hint */
+  rgba(220,38,38,.06) 100%    /* coral hint */
+), #0B0B14;
+```
+
+B2 is exported from `Brand.tsx` as `B2_WASH` and applied to the `AppShell` root `div` in `AppShell.tsx`. Sidebar, mobile header, and bottom tabs use `bg-card/80 backdrop-blur-sm` so B2 bleeds through the chrome.
 
 ### 2.4 Category palette
 
@@ -603,6 +617,15 @@ A flat table of every token defined in this document, for IDE autocomplete refer
   --elev-md:         0 0 0 1px var(--color-border), 0 8px 24px rgba(0,0,0,.5);
   --elev-glow-teal:  0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.28);
   --elev-glow-warm:  0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34);
+
+  /* Radix UI compatibility tokens — required by Radix primitives, not design tokens */
+  --color-popover:            #1B1B2C;   /* = card-elev */
+  --color-popover-foreground: #EEEAF5;   /* = foreground */
+  --color-accent:             #EEEAF5;   /* Radix hover-state; not the brand accent */
+  --color-accent-foreground:  #EEEAF5;
+  --color-input:              #2A2A3F;   /* = border */
+  --color-ring:               #00D4AA;   /* = teal — focus ring */
+  --color-card-hover:         #1C1C22;   /* bar-chart cursor fill */
 
   /* Gradients (defined inline, not as CSS custom properties — gradients on var() are non-trivial) */
   /* See §2.3 for the three signature gradients */

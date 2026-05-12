@@ -289,16 +289,16 @@ export function OverviewPage() {
     <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-overview">
 
       {/* ── Header area (period selector) ── */}
-      <div className="area-header flex justify-between items-end pb-5 border-b border-border">
+      <div className="area-header flex flex-col gap-3 pb-4 border-b border-border md:flex-row md:justify-between md:items-end">
         <div>
           <div className="text-xs uppercase tracking-[0.22em] text-muted mb-2 font-mono font-semibold">
             Overview · {new Date(start).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' })}
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
+          <h1 className="text-xl md:text-3xl font-bold tracking-tight text-foreground font-display">
             Where the dollars go
           </h1>
         </div>
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
+        <div className="flex flex-row items-center gap-2 flex-wrap shrink-0">
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={goBack}>
               <ChevronLeft className="h-4 w-4" />
@@ -527,6 +527,7 @@ export function OverviewPage() {
       <div className="area-right grid-scroll-panel space-y-4">
         <PageCard
           title="Transactions"
+          headerClassName="flex-col items-start gap-1 md:flex-row md:items-center"
           action={
             <div className="flex items-center gap-2">
               {categories.length > 0 && (
