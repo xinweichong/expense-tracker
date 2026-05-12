@@ -19,17 +19,6 @@
   --color-destructive:       #FF453A;
   --color-destructive-foreground: #FFFFFF;
 
-  /* Legacy aliases (kept for migration; remove in Phase 4) */
-  --color-accent:            #00D4AA;
-  --color-accent-foreground: #0B0B14;
-  --color-primary:           #00D4AA;
-  --color-primary-foreground:#0B0B14;
-  --color-popover:           #161624;
-  --color-popover-foreground:#EEEAF5;
-  --color-success:           #00D4AA;
-  --color-warning:           #FBBF24;
-  --color-info:              #34D399;
-
   /* Fonts */
   --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-body:    'Inter', system-ui, -apple-system, sans-serif;

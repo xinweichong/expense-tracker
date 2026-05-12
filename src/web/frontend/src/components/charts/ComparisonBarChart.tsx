@@ -7,7 +7,7 @@ import {
   CHART_TOOLTIP_STYLE,
   CHART_CURSOR_BAR,
   CHART_LEGEND_STYLE,
-  COLOR_ACCENT,
+  COLOR_TEAL,
   COLOR_MUTED_BAR,
 } from '@/lib/chartTheme';
 
@@ -37,7 +37,7 @@ export function ComparisonBarChart({ data }: { data: ComparisonData[] }) {
             formatter={(value) => value != null ? formatCurrency(Number(value)) : ''}
           />
           <Legend wrapperStyle={CHART_LEGEND_STYLE} />
-          <Bar dataKey="current" name="This period" fill={COLOR_ACCENT} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="current" name="This period" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
           <Bar dataKey="previous" name="Last period" fill={COLOR_MUTED_BAR} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
