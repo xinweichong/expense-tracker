@@ -11,7 +11,6 @@ import { AnalyticsPage } from '@/pages/AnalyticsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { MerchantsPage } from '@/pages/MerchantsPage';
 import { FinancePage } from '@/pages/FinancePage';
-import { TripsPage } from '@/pages/TripsPage';
 import { OnboardingPage } from '@/pages/OnboardingPage';
 import { AdminPage } from '@/pages/AdminPage';
 import { SetPasswordPage } from '@/pages/SetPasswordPage';
@@ -131,7 +130,7 @@ function AppContent() {
           <Route path="merchants" element={<MerchantsPage />} />
           <Route path="merchants/:merchantName" element={<MerchantsPage />} />
           <Route path="finance" element={<FinancePage />} />
-          <Route path="trips" element={<TripsPage />} />
+          <Route path="trips" element={<Navigate to="/finance" replace />} />
         </Route>
       </Routes>
     </>
