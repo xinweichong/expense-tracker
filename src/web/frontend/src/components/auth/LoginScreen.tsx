@@ -43,7 +43,7 @@ export function LoginScreen() {
         <div className="flex flex-col items-center gap-2 mb-8">
           <CasheWordmark size={42} />
           <span className="text-xs text-muted font-mono uppercase tracking-[0.22em]">
-            cash, caught.
+            cash, caught
           </span>
         </div>
 

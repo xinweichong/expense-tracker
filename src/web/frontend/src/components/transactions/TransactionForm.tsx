@@ -161,7 +161,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
         <Separator />
 
         <div className="flex gap-2 justify-end">
-          <Button type="button" variant="ghost" onClick={onClose}>
+          <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" disabled={!amount || createTx.isPending}>

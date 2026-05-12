@@ -147,7 +147,7 @@ export function TransactionDetail({
             )}
             <div className="flex gap-2">
               <Button
-                variant="ghost"
+                variant="outline"
                 className="flex-1"
                 onClick={() => {
                   setEditing(false);
@@ -174,7 +174,7 @@ export function TransactionDetail({
             <p className="text-sm text-destructive">Delete this? It's gone for good.</p>
             <div className="flex gap-2">
               <Button
-                variant="ghost"
+                variant="outline"
                 className="flex-1"
                 onClick={() => setConfirmingDelete(false)}
                 disabled={deleteTx.isPending}
@@ -246,7 +246,7 @@ export function TransactionDetail({
             {tx.merchant && (
               <div className="pt-1">
                 <Button
-                  variant="ghost"
+                  variant="link"
                   size="sm"
                   className="h-auto p-0 text-xs text-accent hover:text-accent hover:bg-transparent gap-1"
                   onClick={() => navigate(`/merchants/${encodeURIComponent(tx.merchant!)}`)}

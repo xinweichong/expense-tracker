@@ -232,7 +232,7 @@ export function TelegramStep({ onComplete, onSkip }: StepProps) {
             <div className="flex-1 font-mono text-sm bg-card border border-border rounded-md px-3 py-2 text-foreground">
               /start {token}
             </div>
-            <Button variant="ghost" size="sm" onClick={handleCopy}>
+            <Button variant="outline" size="sm" onClick={handleCopy}>
               {copied ? 'Copied' : 'Copy'}
             </Button>
           </div>
@@ -300,7 +300,7 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
               <div className="flex-1 font-mono text-xs bg-card border border-border rounded-md px-3 py-2 text-foreground break-all">
                 {webhookUrl}
               </div>
-              <Button variant="ghost" size="sm" onClick={handleCopyUrl}>
+              <Button variant="outline" size="sm" onClick={handleCopyUrl}>
                 {copiedUrl ? 'Copied' : 'Copy'}
               </Button>
             </div>
