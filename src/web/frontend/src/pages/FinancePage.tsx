@@ -1058,7 +1058,7 @@ export function FinancePage() {
             Finance
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
-            Finance.
+            Budgets, goals, trips.
           </h1>
         </div>
       </div>

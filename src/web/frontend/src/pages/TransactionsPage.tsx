@@ -98,7 +98,7 @@ export function TransactionsPage() {
               Transactions
             </div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
-              Every dollar tracked
+              Every dollar tracked.
             </h1>
           </div>
           <Button size="sm" onClick={() => setShowForm(!showForm)}>
