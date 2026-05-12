@@ -11,7 +11,7 @@ export function CasheLogo({ size = 28 }: CasheLogoProps) {
       viewBox="0 0 32 32"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      aria-label="Cashe"
+      aria-label="cashe"
     >
       <rect width="32" height="32" rx="8" fill="#00D4AA" />
       <path

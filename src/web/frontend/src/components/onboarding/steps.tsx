@@ -225,7 +225,7 @@ export function TelegramStep({ onComplete, onSkip }: StepProps) {
       ) : token ? (
         <div className="space-y-3">
           <ol className="text-sm text-foreground space-y-1 list-decimal list-inside">
-            <li>Open the Cashe bot: <span className="text-accent font-mono">@cashe_app_bot</span></li>
+            <li>Open the cashe bot: <span className="text-accent font-mono">@cashe_app_bot</span></li>
             <li>Send this code:</li>
           </ol>
           <div className="flex items-center gap-2">
@@ -233,7 +233,7 @@ export function TelegramStep({ onComplete, onSkip }: StepProps) {
               /start {token}
             </div>
             <Button variant="ghost" size="sm" onClick={handleCopy}>
-              {copied ? 'Copied!' : 'Copy'}
+              {copied ? 'Copied' : 'Copy'}
             </Button>
           </div>
           <p className="text-xs text-muted">This code expires in 24 hours.</p>
@@ -291,9 +291,9 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
       <div className="space-y-5">
         {/* Step 1 */}
         <div className="space-y-3">
-          <p className="text-xs font-semibold text-muted uppercase tracking-wider">Step 1 of 2 — Install the Cashe Shortcut</p>
+          <p className="text-xs font-semibold text-muted uppercase tracking-wider">Step 1 of 2 — Install the cashe Shortcut</p>
           <p className="text-sm text-foreground">
-            Tap the button to install the Cashe Shortcut on your iPhone. When prompted, paste your personal URL below:
+            Tap the button to install the cashe Shortcut on your iPhone. When prompted, paste your personal URL below:
           </p>
           {webhookUrl ? (
             <div className="flex items-center gap-2">
@@ -301,14 +301,14 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
                 {webhookUrl}
               </div>
               <Button variant="ghost" size="sm" onClick={handleCopyUrl}>
-                {copiedUrl ? 'Copied!' : 'Copy'}
+                {copiedUrl ? 'Copied' : 'Copy'}
               </Button>
             </div>
           ) : (
             <div className="h-9 bg-card border border-border rounded-md animate-pulse" />
           )}
           <Button variant="outline" onClick={() => window.open(CASHE_SHORTCUT_URL, '_blank')}>
-            Add Cashe Shortcut to iPhone →
+            Add cashe Shortcut to iPhone →
           </Button>
         </div>
 
@@ -326,7 +326,7 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
             <li>Under Personal, tap <span className="text-foreground">Transaction</span></li>
             <li>Select the card(s) you want to track</li>
             <li>Tap Next → Add Action → search <span className="text-foreground">"Run Shortcut"</span></li>
-            <li>Select <span className="text-foreground">Cashe</span> from the list</li>
+            <li>Select <span className="text-foreground">cashe</span> from the list</li>
             <li>Turn off <span className="text-foreground">"Ask Before Running"</span></li>
             <li>Tap <span className="text-foreground">Done</span></li>
           </ol>

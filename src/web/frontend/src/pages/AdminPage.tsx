@@ -266,7 +266,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
                   <span className="text-muted">Password:</span>
                   <span className="font-mono">{createResult.password}</span>
                   <Button variant="ghost" size="sm" onClick={() => copyPassword(createResult.password)}>
-                    {copied ? 'Copied!' : 'Copy'}
+                    {copied ? 'Copied' : 'Copy'}
                   </Button>
                 </div>
               </div>
