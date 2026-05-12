@@ -116,7 +116,7 @@ function TripRow({ trip }: { trip: Trip }) {
             onClick={handleToggle}
             disabled={isPendingToggle}
             className={`relative w-10 h-5 rounded-full transition-colors disabled:opacity-50 ${
-              isActive ? 'bg-success' : 'bg-foreground/20'
+              isActive ? 'toggle-on' : 'bg-foreground/20'
             }`}
             title={isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
           >
