@@ -307,7 +307,7 @@ export function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="w-full border-destructive/40 text-destructive hover:bg-destructive/10"
+              className="w-full"
               onClick={logout}
             >
               Sign out
@@ -436,9 +436,9 @@ export function SettingsPage() {
                 </div>
                 {currentUser?.gmail_connected ? (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="text-destructive shrink-0"
+                    className="shrink-0"
                     onClick={handleDisconnectGmail}
                     disabled={disconnectingGmail}
                   >
@@ -473,9 +473,9 @@ export function SettingsPage() {
                 </div>
                 {currentUser?.telegram_chat_id ? (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="text-destructive shrink-0"
+                    className="shrink-0"
                     onClick={handleDisconnectTelegram}
                     disabled={disconnectingTelegram}
                   >
@@ -595,7 +595,7 @@ export function SettingsPage() {
                       {catError && <p className="text-xs text-destructive">{catError}</p>}
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => handleUpdateCategory(cat.name)} disabled={updateCat.isPending}>Save</Button>
-                        <Button size="sm" variant="ghost" onClick={() => { setEditingCategory(null); setCatError(''); }}>Cancel</Button>
+                        <Button size="sm" variant="outline" onClick={() => { setEditingCategory(null); setCatError(''); }}>Cancel</Button>
                       </div>
                     </div>
                   ) : (
@@ -702,7 +702,7 @@ export function SettingsPage() {
                   </div>
                   <button
                     onClick={() => toggleSetting(key, !settings?.[key])}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${settings?.[key] ? 'bg-success' : 'bg-foreground/20'}`}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${settings?.[key] ? 'toggle-on' : 'bg-foreground/20'}`}
                   >
                     <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings?.[key] ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>
@@ -808,7 +808,7 @@ export function SettingsPage() {
             {catError && <p className="text-xs text-destructive">{catError}</p>}
             <Separator />
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setShowAddCategory(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setShowAddCategory(false)}>Cancel</Button>
               <Button onClick={handleAddCategory} disabled={!newCatName.trim() || createCat.isPending}>Add</Button>
             </div>
           </div>
