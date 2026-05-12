@@ -295,7 +295,7 @@ export function OverviewPage() {
             Overview · {new Date(start).toLocaleDateString('en-SG', { month: 'long', year: 'numeric' })}
           </div>
           <h1 className="text-xl md:text-3xl font-bold tracking-tight text-foreground font-display">
-            Where the dollars go
+            Where the dollars go.
           </h1>
         </div>
         <div className="flex flex-row items-center gap-2 flex-wrap shrink-0">

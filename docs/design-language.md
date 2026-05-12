@@ -510,7 +510,7 @@ All Recharts configuration centralised in `src/lib/chartTheme.ts`. Never inline 
 
 - **Brand name in product copy:** lowercase `cashe` (always).
 - **Brand name in formal documentation / legal:** lowercase `cashe` (same).
-- **Headings:** sentence case, not title case. ("Where the dollars go" — not "Where The Dollars Go.")
+- **Headings:** sentence case, not title case. ("Where the dollars go." — not "Where The Dollars Go.")
 - **Action labels (buttons):** title case. ("Add Transaction", "Sign In", "Delete".)
 - **Eyebrow labels (mono):** uppercase with letter-spacing. ("THIS MONTH · DAY 11 OF 30".)
 - **Tagline:** all lowercase. ("cash, caught.")
