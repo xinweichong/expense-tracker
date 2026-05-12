@@ -1517,9 +1517,11 @@ class AdminStorage:
     def __init__(self, connection: sqlite3.Connection):
         self._conn = connection
         self._conn.row_factory = sqlite3.Row
+        self._lock = threading.RLock()
 
     # ── Users ──────────────────────────────────────────────────────────────────
 
+    @_locked
     def create_user(self, username: str, password_hash: str) -> None:
         """Insert a new user row. Raises ValueError if username already exists.
         Sets force_password_change=1 so the user must set their own password on first login.
@@ -1533,6 +1535,7 @@ class AdminStorage:
         except sqlite3.IntegrityError:
             raise ValueError(f"user '{username}' already exists")
 
+    @_locked
     def get_user(self, username: str) -> dict | None:
         """Returns full user row as dict, or None if not found."""
         row = self._conn.execute(
@@ -1540,6 +1543,7 @@ class AdminStorage:
         ).fetchone()
         return dict(row) if row else None
 
+    @_locked
     def get_user_by_chat_id(self, chat_id: str) -> dict | None:
         """Lookup user by Telegram chat_id."""
         row = self._conn.execute(
@@ -1547,17 +1551,20 @@ class AdminStorage:
         ).fetchone()
         return dict(row) if row else None
 
+    @_locked
     def list_users(self) -> list[dict]:
         rows = self._conn.execute(
             "SELECT * FROM users ORDER BY created_at ASC"
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
     def delete_user(self, username: str) -> None:
         """Delete user row. ON DELETE CASCADE removes sessions and telegram_link_tokens."""
         self._conn.execute("DELETE FROM users WHERE username = ?", (username,))
         self._conn.commit()
 
+    @_locked
     def update_user(self, username: str, **fields) -> None:
         """Update one or more fields on a user row.
         Allowed fields: gmail_connected, telegram_chat_id, wants_gmail,
@@ -1583,6 +1590,7 @@ class AdminStorage:
 
     # ── User sessions (30-day sliding window) ─────────────────────────────────
 
+    @_locked
     def create_session(self, username: str, user_agent: str = "") -> str:
         """Create a session token for a user. Returns the session token."""
         token = secrets.token_hex(32)
@@ -1593,6 +1601,7 @@ class AdminStorage:
         self._conn.commit()
         return token
 
+    @_locked
     def verify_session(self, token: str) -> str | None:
         """Returns username if session is valid and within 30-day sliding window.
         Updates last_used_at on every successful verify.
@@ -1615,10 +1624,12 @@ class AdminStorage:
         self._conn.commit()
         return row["username"]
 
+    @_locked
     def destroy_session(self, token: str) -> None:
         self._conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
         self._conn.commit()
 
+    @_locked
     def destroy_all_sessions(self, username: str, except_token: str | None = None) -> None:
         """Delete all sessions for a user, optionally keeping one (the current session)."""
         if except_token:
@@ -1632,6 +1643,7 @@ class AdminStorage:
             )
         self._conn.commit()
 
+    @_locked
     def list_sessions(self, username: str) -> list[dict]:
         """Return all sessions for a user, newest first."""
         rows = self._conn.execute(
@@ -1644,6 +1656,7 @@ class AdminStorage:
 
     # ── Admin sessions (2-hour sliding window) ─────────────────────────────────
 
+    @_locked
     def create_admin_session(self) -> str:
         token = secrets.token_hex(32)
         self._conn.execute(
@@ -1652,6 +1665,7 @@ class AdminStorage:
         self._conn.commit()
         return token
 
+    @_locked
     def verify_admin_session(self, token: str) -> bool:
         """Returns True if token exists and last_used_at is within 2 hours."""
         row = self._conn.execute(
@@ -1673,12 +1687,14 @@ class AdminStorage:
         self._conn.commit()
         return True
 
+    @_locked
     def destroy_admin_session(self, token: str) -> None:
         self._conn.execute("DELETE FROM admin_sessions WHERE token = ?", (token,))
         self._conn.commit()
 
     # ── Telegram link tokens ──────────────────────────────────────────────────
 
+    @_locked
     def create_telegram_link_token(self, username: str) -> str:
         """Generate a CASHE-XXXXXX one-time code. Stores with 24h expiry.
         Deletes any existing tokens for this user before creating a new one.
@@ -1698,6 +1714,7 @@ class AdminStorage:
         self._conn.commit()
         return token
 
+    @_locked
     def consume_telegram_link_token(self, token: str) -> str | None:
         """Validate and consume a Telegram link token.
         Returns the associated username if valid and not expired.
