@@ -32,7 +32,7 @@ export function BottomTabs() {
 
   return (
     <>
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-sm border-t border-border z-50">
         <div className="flex justify-around items-center h-16">
           {mainTabs.map(({ to, icon: Icon, label }) => (
             <NavLink

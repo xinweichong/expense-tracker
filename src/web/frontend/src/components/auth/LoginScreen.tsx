@@ -15,7 +15,6 @@ const taglineStyle: React.CSSProperties = {
   letterSpacing: '0.24em',
   lineHeight: 1,
   textTransform: 'uppercase',
-  whiteSpace: 'nowrap',
 };
 
 export function LoginScreen() {
@@ -38,7 +37,7 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: B1_WASH }}>
+    <div className="h-dvh overflow-hidden flex items-center justify-center px-4" style={{ background: B1_WASH }}>
       <motion.div
         className="relative w-full max-w-sm space-y-8"
         variants={fadeUpVariants}

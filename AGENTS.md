@@ -204,19 +204,19 @@ Defined in `src/web/frontend/src/index.css` under `@theme`. These become both CS
 | `--color-border` | `#2A2A32` | All borders and dividers |
 | `--color-foreground` | `#E8E8ED` | Primary text |
 | `--color-muted` | `#72727E` | Secondary text, axis ticks, labels |
-| `--color-accent` / `--color-primary` | `#00D4AA` | CTAs, active states, trend lines, current-period bars |
-| `--color-primary-foreground` | `#0D0D0F` | Text on accent background |
+| `--color-teal` / `--color-ring` | `#00D4AA` | CTAs, active states, trend lines, current-period bars, focus ring |
+| `--color-accent` | `#EEEAF5` | Radix UI compat token only — equals foreground; **not** the brand teal |
 | `--color-destructive` | `#FF453A` | Delete actions, error messages, overspend alerts |
-| `--color-success` | `#30D158` | Income amounts, "on track" status |
-| `--color-warning` | `#FFD60A` | Unusual spending alerts |
-| `--color-info` | `#64D2FF` | Informational, "under pace" velocity |
+| `--color-success` | `#00D4AA` (= `--color-teal`) | Income amounts, "on track" / saved status |
+| `--color-warning` | `#FBBF24` (= `--color-honey`) | Unusual spending alerts |
+| `--color-info` | `#34D399` (= `--color-mint`) | Informational, "under pace" velocity |
 
 **Semantic color rules — these have caused real bugs, apply carefully:**
 - `text-destructive` for delete buttons, error messages, and "spending ahead of pace" — **never `text-accent`**. Using `text-accent` on destructive actions was a bug fixed across multiple files in `859dd5e`.
 - `text-warning` for unusual spending alert icons and borders — **never `text-accent`**. Fixed in `ace89a3`.
-- `text-accent` is only for primary interactive states, active toggle buttons, and chart lines/bars. The accent color was changed from `#FF6B6B` to teal specifically to stop it clashing with the Food category color (`29f259c`).
-- `text-success` for income amounts and positive spending velocity.
-- `text-info` for neutral informational status ("under pace").
+- **Never use `text-accent`** for any visible text — `--color-accent` is a Radix UI compat token set to `#EEEAF5` (foreground). Use `text-teal` for brand interactive states.
+- `text-success` for income amounts and positive spending velocity (renders as teal `#00D4AA`).
+- `text-info` for neutral informational status ("under pace") (renders as mint `#34D399`).
 
 ### Category Color System
 

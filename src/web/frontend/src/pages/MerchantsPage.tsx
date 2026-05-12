@@ -134,6 +134,7 @@ export function MerchantsPage() {
         ) : merchants.length === 0 ? (
           <div className="text-muted text-sm py-8 text-center">No merchants found.</div>
         ) : (
+          <div className="overflow-x-auto">
           <Card>
             <CardContent className="p-0">
               <table className="w-full text-sm">
@@ -205,6 +206,7 @@ export function MerchantsPage() {
               </table>
             </CardContent>
           </Card>
+          </div>
         )}
       </div>
 

@@ -3,6 +3,9 @@ import type { CSSProperties } from 'react';
 export const B1_WASH =
   'linear-gradient(135deg, rgba(0,212,170,.38) 0%, rgba(11,11,20,.94) 35%, rgba(11,11,20,.98) 58%, rgba(234,88,12,.34) 82%, rgba(220,38,38,.3) 100%), #0B0B14';
 
+export const B2_WASH =
+  'linear-gradient(135deg, rgba(0,212,170,.08) 0%, transparent 30%, transparent 68%, rgba(234,88,12,.07) 86%, rgba(220,38,38,.06) 100%), #0B0B14';
+
 const WARM_GRADIENT = 'linear-gradient(135deg, #D97706, #EA580C 50%, #DC2626)';
 
 const dollarStyle: CSSProperties = {

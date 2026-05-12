@@ -601,13 +601,13 @@ export function SettingsPage() {
                   ) : (
                     <>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           <span
                             className="inline-block w-3 h-3 rounded-full shrink-0"
                             style={{ backgroundColor: cat.color || getCategoryColor(cat.name) }}
                           />
-                          <span className="text-lg">{cat.icon || '📌'}</span>
-                          <span className="text-sm font-medium">{cat.name}</span>
+                          <span className="text-lg shrink-0">{cat.icon || '📌'}</span>
+                          <span className="text-sm font-medium truncate">{cat.name}</span>
                         </div>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(cat)}>

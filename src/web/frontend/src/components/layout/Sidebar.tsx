@@ -21,7 +21,7 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-14 lg:w-56 bg-card border-r border-border h-screen sticky top-0">
+    <aside className="hidden md:flex flex-col w-14 lg:w-56 bg-card/80 backdrop-blur-sm border-r border-border h-screen sticky top-0">
       <div className="flex items-center gap-3 px-3 py-5 lg:px-4">
         <CasheWordmark size={22} />
       </div>
