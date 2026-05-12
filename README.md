@@ -17,15 +17,15 @@ A privacy-first personal finance app that **automatically captures every transac
 
 ---
 
-## Why Cashe?
+## Why cashe?
 
-Most people don't track their spending — not because they don't care, but because it's too much friction. Cashe removes the friction entirely.
+Most people don't track their spending — not because they don't care, but because it's too much friction. cashe removes the friction entirely.
 
 **Transactions captured automatically.** Every DBS PayLah!, UOB PayNow, UOB Card payment, and Apple Wallet tap is ingested and categorised the moment it happens. You never open an app to log anything.
 
 **Your data, your server.** Everything lives in a SQLite database you control. No cloud vendor sees your transactions. No subscription. No lock-in.
 
-**Intelligent, not just transactional.** Cashe tracks budgets, goals, health score, merchant patterns, recurring charges, and trips — so you get a complete picture of your finances, not just a list of debits.
+**Intelligent, not just transactional.** cashe tracks budgets, goals, health score, merchant patterns, recurring charges, and trips — so you get a complete picture of your finances, not just a list of debits.
 
 ---
 
@@ -62,7 +62,7 @@ Most people don't track their spending — not because they don't care, but beca
 
 ## Features
 
-### Automatic Capture
+### Automatic capture
 
 | | |
 |---|---|
@@ -71,7 +71,7 @@ Most people don't track their spending — not because they don't care, but beca
 | **Source-ID Deduplication** | Every transaction carries a unique `source_id`; cross-source duplicates (Gmail + Apple Wallet arriving for the same transaction) are discarded automatically |
 | **Multi-Currency** | Foreign currency transactions (e.g. `PLN 3.78`, `£12.50`) auto-converted to SGD using cached exchange rates with offline fallbacks |
 
-### Analytics & Intelligence
+### Analytics & intelligence
 
 | | |
 |---|---|
@@ -139,9 +139,9 @@ Single Python process. SQLite with WAL mode. FastAPI for webhooks and the dashbo
 
 ---
 
-## Quick Start
+## Quick start
 
-### Local Development
+### Local development
 
 ```bash
 # Clone and set up
@@ -172,7 +172,7 @@ npm run build   # output goes to src/web/dist/
 cd ../../..
 ```
 
-### Generate Web Dashboard Password
+### Generate web dashboard password
 
 ```bash
 python -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt()).decode())"
@@ -180,9 +180,9 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt()
 
 Copy the output (starts with `$2b$12$...`) into `config.yaml` as `web.password_hash`.
 
-### Oracle Cloud Deployment
+### Oracle Cloud deployment
 
-Cashe runs on an **Oracle Always Free** ARM VM behind a **Cloudflare Tunnel** — no open inbound ports, automatic TLS, and a custom domain. Docker Compose manages the two services (`app` + `cloudflared`).
+cashe runs on an **Oracle Always Free** ARM VM behind a **Cloudflare Tunnel** — no open inbound ports, automatic TLS, and a custom domain. Docker Compose manages the two services (`app` + `cloudflared`).
 
 **Prerequisites:** an Oracle Cloud account and a domain on Cloudflare (free plan works).
 
@@ -271,7 +271,7 @@ categories:
     icon: "📌"
 ```
 
-### Environment Variable Overrides
+### Environment variable overrides
 
 All config values can be set via environment variables (for Railway or Docker). When `config.yaml` is absent, the app builds its config entirely from env vars:
 
@@ -288,9 +288,9 @@ All config values can be set via environment variables (for Railway or Docker). 
 
 ---
 
-## Telegram Commands
+## Telegram commands
 
-### Viewing Spending
+### Viewing spending
 
 | Command | Description |
 |---------|-------------|
@@ -312,7 +312,7 @@ All config values can be set via environment variables (for Railway or Docker). 
 | `/merchants_report` | Top merchants ranked by total spend with trends |
 | `/summary` | Cached weekly or monthly digest report |
 
-### Manual Entry
+### Manual entry
 
 | Command | Description | Example |
 |---------|-------------|---------|
@@ -323,7 +323,7 @@ All config values can be set via environment variables (for Railway or Docker). 
 | `/edit` | Edit a recent transaction via guided conversation | — |
 | `/delete` | Delete a recent transaction via guided conversation | — |
 
-### Category Management
+### Category management
 
 | Command | Description |
 |---------|-------------|
@@ -342,7 +342,7 @@ All commands support **inline keyboards** — post-command action buttons appear
 
 ---
 
-## Web Dashboard
+## Web dashboard
 
 Access at `http://your-server:8080`. The dashboard is a React SPA with six pages, all using viewport-native CSS Grid layout on desktop (no page-level scroll) with spring animations powered by framer-motion.
 
@@ -400,11 +400,11 @@ The dashboard is **fully responsive** (iPhone, iPad, desktop), **PWA-ready** —
 
 ---
 
-## iOS Shortcut Setup (Apple Wallet Auto-Capture)
+## iOS Shortcut setup (Apple Wallet auto-capture)
 
 This sets up an iOS Automation that **automatically fires** whenever an Apple Wallet transaction occurs. The Shortcut extracts transaction details (date, card, merchant, amount) and POSTs them as JSON to your server webhook.
 
-### Part A: Create the Automation
+### Part A: Create the automation
 
 1. Open the **Shortcuts** app on your iPhone
 2. Go to the **Automation** tab → tap **"+"** → **"Create Personal Automation"**
@@ -435,7 +435,7 @@ This sets up an iOS Automation that **automatically fires** whenever an Apple Wa
 **Action 5 — Set Merchant variable:**
 - **"Set Variable"**: name `Merchant`, value = **Updated Text** from Action 4
 
-### Part C: Send to Server (2 actions)
+### Part C: Send to server (2 actions)
 
 **Action 6 — Build JSON:**
 - **"Text"** action with:
@@ -476,7 +476,7 @@ All tests use in-memory SQLite — no database files created on disk. 416 tests 
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 expense-tracker/
@@ -558,7 +558,7 @@ expense-tracker/
 | `/recategorize` says category not found | Use exact category names. Type `/recategorize` alone to see available categories |
 | Inline buttons not appearing | Ensure `bot_token` is correct and `post_init` ran successfully — check logs for `Registered Telegram command menu` |
 
-### Web Dashboard
+### Web dashboard
 
 | Issue | Solution |
 |-------|----------|
@@ -595,7 +595,7 @@ expense-tracker/
 
 ---
 
-## Git Workflow
+## Git workflow
 
 ```
 feature/xxx ──merge --no-ff──> develop ──test──> main (tagged release)
