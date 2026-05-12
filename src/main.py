@@ -450,7 +450,7 @@ def main():
 
     # Start web server (blocking)
     logger.info(f"Starting web server on {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host=host, port=port, timeout_keep_alive=65)
 
 
 if __name__ == "__main__":
