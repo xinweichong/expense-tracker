@@ -3,9 +3,20 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { CasheBrandLockup } from '@/components/ui/Brand';
+import { CasheWordmark, B1_WASH } from '@/components/ui/Brand';
 import { motion } from 'framer-motion';
 import { fadeUpVariants } from '@/lib/animations';
+
+const taglineStyle: React.CSSProperties = {
+  color: 'rgba(238, 234, 245, 0.68)',
+  fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
+  fontSize: '13px',
+  fontWeight: 600,
+  letterSpacing: '0.24em',
+  lineHeight: 1,
+  textTransform: 'uppercase',
+  whiteSpace: 'nowrap',
+};
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -27,25 +38,21 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      {/* Subtle accent glow */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-accent/5 blur-3xl" />
-      </div>
-
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: B1_WASH }}>
       <motion.div
         className="relative w-full max-w-sm space-y-8"
         variants={fadeUpVariants}
         initial="initial"
         animate="animate"
       >
-        {/* Branding */}
-        <div className="flex flex-col items-center mb-8">
-          <CasheBrandLockup size={160} />
+        {/* Brand */}
+        <div className="flex flex-col items-center gap-3">
+          <CasheWordmark size={72} />
+          <span style={taglineStyle}>CASH, CAUGHT.</span>
         </div>
 
         {/* Form card */}
-        <Card className="p-6">
+        <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/60">
           <div className="mb-5">
             <p className="text-sm font-semibold text-foreground">Sign in.</p>
             <p className="text-xs text-muted mt-0.5">Enter your credentials to continue</p>
