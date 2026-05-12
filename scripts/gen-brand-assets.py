@@ -30,14 +30,22 @@ def run():
             page.locator(selector).screenshot(path=str(path))
             print(f"Saved {path}")
 
+        def shot_transparent(selector, path):
+            page.locator(selector).screenshot(path=str(path), omit_background=True)
+            print(f"Saved {path}")
+
+        # App icons and banners — opaque dark background, no transparent corners needed
         shot("#icon-192",    PUBLIC / "icon-192.png")
         shot("#icon-512",    PUBLIC / "icon-512.png")
         shot("#icon-180",    PUBLIC / "apple-touch-icon.png")
-        shot("#favicon-32",  PUBLIC / "favicon-32.png")
-        shot("#favicon-192", PUBLIC / "favicon-192.png")
-        shot("#favicon-512", PUBLIC / "favicon-512.png")
         shot("#banner-1280", REPO   / "cashe-banner.png")
         shot("#banner-1200", PUBLIC / "og-image.png")
+
+        # Favicons — transparent corners so rounded rect shows cleanly in browser tabs
+        page.evaluate("() => document.body.style.background = 'transparent'")
+        shot_transparent("#favicon-32",  PUBLIC / "favicon-32.png")
+        shot_transparent("#favicon-192", PUBLIC / "favicon-192.png")
+        shot_transparent("#favicon-512", PUBLIC / "favicon-512.png")
 
         browser.close()
 
