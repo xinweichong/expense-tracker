@@ -33,8 +33,8 @@ The wordmark is **ca$he** — the literal "s" replaced by a warm-gradient "$" gl
 | Property | Value |
 |---|---|
 | Family | Plus Jakarta Sans |
-| Weight | 800 (ExtraBold) |
-| Letter-spacing | `-0.045em` |
+| Weight | 800 (ExtraBold — the max available weight) |
+| Letter-spacing | `-0.068em` |
 | Line-height | `0.9` |
 | "ca" + "he" color | `#00D4AA` (teal) |
 | "$" fill | Warm gradient (see §2.3) |
@@ -46,10 +46,11 @@ Reference CSS:
 .cashe-mark {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-weight: 800;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.068em;
   line-height: 0.9;
   display: inline-flex;
   align-items: baseline;
+  transform: translateX(-1px); /* optical correction */
 }
 .cashe-mark .ca,
 .cashe-mark .he { color: #00D4AA; }
@@ -58,43 +59,50 @@ Reference CSS:
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  margin: 0 -0.02em; /* tighten the $ so it nests like an "s" */
+  margin: 0 -0.02em;
 }
-```
-
-Markup:
-
-```html
-<span class="cashe-mark">
-  <span class="ca">ca</span><span class="dollar">$</span><span class="he">he</span>
-</span>
 ```
 
 The wordmark is the primary expression of the brand. **Use it wherever space allows** — sidebar, headers, footers, splash, README, marketing.
 
-### 1.4 Icon — `$` in cache
+### 1.4 Icon — B1 spectrum wash
 
-For places the wordmark cannot fit (favicon, app icon, social profile, OS tile), use the icon: the warm-gradient `$` glyph from the wordmark, promoted into a teal rounded square (the "cache").
+All static icons (PWA, browser tab, banners) use the **B1 spectrum-wash** background: a diagonal gradient that sweeps teal (entry) → near-ink (center) → orange/red (exit).
 
-| Property | Value |
-|---|---|
-| Container | `aspect-ratio: 1`, `border-radius: 22%`, `background: #00D4AA` |
-| $ glyph | Plus Jakarta Sans 800, warm gradient (see §2.3) |
-| $ font-size | `~75%` of container size (e.g. 96px in a 128px container) |
-| $ alignment | `display: flex; align-items: center; justify-content: center; line-height: 1` |
-| Optical centering | Push the $ up by `-0.05em` (margin-top) to optically center — the $ glyph's visual centre sits slightly below the bbox centre |
+**Background spec:**
+```css
+background:
+  linear-gradient(135deg,
+    rgba(0,212,170,.38)  0%,
+    rgba(11,11,20,.94)  35%,
+    rgba(11,11,20,.98)  58%,
+    rgba(234,88,12,.34) 82%,
+    rgba(220,38,38,.3) 100%),
+  #0B0B14;
+border: 1px solid #2A2A3F;
+border-radius: 25.5%;
+box-shadow: 0 18px 40px -30px rgba(0,212,170,.85);
+```
 
-> Note: the icon and the wordmark contain the same `$` glyph in the same gradient. The icon is the $ from the wordmark, isolated. They are visually one system.
+**Adaptive foreground by context:**
+
+| Context | Foreground | Files |
+|---|---|---|
+| Wide banners (README, OG/social) | `ca$he` wordmark + `CASH, CAUGHT.` tagline | `cashe-banner.png`, `og-image.png` |
+| App / PWA home-screen icons | `ca$he` wordmark only | `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` |
+| Browser tab favicons | `$` glyph only (legibility at small size) | `favicon-32.png`, `favicon-192.png`, `favicon-512.png` |
+| Login screen tile | `ca$he` + `CASH, CAUGHT.` (React component) | `CasheBrandLockup` in `Brand.tsx` |
+
+Tagline uses JetBrains Mono 600, `letter-spacing: 0.24em`, `text-transform: uppercase`, `color: rgba(238,234,245,.68)`.
 
 ### 1.5 Icon — where it appears
 
-- ✅ Favicon (16, 32, 64px)
-- ✅ App icon / PWA icon (128, 192, 512, 1024px)
-- ✅ Social profile picture (Twitter, GitHub, OG share fallback)
-- ✅ OS tile / Windows live tile
-- ❌ Sidebar — use the wordmark only. The icon would be redundant next to the wordmark.
-- ❌ Email headers, slack notifications — wordmark only.
-- ❌ Telegram bot avatar — icon is acceptable here only because Telegram requires a square image and won't render the wordmark.
+- ✅ Browser tab favicon (`favicon-32.png`, `favicon-192.png`) — `$` only
+- ✅ PWA / home-screen icon (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) — `ca$he` wordmark
+- ✅ README banner, OG/social image — `ca$he` + tagline
+- ✅ Login screen (`CasheBrandLockup` component) — `ca$he` + tagline in B1 square tile
+- ❌ Sidebar — wordmark text only, no icon tile.
+- ❌ Inline app chrome — wordmark text only.
 
 ### 1.6 Wordmark — where it appears
 
@@ -110,6 +118,47 @@ When you have space to tell the brand story (e.g. an "About" page, an empty-stat
 
 > **cashe = cash + cache.**
 > The teal is the cache — quiet, persistent storage that captures every transaction the moment it happens. The "$" glyph in warm gradient is the cash — the spending, made visible. Together, they tell the story of a system that catches every dollar.
+
+### 1.8 Re-rendering static brand assets
+
+All static PNG assets are rendered by Chrome via Playwright — the browser is the single canonical source of truth for fonts, gradients, and spacing. **Never hand-edit the PNGs or hand-craft SVG replacements.**
+
+#### Prerequisites (one-time)
+
+```bash
+# Python dependencies
+pip install playwright pillow numpy fonttools
+playwright install  # or use: --executable-path to system Chrome
+
+# Font files (embedded in the script as base64; refresh if fontsource packages update)
+npm pack @fontsource/plus-jakarta-sans   # extract latin-800-normal.woff
+npm pack @fontsource/jetbrains-mono      # extract latin-600-normal.woff
+```
+
+The script assumes these WOFF files live at the paths hardcoded in `scripts/gen-brand-assets.py`. Update those paths if you re-extract.
+
+#### Running
+
+```bash
+python3 scripts/gen-brand-assets.py
+```
+
+Outputs (all overwritten in-place):
+
+| File | Size | Foreground |
+|---|---|---|
+| `cashe-banner.png` | 1280×420 | `ca$he` + tagline |
+| `src/web/frontend/public/og-image.png` | 1200×630 | `ca$he` + tagline |
+| `src/web/frontend/public/icon-192.png` | 192×192 | `ca$he` wordmark |
+| `src/web/frontend/public/icon-512.png` | 512×512 | `ca$he` wordmark |
+| `src/web/frontend/public/apple-touch-icon.png` | 180×180 | `ca$he` wordmark |
+| `src/web/frontend/public/favicon-32.png` | 32×32 | `$` only |
+| `src/web/frontend/public/favicon-192.png` | 192×192 | `$` only |
+| `src/web/frontend/public/favicon-512.png` | 512×512 | `$` only |
+
+#### If you change the design
+
+Edit the HTML inside `scripts/gen-brand-assets.py` — it is plain CSS/HTML. The B1 background gradient, font sizes, and letter-spacing are all inline in that file. Change the values, re-run the script, commit the new PNGs.
 
 ---
 
