@@ -10,6 +10,7 @@ from typing import Optional
 
 import bcrypt
 from fastapi import FastAPI, Request, Response, HTTPException, Depends
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 import csv
 import io
@@ -37,9 +38,8 @@ SUMMARY_CACHE_DIR = os.environ.get(
     os.path.join(os.path.dirname(__file__), "..", "data", "summaries")
 )
 
-# Single-worker executor: serialises all DB work off the event loop.
-# max_workers=1 means the web layer never concurrently accesses the SQLite connection.
-_DB_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+# DB thread pool: allows concurrent read queries while serialising writes via SQLite WAL mode.
+_DB_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
 async def _db(fn, *args, **kwargs):
@@ -55,6 +55,7 @@ def create_dashboard_app(
     host_base_url: str = "",
 ) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
+    app.add_middleware(GZipMiddleware, minimum_size=500)
 
     @app.get("/oauth/callback")
     async def oauth_callback(request: Request):
