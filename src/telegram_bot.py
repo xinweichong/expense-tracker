@@ -161,7 +161,7 @@ class TelegramBotService:
         if ctx is None:
             try:
                 await update.message.reply_text(
-                    "Send `/start <code>` from the Cashe onboarding page to link your account.",
+                    "Send `/start <code>` from the cashe onboarding page to link your account.",
                     parse_mode="Markdown",
                 )
             except Exception:
@@ -634,8 +634,8 @@ class TelegramBotService:
                 username = self.admin_storage.consume_telegram_link_token(token)
                 if not username:
                     await update.message.reply_text(
-                        "This code is invalid or has expired. "
-                        "Return to the Cashe onboarding page to generate a new one."
+                        "Code invalid or expired. "
+                        "Return to the cashe onboarding page to generate a new one."
                     )
                     return
                 existing = self.admin_storage.get_user_by_chat_id(str(chat_id))
@@ -643,19 +643,19 @@ class TelegramBotService:
                     await update.message.reply_text("This code belongs to a different account.")
                     return
                 self.admin_storage.update_user(username, telegram_chat_id=str(chat_id))
-                await update.message.reply_text("Your Telegram is now linked to Cashe.")
+                await update.message.reply_text("Linked. Your Telegram is connected to cashe.")
                 return
             # /start with no args — check if already linked
             if self.user_manager:
                 ctx = self.user_manager.get_by_chat_id(chat_id)
                 if ctx:
                     await update.message.reply_text(
-                        f"Welcome back! You're linked as *{ctx.username}*.",
+                        f"Linked as *{ctx.username}*.",
                         parse_mode="Markdown",
                     )
                     return
             await update.message.reply_text(
-                "Send `/start <code>` from the Cashe onboarding page to link your account.",
+                "Send `/start <code>` from the cashe onboarding page to link your account.",
                 parse_mode="Markdown",
             )
             return
@@ -664,7 +664,7 @@ class TelegramBotService:
         self.chat_id = chat_id
         self._save_chat_id(self.chat_id)
         await update.message.reply_text(
-            "Expense Tracker bot ready! Use the menu button or /help to see all commands."
+            "Ready. Use the menu button or /help to see all commands."
         )
 
     async def _today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -767,7 +767,7 @@ class TelegramBotService:
         sgd_equivalent = parsed["amount"] * exchange_rate
         icon = ctx.storage.get_category_icon_map().get(category, "")
         cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
-        msg = f"✅ *Added* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} {currency}`"
+        msg = f"Captured. *{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} {currency}` _{tx_id}_"
         if currency != "SGD":
             msg += f"\n~ SGD `${sgd_equivalent:.2f}`"
         await update.message.reply_text(msg, parse_mode="Markdown")
@@ -815,7 +815,7 @@ class TelegramBotService:
         ctx.storage.auto_assign_to_active_trip(tx_id)
         icon = ctx.storage.get_category_icon_map().get(category, "")
         cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
-        msg = f"✅ *Cash* #{tx_id}\n*{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} SGD`"
+        msg = f"Captured. *{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} SGD` _{tx_id}_"
         await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _recategorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -926,7 +926,7 @@ class TelegramBotService:
             tx_type="income",
         )
 
-        msg = f"💰 *Income* #{tx_id}\n*{self._escape_md(description)}* · `${amount:.2f} SGD`"
+        msg = f"💰 Recorded. *{self._escape_md(description)}* · `+${amount:.2f} SGD` _{tx_id}_"
         await update.message.reply_text(msg, parse_mode="Markdown")
 
     async def _balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1168,7 +1168,7 @@ class TelegramBotService:
 
     async def _help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines = [
-            "*Expense Tracker Commands*\n",
+            "*cashe commands*\n",
             "📋 *Viewing*",
             "  /today — Today's spending",
             "  /week — This week's spending",
@@ -1210,8 +1210,7 @@ class TelegramBotService:
         text = update.message.text or ""
         cmd = text.split()[0]
         await update.message.reply_text(
-            f"Unknown command: {cmd}\n\n"
-            "Available commands:\n"
+            f"{cmd} not recognised.\n\n"
             "/today /week /month — view spending\n"
             "/balance — income vs expenses\n"
             "/dashboard — open web dashboard\n"
@@ -1226,7 +1225,7 @@ class TelegramBotService:
 
     async def _unknown_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(
-            "I understand commands starting with /.\n"
+            "Commands start with /.\n"
             "Type /help for a full list."
         )
 
@@ -1607,11 +1606,11 @@ class TelegramBotService:
         try:
             auth_url = poller.get_auth_url(self.oauth_redirect_uri, state)
             await update.message.reply_text(
-                f"Click the link below to re-authorize Gmail:\n{auth_url}",
+                f"Re-authorize Gmail:\n{auth_url}",
                 disable_web_page_preview=True,
             )
         except Exception as e:
-            await update.message.reply_text(f"Failed to start re-authorization: {e}")
+            await update.message.reply_text(f"Could not start re-authorization: {e}")
 
     async def _forcepoll(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         poller = self._resolve_poller(update)
@@ -1621,13 +1620,13 @@ class TelegramBotService:
         if not poller.service:
             await update.message.reply_text("Gmail not authenticated. Use /reauth first.")
             return
-        await update.message.reply_text("Polling Gmail for new emails...")
+        await update.message.reply_text("Checking Gmail for new emails.")
         try:
             count = poller.force_poll()
             if count == 0:
                 await update.message.reply_text("No new transactions found.")
             else:
-                await update.message.reply_text(f"Ingested {count} new transaction(s).")
+                await update.message.reply_text(f"{count} new transaction(s) captured.")
         except Exception as e:
             await update.message.reply_text(f"Poll failed: {e}")
 

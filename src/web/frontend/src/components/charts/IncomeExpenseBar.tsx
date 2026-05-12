@@ -9,8 +9,8 @@ import {
   CHART_TOOLTIP_STYLE,
   CHART_CURSOR_BAR,
   CHART_LEGEND_STYLE,
-  COLOR_INCOME,
-  COLOR_EXPENSE,
+  COLOR_TEAL,
+  COLOR_CORAL,
 } from '@/lib/chartTheme';
 
 function formatMonth(month: string): string {
@@ -31,7 +31,7 @@ export function IncomeExpenseBar() {
   if (isLoading) {
     return (
       <ChartCard title={TITLE}>
-        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Loading…</div>
+        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Catching up…</div>
       </ChartCard>
     );
   }
@@ -39,7 +39,7 @@ export function IncomeExpenseBar() {
   if (isError) {
     return (
       <ChartCard title={TITLE}>
-        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Failed to load data</div>
+        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Couldn't load this — try refreshing.</div>
       </ChartCard>
     );
   }
@@ -73,8 +73,8 @@ export function IncomeExpenseBar() {
                 : ''}
             />
             <Legend wrapperStyle={CHART_LEGEND_STYLE} />
-            <Bar dataKey="Income" fill={COLOR_INCOME} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Expenses" fill={COLOR_EXPENSE} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Income" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Expenses" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

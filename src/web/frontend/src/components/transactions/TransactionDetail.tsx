@@ -91,7 +91,7 @@ export function TransactionDetail({
       { id: tx.id, data },
       {
         onSuccess: () => setEditing(false),
-        onError: () => setSaveError('Failed to save. Please try again.'),
+        onError: () => setSaveError('Couldn\'t save — try again.'),
       },
     );
   };
@@ -171,7 +171,7 @@ export function TransactionDetail({
           </div>
         ) : confirmingDelete ? (
           <div className="flex flex-col gap-1 px-4 py-2">
-            <p className="text-sm text-destructive">Delete this transaction?</p>
+            <p className="text-sm text-destructive">Delete this? It's gone for good.</p>
             <div className="flex gap-2">
               <Button
                 variant="ghost"

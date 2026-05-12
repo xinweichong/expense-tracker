@@ -164,7 +164,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       const list = await adminApi.listUsers();
       setUsers(list);
     } catch (err: any) {
-      setLoadError(err.message ?? 'Failed to load users');
+      setLoadError(err.message ?? 'Couldn\'t load this — try refreshing.');
     }
   };
 
@@ -180,7 +180,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       setNewUsername('');
       loadUsers();
     } catch (err: any) {
-      setCreateError(err.message ?? 'Failed to create user');
+      setCreateError(err.message ?? 'Couldn\'t create user — try again.');
     } finally {
       setCreateLoading(false);
     }
@@ -195,7 +195,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       setResetTarget(null);
       setResetPassword('');
     } catch (err: any) {
-      setResetError(err.message ?? 'Failed to reset password');
+      setResetError(err.message ?? 'Couldn\'t reset password — try again.');
     } finally {
       setResetLoading(false);
     }
@@ -266,7 +266,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
                   <span className="text-muted">Password:</span>
                   <span className="font-mono">{createResult.password}</span>
                   <Button variant="ghost" size="sm" onClick={() => copyPassword(createResult.password)}>
-                    {copied ? 'Copied!' : 'Copy'}
+                    {copied ? 'Copied' : 'Copy'}
                   </Button>
                 </div>
               </div>

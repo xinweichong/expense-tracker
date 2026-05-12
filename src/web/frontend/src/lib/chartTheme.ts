@@ -29,11 +29,6 @@ export const COLOR_TANGERINE = '#FB923C';
 export const COLOR_CORAL     = '#FF6B6B';
 export const COLOR_MUTED_BAR = '#3A3A46';
 
-// Legacy aliases (kept for migration; remove in Phase 4)
-export const COLOR_ACCENT  = COLOR_TEAL;
-export const COLOR_INCOME  = COLOR_TEAL;
-export const COLOR_EXPENSE = '#FF453A';
-
 // 10-color cohesive palette sampled along the spectrum.
 // Used for category fills (donut chart, category pills).
 export const SPECTRUM_PALETTE = [

@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-05-12
+
+### Design Language v2 — "cash, caught."
+
+**Brand:**
+- New wordmark: `ca$he` (lowercase, with warm-gradient `$` glyph)
+- New brand-mark meaning: cashe = cash + cache
+- New brand hook: "cash, caught."
+- Retired the teal-square check-sparkline logo
+
+**Color:**
+- New 5-anchor spectrum: teal (#00D4AA) → mint → honey → tangerine → coral
+- Yellow `#FFD60A` retired; "notable" alerts now use tangerine
+- 20-color category palette replaced with 10-color spectrum-derived palette
+- Existing custom category colors auto-snap to nearest spectrum match on first load
+
+**Typography:**
+- Display: Plus Jakarta Sans (700, 800)
+- Body: Inter (kept)
+- Mono: JetBrains Mono (new)
+- Modular scale 1.250
+
+**Components:**
+- New `<HeroCard>` and `<HighlightCard>` wrappers
+- New `<Button variant="hero">` with gradient sweep
+- New `<Badge tone={...}>` spectrum API
+- Ghost-button bug fixed (no more teal bleed on hover)
+
+**Voice:**
+- Matter-of-fact, slightly knowing. No cheerleader, no emoji in microcopy.
+
+See `docs/design-language.md` for the full reference.
+
 ## [1.0.0] - 2026-04-25
 
 ### Added

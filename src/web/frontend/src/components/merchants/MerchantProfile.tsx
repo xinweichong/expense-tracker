@@ -8,7 +8,7 @@ import { api } from '@/api/client';
 import type { Transaction } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { ChartCard } from '@/components/ui/cards';
-import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, COLOR_ACCENT } from '@/lib/chartTheme';
+import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, COLOR_TEAL } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
@@ -76,7 +76,7 @@ export function MerchantProfile({
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center text-muted text-sm">
-        Loading…
+        Catching up…
       </div>
     );
   }
@@ -139,7 +139,7 @@ export function MerchantProfile({
                 contentStyle={CHART_TOOLTIP_STYLE}
                 cursor={CHART_CURSOR_BAR}
               />
-              <Bar dataKey="Total" fill={COLOR_ACCENT} radius={[3, 3, 0, 0]} />
+              <Bar dataKey="Total" fill={COLOR_TEAL} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

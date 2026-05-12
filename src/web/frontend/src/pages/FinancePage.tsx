@@ -639,7 +639,7 @@ function GoalsSection() {
       }
     >
       {isLoading ? (
-        <p className="text-muted text-sm py-4 text-center">Loading…</p>
+        <p className="text-muted text-sm py-4 text-center">Catching up…</p>
       ) : goals.length === 0 ? (
         <p className="text-muted text-sm py-4 text-center">
           No goals yet. Add one to start tracking your savings.
@@ -796,7 +796,7 @@ export function FinancePage() {
             }
           >
             {isLoading ? (
-              <p className="text-muted text-sm py-4 text-center">Loading…</p>
+              <p className="text-muted text-sm py-4 text-center">Catching up…</p>
             ) : progress.length === 0 ? (
               <p className="text-muted text-sm py-4 text-center">
                 No budgets yet. Add one to start tracking.
