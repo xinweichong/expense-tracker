@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import { CasheWordmark, CasheIcon } from '../Brand';
+import { CasheWordmark, CasheIcon, CasheBrandLockup } from '../Brand';
 
 describe('<CasheWordmark>', () => {
   it('renders the lowercase "ca$he" with three segments', () => {
@@ -23,5 +23,20 @@ describe('<CasheIcon>', () => {
     expect(root.style.width).toBe('32px');
     expect(root.style.height).toBe('32px');
     expect(container.textContent).toContain('$');
+  });
+});
+
+describe('<CasheBrandLockup>', () => {
+  it('renders ca$he text and CASH, CAUGHT. tagline', () => {
+    const { container } = render(<CasheBrandLockup size={160} />);
+    expect(container.textContent).toContain('ca$he');
+    expect(container.textContent).toContain('CASH, CAUGHT.');
+  });
+
+  it('applies the requested size to the container', () => {
+    const { container } = render(<CasheBrandLockup size={200} />);
+    const root = container.firstChild as HTMLElement;
+    expect(root.style.width).toBe('200px');
+    expect(root.style.height).toBe('200px');
   });
 });

@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { CasheWordmark } from '@/components/ui/Brand';
+import { CasheBrandLockup } from '@/components/ui/Brand';
 import { motion } from 'framer-motion';
 import { fadeUpVariants } from '@/lib/animations';
 
@@ -40,11 +40,8 @@ export function LoginScreen() {
         animate="animate"
       >
         {/* Branding */}
-        <div className="flex flex-col items-center gap-2 mb-8">
-          <CasheWordmark size={42} />
-          <span className="text-xs text-muted font-mono uppercase tracking-[0.22em]">
-            cash, caught
-          </span>
+        <div className="flex flex-col items-center mb-8">
+          <CasheBrandLockup size={160} />
         </div>
 
         {/* Form card */}
