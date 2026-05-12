@@ -18,6 +18,15 @@
   --color-muted:             #7A7488;
   --color-destructive:       #FF453A;
   --color-destructive-foreground: #FFFFFF;
+  --color-popover:            #1B1B2C;
+  --color-popover-foreground: #EEEAF5;
+  --color-accent:             #EEEAF5;
+  --color-accent-foreground:  #EEEAF5;
+  --color-input:              #2A2A3F;
+  --color-ring:               #00D4AA;
+  --color-success:            #30D158;
+  --color-warning:            #FFD60A;
+  --color-info:               #64D2FF;
 
   /* Fonts */
   --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -58,12 +67,30 @@ body {
     background-size: 1rem;
   }
 
+  .btn-gradient {
+    background: linear-gradient(135deg, #00D4AA 0%, #34D399 25%, #FBBF24 50%, #FB923C 75%, #FF6B6B 100%);
+    background-size: 200% 100%;
+    background-position: 0 0;
+    transition: background-position 0.35s ease, opacity 0.15s;
+    box-shadow: 0 0 32px -10px rgba(251, 146, 60, 0.45);
+  }
+  .btn-gradient:hover {
+    background-position: 100% 0;
+  }
+
+  .toggle-on {
+    background: linear-gradient(90deg, #00D4AA, #FB923C);
+  }
+
   /* ── Grid layout utilities ─────────────────────────────────────────────── */
 
   /* Applied to any grid cell whose content may overflow — scrolls independently */
   .grid-scroll-panel {
     overflow-y: auto;
-    min-height: 0; /* Critical: prevents grid child from overflowing its row */
+    min-height: 0;
+    padding: 12px;
+    margin: -12px;
+    width: calc(100% + 24px);
   }
 
   /* Grid area name assignments (apply on children of a named-areas grid) */
