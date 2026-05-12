@@ -234,7 +234,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
         <div className="flex items-center gap-3">
           <CasheWordmark size={22} />
         </div>
-        <Button variant="ghost" size="sm" onClick={handleLogout}>Sign out</Button>
+        <Button variant="outline" size="sm" onClick={handleLogout}>Sign out</Button>
       </div>
 
       <div className="max-w-3xl mx-auto space-y-6">
@@ -265,13 +265,13 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
                 <div className="flex items-center gap-2">
                   <span className="text-muted">Password:</span>
                   <span className="font-mono">{createResult.password}</span>
-                  <Button variant="ghost" size="sm" onClick={() => copyPassword(createResult.password)}>
+                  <Button variant="outline" size="sm" onClick={() => copyPassword(createResult.password)}>
                     {copied ? 'Copied' : 'Copy'}
                   </Button>
                 </div>
               </div>
               <p className="text-xs text-warning">⚠ {createResult.reminder}</p>
-              <Button variant="ghost" size="sm" onClick={() => setCreateResult(null)}>
+              <Button variant="outline" size="sm" onClick={() => setCreateResult(null)}>
                 <X className="w-3.5 h-3.5 mr-1" /> Dismiss
               </Button>
             </div>
@@ -318,16 +318,15 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
                     <td className="p-3 text-xs text-muted">{relDate(u.created_at)}</td>
                     <td className="p-3 text-right space-x-1">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
                         onClick={() => { setResetTarget(u.username); setResetPassword(''); setResetError(''); }}
                       >
                         Reset Password
                       </Button>
                       <Button
-                        variant="ghost"
+                        variant="destructive"
                         size="sm"
-                        className="text-destructive"
                         onClick={() => setDeleteTarget(u.username)}
                       >
                         Delete
@@ -368,7 +367,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
             </div>
             {resetError && <p className="text-sm text-destructive">{resetError}</p>}
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setResetTarget(null)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
               <Button
                 onClick={handleReset}
                 disabled={resetLoading || resetPassword.length < 8}
@@ -391,7 +390,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
               This stops all data ingestion for this account. Files are preserved on disk.
             </p>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
               <Button
                 className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
                 onClick={handleDelete}
