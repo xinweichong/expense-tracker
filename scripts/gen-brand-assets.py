@@ -40,6 +40,7 @@ def run():
         shot("#icon-180",    PUBLIC / "apple-touch-icon.png")
         shot("#banner-1280", REPO   / "cashe-banner.png")
         shot("#banner-1200", PUBLIC / "og-image.png")
+        shot("#banner-640",  REPO   / "cashe-telegram-banner.png")
 
         # Favicons — transparent corners so rounded rect shows cleanly in browser tabs
         page.evaluate("() => document.body.style.background = 'transparent'")
