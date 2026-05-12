@@ -76,7 +76,7 @@ export function MerchantProfile({
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center text-muted text-sm">
-        Loading…
+        Catching up…
       </div>
     );
   }

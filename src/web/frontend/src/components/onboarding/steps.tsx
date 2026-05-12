@@ -35,9 +35,10 @@ export function WelcomeStep({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Welcome to Cashe, {username}.</h2>
+        <p className="text-xs font-mono uppercase tracking-[0.22em] text-muted mb-1">{username}</p>
+        <h2 className="text-xl font-semibold text-foreground">Connect your accounts.</h2>
         <p className="text-sm text-muted mt-1">
-          Cashe can track your spending automatically. Choose how you'd like to connect:
+          cashe can track your spending automatically. Choose how you'd like to connect:
         </p>
       </div>
 
@@ -120,7 +121,7 @@ export function GmailStep({ onComplete, onSkip }: StepProps) {
         }
       }, 2000);
     } catch {
-      setError('Failed to get connect URL. Please try again.');
+      setError('Couldn\'t get connect URL — try again.');
       setConnecting(false);
     }
   };
@@ -190,7 +191,7 @@ export function TelegramStep({ onComplete, onSkip }: StepProps) {
           }
         }, 2000);
       } catch {
-        setError('Failed to generate link code. Please refresh the page.');
+        setError('Couldn\'t generate link code — try refreshing.');
       }
     };
     initStep();

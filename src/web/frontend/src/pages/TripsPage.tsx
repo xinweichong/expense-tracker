@@ -183,7 +183,7 @@ function TripRow({ trip }: { trip: Trip }) {
 
           {/* Transaction rows — full card width */}
           {txs.length === 0 ? (
-            <p className="ml-9 mt-1 text-xs text-muted">No transactions yet.</p>
+            <p className="ml-9 mt-1 text-xs text-muted">Nothing captured this period.</p>
           ) : (
             <div className="mt-2 border-t border-border">
               {pageTxs.map((tx) => (

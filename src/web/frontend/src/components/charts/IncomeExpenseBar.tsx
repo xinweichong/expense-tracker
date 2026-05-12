@@ -31,7 +31,7 @@ export function IncomeExpenseBar() {
   if (isLoading) {
     return (
       <ChartCard title={TITLE}>
-        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Loading…</div>
+        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Catching up…</div>
       </ChartCard>
     );
   }
@@ -39,7 +39,7 @@ export function IncomeExpenseBar() {
   if (isError) {
     return (
       <ChartCard title={TITLE}>
-        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Failed to load data</div>
+        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Couldn't load this — try refreshing.</div>
       </ChartCard>
     );
   }

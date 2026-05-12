@@ -41,7 +41,7 @@ export function TransactionList({
   if (transactions.length === 0 && !isLoading) {
     return (
       <div className="py-12 text-center text-muted text-sm">
-        No transactions found
+        Nothing captured this period.
       </div>
     );
   }
@@ -70,7 +70,7 @@ export function TransactionList({
       </AnimatePresence>
       {hasMore && (
         <div ref={observerRef} className="py-4 text-center text-muted text-xs">
-          {isLoading ? 'Loading...' : 'Load more'}
+          {isLoading ? 'Catching up…' : 'Load more'}
         </div>
       )}
     </div>

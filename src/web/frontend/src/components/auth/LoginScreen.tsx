@@ -50,7 +50,7 @@ export function LoginScreen() {
         {/* Form card */}
         <Card className="p-6">
           <div className="mb-5">
-            <p className="text-sm font-semibold text-foreground">Welcome back</p>
+            <p className="text-sm font-semibold text-foreground">Sign in.</p>
             <p className="text-xs text-muted mt-0.5">Enter your credentials to continue</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-3">

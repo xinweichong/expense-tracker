@@ -189,7 +189,7 @@ export function SettingsPage() {
       await api.updateSettings({ anomaly_multiplier: parseFloat(anomalyMultiplier), velocity_alert_threshold: parseInt(velocityThreshold) });
       refetchSettings();
     } catch (e: unknown) {
-      setSettingsError(e instanceof Error ? e.message : 'Failed to save settings');
+      setSettingsError(e instanceof Error ? e.message : 'Couldn\'t save settings — try refreshing.');
     }
   };
 
@@ -221,7 +221,7 @@ export function SettingsPage() {
       if (msg.includes('401') || msg.includes('Current password')) {
         setPwError('Current password is incorrect.');
       } else {
-        setPwError('Failed to change password.');
+        setPwError('Couldn\'t change password — try again.');
       }
     } finally {
       setPwLoading(false);
@@ -251,7 +251,7 @@ export function SettingsPage() {
   const [disconnectingTelegram, setDisconnectingTelegram] = useState(false);
 
   const handleDisconnectGmail = async () => {
-    if (!confirm('This will stop email ingestion. Are you sure?')) return;
+    if (!confirm('Disconnect Gmail? This stops email ingestion — it\'s gone for good.')) return;
     setDisconnectingGmail(true);
     try {
       await api.disconnectGmail();
