@@ -475,7 +475,7 @@ class TestHelp:
         update.message.reply_text.assert_called_once()
         text = update.message.reply_text.call_args[0][0]
         for expected in [
-            "Expense Tracker Commands",
+            "cashe commands",
             "/today",
             "/balance",
             "/insights",
@@ -951,7 +951,7 @@ class TestStartCommand:
 
         user = admin_storage.get_user("alice")
         assert user["telegram_chat_id"] == "99001"
-        update.message.reply_text.assert_called_once_with("Your Telegram is now linked to Cashe.")
+        update.message.reply_text.assert_called_once_with("Linked. Your Telegram is connected to cashe.")
 
     def test_invalid_token_replies_with_error(self, in_memory_db):
         """Sending /start <bad-token> replies with an invalid code message."""
