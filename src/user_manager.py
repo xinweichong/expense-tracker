@@ -159,6 +159,11 @@ class UserManager:
         poll_interval = int(gmail_cfg.get("poll_interval_seconds", 120))
         sender_filters = gmail_cfg.get("sender_filters", [])
 
+        bot = self._bot
+        suggestion_callback = (
+            (lambda m, f, a: bot.notify_subscription_suggestion(username, m, f, a))
+            if bot is not None else None
+        )
         poller = GmailPoller(
             credentials_path=credentials_path,
             token_path=token_path,
@@ -171,6 +176,7 @@ class UserManager:
                 storage=storage,
                 categorizer=categorizer,
                 exchange_service=self._exchange_service,
+                on_recurring_pattern=suggestion_callback,
             ),
             poll_interval=poll_interval,
         )
