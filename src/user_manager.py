@@ -9,6 +9,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Optional
 
+from src.subscriptions import SubscriptionMatcher
+
 logger = logging.getLogger(__name__)
 
 
@@ -234,6 +236,10 @@ class UserManager:
             if bot:
                 bot.notify_daily_digest(username)
 
+        def run_subscriptions():
+            if ctx:
+                SubscriptionMatcher(ctx.storage).run()
+
         self._scheduler.add_job(
             weekly, "cron", day_of_week="sun", hour=8, timezone=tz,
             id=f"weekly_{username}", replace_existing=True,
@@ -245,6 +251,10 @@ class UserManager:
         self._scheduler.add_job(
             daily, "cron", hour=8, minute=0, timezone=tz,
             id=f"daily_{username}", replace_existing=True,
+        )
+        self._scheduler.add_job(
+            run_subscriptions, "cron", hour=6, minute=0, timezone=tz,
+            id=f"subscription_matcher_{username}", replace_existing=True,
         )
 
 
