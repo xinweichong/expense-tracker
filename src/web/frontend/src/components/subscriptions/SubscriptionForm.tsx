@@ -78,14 +78,6 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
         label: label || null,
         notes: notes || null,
       });
-      }
-      return api.updateSubscription(initial!.id, {
-        merchant,
-        frequency,
-        billing_day: billingDayNum ?? null,
-        label: label || null,
-        notes: notes || null,
-      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subscriptions'] });
