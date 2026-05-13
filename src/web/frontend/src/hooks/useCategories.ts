@@ -68,13 +68,6 @@ export function useInsights(start_date: string, end_date: string) {
   });
 }
 
-export function useRecurring() {
-  return useQuery({
-    queryKey: ['recurring'],
-    queryFn: () => api.getRecurring(),
-  });
-}
-
 export function useMerchantOverrides() {
   return useQuery({
     queryKey: ['merchant-overrides'],

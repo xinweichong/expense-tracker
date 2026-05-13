@@ -326,9 +326,6 @@ export const api = {
   getMerchants: (start_date: string, end_date: string) =>
     request<string[]>(`/api/merchants?start_date=${start_date}&end_date=${end_date}`),
 
-  getRecurring: () =>
-    request<any[]>('/api/recurring'),
-
   getIncomeVsExpense: (months = 6) =>
     request<Array<{ month: string; income: number; expenses: number }>>(
       `/api/income-vs-expense?months=${months}`
