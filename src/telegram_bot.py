@@ -555,7 +555,7 @@ class TelegramBotService:
                 BotCommand("income",           "Record income"),
                 BotCommand("balance",          "Income vs expenses this month"),
                 BotCommand("insights",         "Top merchants & daily average spend"),
-                BotCommand("subscriptions",    "Detected recurring transactions"),
+                 BotCommand("subscriptions",    "Your subscriptions and monthly total"),
                 BotCommand("recategorize",     "Reassign a transaction's category"),
                 BotCommand("compare",          "This month vs last month"),
                 BotCommand("merchants_report", "Top merchants this month"),
@@ -597,6 +597,7 @@ class TelegramBotService:
         self.app.add_handler(CallbackQueryHandler(self._cmd_callback, pattern="^cmd_"))
         self.app.add_handler(CallbackQueryHandler(self._category_callback, pattern="^cat:"))
         self.app.add_handler(CallbackQueryHandler(self._recat_callback, pattern="^recat:"))
+        self.app.add_handler(CallbackQueryHandler(self._handle_sub_suggest_callback, pattern="^sub_suggest_"))
 
         edit_conv = ConversationHandler(
             entry_points=[CommandHandler("edit", self._edit_start)],
@@ -999,31 +1000,37 @@ class TelegramBotService:
         ctx = await self._require_ctx(update)
         if ctx is None:
             return
-        rows = ctx.storage.get_recurring_transactions()
-        if not rows:
-            await update.message.reply_text("No recurring transactions detected yet.")
+        loop = asyncio.get_running_loop()
+        summary = await loop.run_in_executor(None, ctx.storage.get_subscription_summary)
+        subs = await loop.run_in_executor(None, ctx.storage.list_subscriptions)
+        upcoming_map: dict[int, str] = {}
+        for sub in subs:
+            rows = await loop.run_in_executor(None, ctx.storage.list_upcoming_transactions, sub["id"])
+            pending = [u for u in rows if u["status"] == "pending"]
+            if pending:
+                upcoming_map[sub["id"]] = pending[0]["expected_date"]
+
+        active_subs = [s for s in subs if s["status"] not in ("cancelled",)]
+        if not active_subs:
+            await update.message.reply_text(
+                "No subscriptions yet. Add one via the app.",
+            )
             return
 
-        lines = ["*Recurring Transactions*"]
-        for r in rows:
-            freq = r["frequency"]
-            amount = r["avg_amount"]
-            merchant = r["merchant"]
-            last_seen = r["last_seen"]
-            if freq == "monthly":
-                monthly_eq = amount
-            elif freq == "weekly":
-                monthly_eq = amount * 4.33
-            elif freq == "biweekly":
-                monthly_eq = amount * 2.17
-            else:
-                monthly_eq = amount
-                logger.warning("Unknown recurring frequency %r for merchant %r", freq, merchant)
-            next_date = estimate_next_date(freq, last_seen)
+        header = (
+            f"*Subscriptions* · ${summary['total_monthly_sgd']:.2f}/mo · "
+            f"{summary['active_count']} active"
+        )
+        lines = [header]
+        for sub in active_subs:
+            label = sub.get("label") or sub["merchant"]
+            freq = sub["frequency"]
+            amount_str = f"${sub['last_amount']:.2f}" if sub.get("last_amount") is not None else "—"
+            next_date = upcoming_map.get(sub["id"], "—")
+            status_tag = " ⚠" if sub["status"] == "possibly_cancelled" else ""
             lines.append(
-                f"🔄 *{merchant}*\n"
-                f"  ${amount:.2f} · {freq}\n"
-                f"  Next: {next_date} · ~${monthly_eq:.2f}/mo"
+                f"🔄 *{self._escape_md(label)}*{status_tag}\n"
+                f"  {amount_str} · {freq} · Next: {next_date[:10] if next_date != '—' else '—'}"
             )
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
@@ -1175,7 +1182,7 @@ class TelegramBotService:
             "  /month — This month's spending",
             "  /balance — Income vs expenses",
             "  /insights — Category breakdown + top merchants",
-            "  /subscriptions — Recurring transactions",
+            "  /subscriptions — Your subscriptions and monthly total",
             "",
             "📊 *Analytics*",
             "  /compare — This month vs last month",
@@ -1219,7 +1226,7 @@ class TelegramBotService:
             "/income — record income\n"
             "/recategorize — change category\n"
             "/insights — spending patterns\n"
-            "/subscriptions — recurring transactions\n"
+            "/subscriptions — subscriptions and monthly total\n"
             "/help — full command reference"
         )
 
@@ -1268,6 +1275,73 @@ class TelegramBotService:
         fut.add_done_callback(
             lambda f: logger.error("notify_transaction send failed: %s", f.exception()) if f.exception() else None
         )
+
+    def notify_subscription_suggestion(self, username: str, merchant: str, frequency: str, avg_amount: float) -> None:
+        """Suggest adding a detected recurring pattern as a subscription. Thread-safe bridge."""
+        chat_id = self._resolve_chat_id(username)
+        if not chat_id:
+            return
+        if not self._loop or not self.app:
+            return
+        fut = asyncio.run_coroutine_threadsafe(
+            self._async_notify_subscription_suggestion(chat_id, merchant, frequency, avg_amount),
+            self._loop,
+        )
+        fut.add_done_callback(
+            lambda f: logger.error("notify_subscription_suggestion failed: %s", f.exception()) if f.exception() else None
+        )
+
+    async def _async_notify_subscription_suggestion(
+        self, chat_id: int, merchant: str, frequency: str, avg_amount: float
+    ) -> None:
+        # Truncate merchant to stay within Telegram's 64-byte callback_data limit:
+        # "sub_suggest_add|{frequency}|" is at most 30 chars, leaving 34 for merchant.
+        merchant_trunc = merchant[:34]
+        text = (
+            f"🔄 Recurring pattern: *{self._escape_md(merchant)}* charged "
+            f"~${avg_amount:.2f} ({frequency})\\. Add as subscription?"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Add subscription", callback_data=f"sub_suggest_add|{frequency}|{merchant_trunc}"),
+                InlineKeyboardButton("Dismiss", callback_data="sub_suggest_dismiss"),
+            ]
+        ])
+        await self.app.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode="MarkdownV2",
+            reply_markup=keyboard,
+        )
+
+    async def _handle_sub_suggest_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        await query.answer()
+        data = query.data or ""
+
+        if data == "sub_suggest_dismiss":
+            await query.edit_message_text("Dismissed.")
+            return
+
+        if data.startswith("sub_suggest_add|"):
+            parts = data.split("|", 2)
+            if len(parts) < 3:
+                await query.edit_message_text("Could not parse suggestion — please add manually via the app.")
+                return
+            _, frequency, merchant = parts
+            ctx = await self._require_ctx(update)
+            if ctx is None:
+                return
+            try:
+                ctx.storage.create_subscription(merchant=merchant, frequency=frequency)
+                await query.edit_message_text(
+                    f"✅ Added *{self._escape_md(merchant)}* \\({frequency}\\) as a subscription\\. "
+                    f"Open the app to set billing day and other details\\.",
+                    parse_mode="MarkdownV2",
+                )
+            except Exception as e:
+                logger.error("Failed to create subscription from suggestion: %s", e)
+                await query.edit_message_text("Failed to add subscription — try adding it manually in the app.")
 
     async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str, chat_id: Optional[int] = None, storage=None) -> None:
         _chat_id = chat_id if chat_id is not None else self.chat_id
