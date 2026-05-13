@@ -9,6 +9,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Optional
 
+from src.subscriptions import SubscriptionMatcher
+
 logger = logging.getLogger(__name__)
 
 
@@ -114,7 +116,12 @@ class UserManager:
         ctx = self._registry.pop(username, None)
         if ctx and ctx.poller:
             ctx.poller.stop()
-        for job_id in [f"weekly_{username}", f"monthly_{username}", f"daily_{username}"]:
+        for job_id in [
+            f"weekly_{username}",
+            f"monthly_{username}",
+            f"daily_{username}",
+            f"subscription_matcher_{username}",
+        ]:
             if self._scheduler is not None:
                 try:
                     self._scheduler.remove_job(job_id)
@@ -152,6 +159,11 @@ class UserManager:
         poll_interval = int(gmail_cfg.get("poll_interval_seconds", 120))
         sender_filters = gmail_cfg.get("sender_filters", [])
 
+        bot = self._bot
+        suggestion_callback = (
+            (lambda m, f, a: bot.notify_subscription_suggestion(username, m, f, a))
+            if bot is not None else None
+        )
         poller = GmailPoller(
             credentials_path=credentials_path,
             token_path=token_path,
@@ -164,6 +176,7 @@ class UserManager:
                 storage=storage,
                 categorizer=categorizer,
                 exchange_service=self._exchange_service,
+                on_recurring_pattern=suggestion_callback,
             ),
             poll_interval=poll_interval,
         )
@@ -234,6 +247,10 @@ class UserManager:
             if bot:
                 bot.notify_daily_digest(username)
 
+        def run_subscriptions():
+            if ctx:
+                SubscriptionMatcher(ctx.storage).run()
+
         self._scheduler.add_job(
             weekly, "cron", day_of_week="sun", hour=8, timezone=tz,
             id=f"weekly_{username}", replace_existing=True,
@@ -245,6 +262,10 @@ class UserManager:
         self._scheduler.add_job(
             daily, "cron", hour=8, minute=0, timezone=tz,
             id=f"daily_{username}", replace_existing=True,
+        )
+        self._scheduler.add_job(
+            run_subscriptions, "cron", hour=6, minute=0, timezone=tz,
+            id=f"subscription_matcher_{username}", replace_existing=True,
         )
 
 

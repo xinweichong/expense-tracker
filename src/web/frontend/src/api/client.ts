@@ -153,6 +153,36 @@ export interface Trip {
   updated_at: string;
 }
 
+export interface Subscription {
+  id: number;
+  merchant: string;
+  label: string | null;
+  frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
+  billing_day: number | null;
+  status: 'active' | 'possibly_cancelled' | 'cancelled';
+  notes: string | null;
+  last_amount: number | null;
+  next_expected_date: string | null;
+  next_upcoming_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpcomingTransaction {
+  id: number;
+  subscription_id: number;
+  expected_date: string;
+  expected_amount: number | null;
+  matched_transaction_id: number | null;
+  status: 'pending' | 'matched' | 'dismissed';
+}
+
+export interface SubscriptionSummary {
+  total_monthly_sgd: number;
+  active_count: number;
+  possibly_cancelled_count: number;
+}
+
 export interface TripSummary {
   trip: Trip;
   total_sgd: number;
@@ -296,9 +326,6 @@ export const api = {
   getMerchants: (start_date: string, end_date: string) =>
     request<string[]>(`/api/merchants?start_date=${start_date}&end_date=${end_date}`),
 
-  getRecurring: () =>
-    request<any[]>('/api/recurring'),
-
   getIncomeVsExpense: (months = 6) =>
     request<Array<{ month: string; income: number; expenses: number }>>(
       `/api/income-vs-expense?months=${months}`
@@ -428,6 +455,7 @@ export const api = {
       budgets_enabled: boolean;
       goals_enabled: boolean;
       trips_enabled: boolean;
+      subscriptions_enabled: boolean;
     }>('/api/settings'),
 
   updateSettings: (data: {
@@ -436,6 +464,7 @@ export const api = {
     budgets_enabled?: boolean;
     goals_enabled?: boolean;
     trips_enabled?: boolean;
+    subscriptions_enabled?: boolean;
   }) =>
     request<{
       anomaly_multiplier: number;
@@ -443,6 +472,7 @@ export const api = {
       budgets_enabled: boolean;
       goals_enabled: boolean;
       trips_enabled: boolean;
+      subscriptions_enabled: boolean;
     }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -533,6 +563,48 @@ export const api = {
 
   checkTripMembership: (tripId: number, txId: number) =>
     request<{ in_trip: boolean }>(`/api/trips/${tripId}/transactions/${txId}/membership`),
+
+  // Subscriptions
+  getSubscriptions: () =>
+    request<{ subscriptions: Subscription[]; summary: SubscriptionSummary }>('/api/subscriptions'),
+
+  getSubscriptionSummary: () =>
+    request<SubscriptionSummary>('/api/subscriptions/summary'),
+
+  createSubscription: (data: {
+    merchant: string;
+    frequency: string;
+    billing_day?: number;
+    label?: string;
+    notes?: string;
+  }) => request<Subscription>('/api/subscriptions', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateSubscription: (
+    id: number,
+    data: Partial<Pick<Subscription, 'merchant' | 'label' | 'frequency' | 'billing_day' | 'status' | 'notes'>>,
+  ) =>
+    request<Subscription>(`/api/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  deleteSubscription: (id: number) =>
+    request<{ status: string }>(`/api/subscriptions/${id}`, { method: 'DELETE' }),
+
+  getSubscriptionHistory: (id: number, limit = 50) =>
+    request<Transaction[]>(`/api/subscriptions/${id}/history?limit=${limit}`),
+
+  getSubscriptionUpcoming: (id: number) =>
+    request<UpcomingTransaction[]>(`/api/subscriptions/${id}/upcoming`),
+
+  matchUpcoming: (subId: number, upcomingId: number, transactionId: number) =>
+    request<{ status: string }>(
+      `/api/subscriptions/${subId}/upcoming/${upcomingId}/match`,
+      { method: 'POST', body: JSON.stringify({ transaction_id: transactionId }) },
+    ),
+
+  dismissUpcoming: (subId: number, upcomingId: number) =>
+    request<{ status: string }>(
+      `/api/subscriptions/${subId}/upcoming/${upcomingId}/dismiss`,
+      { method: 'POST' },
+    ),
 
   getStatus: () =>
     request<{

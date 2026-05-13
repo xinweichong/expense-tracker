@@ -784,25 +784,6 @@ class TestGetMerchantHistory:
         assert len(rows) == 0
 
 
-class TestSaveAndGetRecurring:
-    def test_save_then_get(self, storage):
-        storage.save_recurring("Netflix", 30.0, "monthly", "Entertainment")
-        rows = storage.get_recurring_transactions()
-        assert len(rows) == 1
-        assert rows[0]["merchant"] == "Netflix"
-        assert rows[0]["frequency"] == "monthly"
-
-    def test_save_updates_existing_row(self, storage):
-        storage.save_recurring("Netflix", 30.0, "monthly", "Entertainment")
-        storage.save_recurring("Netflix", 31.0, "monthly", "Entertainment")
-        rows = storage.get_recurring_transactions()
-        assert len(rows) == 1
-        assert rows[0]["avg_amount"] == 31.0
-
-    def test_get_recurring_empty(self, storage):
-        assert storage.get_recurring_transactions() == []
-
-
 class TestAppleWalletCards:
     def test_returns_card_descriptions(self, in_memory_db, storage):
         in_memory_db.execute("""

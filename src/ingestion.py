@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Optional, Callable
 
 from src.parsers.base import ParseResult
 from src.storage import Storage
@@ -16,10 +16,12 @@ class IngestionPipeline:
         categorizer=None,
         exchange_service=None,
         detector=None,
+        on_recurring_pattern: Optional[Callable[[str, str, float], None]] = None,
     ):
         self.storage = storage
         self.categorizer = categorizer
         self.exchange_service = exchange_service
+        self._on_recurring_pattern = on_recurring_pattern
         # Allow injection of a RecurringDetector (or mock) for testing
         if detector is not None:
             self._detector = detector
@@ -83,9 +85,15 @@ class IngestionPipeline:
             logger.warning("auto_assign_to_active_trip failed (best-effort): %s", e)
 
         try:
-            self._detector.run(result.merchant, result.amount, tx_id)
+            rec = self._detector.detect_and_suggest(result.merchant, result.amount, tx_id)
+            if rec and self._on_recurring_pattern:
+                # Only suggest if no subscription already exists for this merchant
+                if not self.storage.find_subscription_by_merchant(result.merchant):
+                    self._on_recurring_pattern(
+                        result.merchant, rec["frequency"], rec["avg_amount"]
+                    )
         except Exception as e:
-            logger.warning("Recurring detection failed (best-effort): %s", e)
+            logger.warning("Recurring suggestion failed (best-effort): %s", e)
 
         tx = self.storage.get_transaction(tx_id)
         if tx is not None:

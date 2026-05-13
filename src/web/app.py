@@ -48,6 +48,9 @@ async def _db(fn, *args, **kwargs):
     return await loop.run_in_executor(_DB_EXECUTOR, partial(fn, *args, **kwargs))
 
 
+VALID_SUBSCRIPTION_FREQUENCIES = {"weekly", "biweekly", "monthly", "quarterly", "annual"}
+
+
 def create_dashboard_app(
     user_manager,
     admin_storage,
@@ -643,8 +646,8 @@ def create_dashboard_app(
         }
 
     @app.get("/api/recurring")
-    async def recurring(storage=Depends(_get_storage)):
-        return await _db(storage.get_recurring_transactions)
+    async def recurring(_storage=Depends(_get_storage)):
+        return []
 
     @app.get("/api/analytics/comparison")
     async def analytics_comparison(
@@ -696,6 +699,7 @@ def create_dashboard_app(
             "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
             "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
+            "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
             "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 
@@ -750,6 +754,13 @@ def create_dashboard_app(
             else:
                 validated["trips_enabled"] = "true" if val else "false"
 
+        if "subscriptions_enabled" in body:
+            val = body["subscriptions_enabled"]
+            if not isinstance(val, bool):
+                errors["subscriptions_enabled"] = "must be a boolean"
+            else:
+                validated["subscriptions_enabled"] = "true" if val else "false"
+
         if "category_colors_snapped_v2" in body:
             validated["category_colors_snapped_v2"] = str(body["category_colors_snapped_v2"])
 
@@ -769,6 +780,7 @@ def create_dashboard_app(
             "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
             "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
+            "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
             "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 
@@ -1044,6 +1056,115 @@ def create_dashboard_app(
     @app.get("/api/trips/{trip_id}/transactions/{tx_id}/membership")
     async def check_trip_membership(trip_id: int, tx_id: int, storage=Depends(_get_storage)):
         return {"in_trip": await _db(storage.is_in_trip, trip_id, tx_id)}
+
+    # ── Subscriptions ──────────────────────────────────────────────────────────
+
+    @app.get("/api/subscriptions/summary")
+    async def get_subscription_summary(storage=Depends(_get_storage)):
+        return await _db(storage.get_subscription_summary)
+
+    @app.get("/api/subscriptions")
+    async def list_subscriptions(storage=Depends(_get_storage)):
+        subs = await _db(storage.list_subscriptions)
+        summary = await _db(storage.get_subscription_summary)
+        enriched = []
+        for sub in subs:
+            last_amount = await _db(storage.get_subscription_last_amount, sub["id"])
+            upcoming = await _db(storage.list_upcoming_transactions, sub["id"])
+            pending = [u for u in upcoming if u["status"] == "pending"]
+            next_upcoming = pending[0] if pending else None
+            enriched.append({
+                **sub,
+                "last_amount": last_amount,
+                "next_expected_date": next_upcoming["expected_date"] if next_upcoming else None,
+                "next_upcoming_id": next_upcoming["id"] if next_upcoming else None,
+            })
+        return {"subscriptions": enriched, "summary": summary}
+
+    def _validate_billing_day(day) -> None:
+        """Raise HTTPException 422 if billing_day is present but out of range."""
+        if day is not None and not (1 <= int(day) <= 31):
+            raise HTTPException(status_code=422, detail="billing_day must be between 1 and 31")
+
+    @app.post("/api/subscriptions", status_code=201)
+    async def create_subscription(body: dict, storage=Depends(_get_storage)):
+        required = {"merchant", "frequency"}
+        missing = required - body.keys()
+        if missing:
+            raise HTTPException(status_code=422, detail=f"Missing fields: {missing}")
+        if body["frequency"] not in VALID_SUBSCRIPTION_FREQUENCIES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid frequency. Must be one of {VALID_SUBSCRIPTION_FREQUENCIES}",
+            )
+        _validate_billing_day(body.get("billing_day"))
+        sub_id = await _db(
+            storage.create_subscription,
+            merchant=body["merchant"],
+            frequency=body["frequency"],
+            billing_day=body.get("billing_day"),
+            label=body.get("label"),
+            notes=body.get("notes"),
+        )
+        return await _db(storage.get_subscription, sub_id)
+
+    @app.put("/api/subscriptions/{sub_id}")
+    async def update_subscription(sub_id: int, body: dict, storage=Depends(_get_storage)):
+        if "frequency" in body and body["frequency"] not in VALID_SUBSCRIPTION_FREQUENCIES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid frequency. Must be one of {VALID_SUBSCRIPTION_FREQUENCIES}",
+            )
+        if "billing_day" in body:
+            _validate_billing_day(body["billing_day"])
+        try:
+            await _db(storage.update_subscription, sub_id, **body)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return await _db(storage.get_subscription, sub_id)
+
+    @app.delete("/api/subscriptions/{sub_id}")
+    async def delete_subscription(sub_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.delete_subscription, sub_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok"}
+
+    @app.get("/api/subscriptions/{sub_id}/history")
+    async def get_subscription_history(sub_id: int, limit: int = 50, storage=Depends(_get_storage)):
+        if not await _db(storage.get_subscription, sub_id):
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        return await _db(storage.get_subscription_matched_transactions, sub_id, limit)
+
+    @app.get("/api/subscriptions/{sub_id}/upcoming")
+    async def get_subscription_upcoming(sub_id: int, storage=Depends(_get_storage)):
+        if not await _db(storage.get_subscription, sub_id):
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        return await _db(storage.list_upcoming_transactions, sub_id)
+
+    @app.post("/api/subscriptions/{sub_id}/upcoming/{upcoming_id}/match")
+    async def manual_match_upcoming(
+        sub_id: int, upcoming_id: int, body: dict, storage=Depends(_get_storage)
+    ):
+        upcoming = await _db(storage.get_upcoming_transaction, upcoming_id)
+        if not upcoming or upcoming["subscription_id"] != sub_id:
+            raise HTTPException(status_code=404, detail="Upcoming transaction not found")
+        transaction_id = body.get("transaction_id")
+        if not transaction_id:
+            raise HTTPException(status_code=422, detail="transaction_id required")
+        if not await _db(storage.get_transaction, transaction_id):
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        await _db(storage.match_upcoming_transaction, upcoming_id, transaction_id)
+        return {"status": "ok"}
+
+    @app.post("/api/subscriptions/{sub_id}/upcoming/{upcoming_id}/dismiss")
+    async def dismiss_upcoming(sub_id: int, upcoming_id: int, storage=Depends(_get_storage)):
+        upcoming = await _db(storage.get_upcoming_transaction, upcoming_id)
+        if not upcoming or upcoming["subscription_id"] != sub_id:
+            raise HTTPException(status_code=404, detail="Upcoming transaction not found")
+        await _db(storage.dismiss_upcoming_transaction, upcoming_id)
+        return {"status": "ok"}
 
     # Serve React SPA
 

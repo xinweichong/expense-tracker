@@ -1356,6 +1356,226 @@ class Storage:
             "by_day": by_day,
         }
 
+    # ── Subscriptions ──────────────────────────────────────────────
+
+    @_locked
+    def create_subscription(
+        self, merchant: str, frequency: str,
+        billing_day: int | None = None, label: str | None = None, notes: str | None = None
+    ) -> int:
+        cur = self._conn.execute(
+            """INSERT INTO subscriptions (merchant, frequency, billing_day, label, notes)
+               VALUES (?, ?, ?, ?, ?)""",
+            (merchant, frequency, billing_day, label, notes),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    @_locked
+    def get_subscription(self, sub_id: int) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM subscriptions WHERE id = ?", (sub_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    @_locked
+    def list_subscriptions(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM subscriptions ORDER BY status, merchant"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @_locked
+    def update_subscription(self, sub_id: int, **fields) -> None:
+        if not self.get_subscription(sub_id):
+            raise ValueError("subscription not found")
+        allowed = {"merchant", "label", "frequency", "billing_day", "status", "notes"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        self._conn.execute(
+            f"UPDATE subscriptions SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (*updates.values(), sub_id),
+        )
+        self._conn.commit()
+
+    @_locked
+    def delete_subscription(self, sub_id: int) -> None:
+        if not self.get_subscription(sub_id):
+            raise ValueError("subscription not found")
+        self._conn.execute("DELETE FROM upcoming_transactions WHERE subscription_id = ?", (sub_id,))
+        self._conn.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
+        self._conn.commit()
+
+    @_locked
+    def get_subscription_matched_transactions(self, sub_id: int, limit: int = 50) -> list[dict]:
+        """Return transactions linked to this subscription via upcoming_transactions."""
+        rows = self._conn.execute(
+            """SELECT t.* FROM transactions t
+               JOIN upcoming_transactions u ON u.matched_transaction_id = t.id
+               WHERE u.subscription_id = ? AND u.status = 'matched'
+               ORDER BY t.transaction_date DESC
+               LIMIT ?""",
+            (sub_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @_locked
+    def get_subscription_summary(self) -> dict:
+        """Return {total_monthly_sgd, active_count, possibly_cancelled_count}."""
+        rows = self._conn.execute(
+            "SELECT id, frequency, status FROM subscriptions WHERE status NOT IN ('cancelled')"
+        ).fetchall()
+        monthly_total = 0.0
+        active = 0
+        possibly_cancelled = 0
+        for row in rows:
+            last_amount = self._get_subscription_last_amount(row["id"])
+            if row["status"] == "active":
+                active += 1
+                monthly_total += _to_monthly(last_amount or 0.0, row["frequency"])
+            elif row["status"] == "possibly_cancelled":
+                possibly_cancelled += 1
+        return {
+            "total_monthly_sgd": round(monthly_total, 2),
+            "active_count": active,
+            "possibly_cancelled_count": possibly_cancelled,
+        }
+
+    def _get_subscription_last_amount(self, sub_id: int) -> float | None:
+        """Not locked — only called from within locked methods."""
+        row = self._conn.execute(
+            """SELECT t.amount * t.exchange_rate AS sgd_amount
+               FROM upcoming_transactions u
+               JOIN transactions t ON t.id = u.matched_transaction_id
+               WHERE u.subscription_id = ? AND u.status = 'matched'
+               ORDER BY t.transaction_date DESC
+               LIMIT 1""",
+            (sub_id,),
+        ).fetchone()
+        return row["sgd_amount"] if row else None
+
+    @_locked
+    def get_subscription_last_amount(self, sub_id: int) -> float | None:
+        """Public accessor for the most recent matched SGD amount."""
+        return self._get_subscription_last_amount(sub_id)
+
+    # ── Upcoming Transactions ──────────────────────────────────────
+
+    @_locked
+    def create_upcoming_transaction(
+        self, subscription_id: int, expected_date: str, expected_amount: float | None = None
+    ) -> int:
+        cur = self._conn.execute(
+            """INSERT INTO upcoming_transactions (subscription_id, expected_date, expected_amount)
+               VALUES (?, ?, ?)""",
+            (subscription_id, expected_date, expected_amount),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    @_locked
+    def list_upcoming_transactions(self, subscription_id: int) -> list[dict]:
+        rows = self._conn.execute(
+            """SELECT * FROM upcoming_transactions
+               WHERE subscription_id = ?
+               ORDER BY expected_date ASC""",
+            (subscription_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @_locked
+    def upcoming_exists_for_period(self, subscription_id: int, expected_date: str, window_days: int = 5) -> bool:
+        """Return True if an upcoming transaction already exists near expected_date."""
+        from datetime import datetime, timedelta
+        d = datetime.strptime(expected_date, "%Y-%m-%d")
+        lo = (d - timedelta(days=window_days)).strftime("%Y-%m-%d")
+        hi = (d + timedelta(days=window_days)).strftime("%Y-%m-%d")
+        row = self._conn.execute(
+            """SELECT 1 FROM upcoming_transactions
+               WHERE subscription_id = ? AND expected_date BETWEEN ? AND ?
+               AND status IN ('pending', 'matched')""",
+            (subscription_id, lo, hi),
+        ).fetchone()
+        return row is not None
+
+    @_locked
+    def find_subscription_match(
+        self, merchant: str, expected_date: str, expected_amount: float | None,
+        date_window_days: int = 5, amount_tolerance: float = 0.10
+    ) -> dict | None:
+        """Find a transaction matching subscription criteria for auto-linking.
+
+        Exact merchant name match within ±date_window_days days.
+        If expected_amount provided: amount within ±amount_tolerance (10%).
+        If expected_amount is None: first merchant hit in window wins.
+        Excludes transactions already linked to another upcoming transaction.
+        """
+        from datetime import datetime, timedelta
+        d = datetime.strptime(expected_date, "%Y-%m-%d")
+        lo = (d - timedelta(days=date_window_days)).strftime("%Y-%m-%d")
+        hi = (d + timedelta(days=date_window_days)).strftime("%Y-%m-%d")
+
+        candidates = self._conn.execute(
+            """SELECT * FROM transactions
+               WHERE merchant = ?
+                 AND DATE(transaction_date) BETWEEN ? AND ?
+                 AND (type IS NULL OR type = 'expense')
+                 AND id NOT IN (
+                     SELECT matched_transaction_id FROM upcoming_transactions
+                     WHERE matched_transaction_id IS NOT NULL
+                 )
+               ORDER BY transaction_date DESC""",
+            (merchant, lo, hi),
+        ).fetchall()
+
+        for row in candidates:
+            tx = dict(row)
+            if expected_amount is None:
+                return tx
+            actual = tx["amount"] * tx["exchange_rate"]
+            if abs(actual - expected_amount) / max(expected_amount, 0.01) <= amount_tolerance:
+                return tx
+        return None
+
+    @_locked
+    def find_subscription_by_merchant(self, merchant: str) -> dict | None:
+        """Return the first non-cancelled subscription matching merchant (case-insensitive), or None."""
+        row = self._conn.execute(
+            """SELECT * FROM subscriptions
+               WHERE LOWER(merchant) = LOWER(?)
+                 AND status NOT IN ('cancelled')
+               LIMIT 1""",
+            (merchant,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    @_locked
+    def match_upcoming_transaction(self, upcoming_id: int, transaction_id: int) -> None:
+        self._conn.execute(
+            """UPDATE upcoming_transactions
+               SET status = 'matched', matched_transaction_id = ?
+               WHERE id = ?""",
+            (transaction_id, upcoming_id),
+        )
+        self._conn.commit()
+
+    @_locked
+    def dismiss_upcoming_transaction(self, upcoming_id: int) -> None:
+        self._conn.execute(
+            "UPDATE upcoming_transactions SET status = 'dismissed' WHERE id = ?",
+            (upcoming_id,),
+        )
+        self._conn.commit()
+
+    @_locked
+    def get_upcoming_transaction(self, upcoming_id: int) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM upcoming_transactions WHERE id = ?", (upcoming_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
     # ── Recurring ─────────────────────────────────────────────────────────────
 
     @_locked
@@ -1367,37 +1587,6 @@ class Storage:
                AND (type IS NULL OR type = 'expense')
                ORDER BY transaction_date DESC""",
             (merchant, f"-{days}"),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-    @_locked
-    def save_recurring(
-        self, merchant: str, avg_amount: float, frequency: str, category: Optional[str] = None
-    ) -> None:
-        existing = self._conn.execute(
-            "SELECT id FROM recurring_transactions WHERE merchant = ?", (merchant,)
-        ).fetchone()
-        if existing:
-            self._conn.execute(
-                """UPDATE recurring_transactions
-                   SET avg_amount = ?, frequency = ?, category = ?,
-                       last_seen = CURRENT_TIMESTAMP, occurrences = occurrences + 1
-                   WHERE merchant = ?""",
-                (avg_amount, frequency, category, merchant),
-            )
-        else:
-            self._conn.execute(
-                """INSERT INTO recurring_transactions
-                   (merchant, avg_amount, frequency, category, first_seen, last_seen, occurrences)
-                   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 2)""",
-                (merchant, avg_amount, frequency, category),
-            )
-        self._conn.commit()
-
-    @_locked
-    def get_recurring_transactions(self) -> list[dict]:
-        rows = self._conn.execute(
-            "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -1738,3 +1927,16 @@ class AdminStorage:
         )
         self._conn.commit()
         return row["username"]
+
+
+def _to_monthly(amount: float, frequency: str) -> float:
+    """Normalise an amount to monthly SGD equivalent."""
+    if frequency == "weekly":
+        return amount * 4.33
+    if frequency == "annual":
+        return amount / 12
+    if frequency == "quarterly":
+        return amount / 3
+    if frequency == "biweekly":
+        return amount * 2.17
+    return amount  # monthly fallthrough

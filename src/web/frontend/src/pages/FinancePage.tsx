@@ -10,6 +10,7 @@ import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/an
 import { Pencil, Trash2, X, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
+import { SubscriptionsSection } from '@/components/subscriptions/SubscriptionsSection';
 
 function SavingsOverviewCard() {
   const { data: overview } = useQuery({
@@ -1032,11 +1033,11 @@ export function FinancePage() {
 
   if (!settings) return null;
 
-  if (!settings.budgets_enabled && !settings.goals_enabled && !settings.trips_enabled) {
+  if (!settings.budgets_enabled && !settings.goals_enabled && !settings.trips_enabled && !settings.subscriptions_enabled) {
     return (
       <div className="p-6 flex flex-col items-center justify-center min-h-48 text-center gap-3">
         <p className="text-muted text-sm">
-          Enable Budgets, Goals, or Trips in Settings to get started.
+          Enable Budgets, Goals, Trips, or Subscriptions in Settings to get started.
         </p>
         <button
           onClick={() => navigate('/settings')}
@@ -1063,69 +1064,74 @@ export function FinancePage() {
         </div>
       </div>
 
-      {/* ── Left panel: budgets ── */}
-      {settings.budgets_enabled ? (
+      {/* ── Left panel: expense-side (budgets + subscriptions + trips) ── */}
+      {(settings.budgets_enabled || settings.subscriptions_enabled || settings.trips_enabled) ? (
         <div
           className="area-left grid-scroll-panel space-y-4"
-          style={(!settings.goals_enabled && !settings.trips_enabled) ? { gridColumn: '1 / -1' } : undefined}
+          style={!settings.goals_enabled ? { gridColumn: '1 / -1' } : undefined}
         >
-          <PageCard
-            title="Budgets"
-            action={
-              <button
-                onClick={() => setShowAddForm(!showAddForm)}
-                className="text-xs px-2.5 py-1 border border-border rounded-md text-muted hover:text-foreground transition-colors"
-              >
-                {showAddForm ? 'Cancel' : '+ Add Budget'}
-              </button>
-            }
-          >
-            {isLoading ? (
-              <p className="text-muted text-sm py-4 text-center">Catching up…</p>
-            ) : progress.length === 0 ? (
-              <p className="text-muted text-sm py-4 text-center">
-                No budgets yet. Add one to start tracking.
-              </p>
-            ) : (
-              <motion.div variants={staggerContainerVariants} initial="initial" animate="animate">
-                <AnimatePresence>
-                  {progress.map((b) => (
-                    <motion.div
-                      key={b.id}
-                      variants={staggerItemVariants}
-                      exit={{ opacity: 0, transition: { duration: 0.15 } }}
-                    >
-                      <BudgetRow
-                        b={b}
-                        onDelete={(id) => deleteMutation.mutate(id)}
-                        onEdit={(id, amount) => editMutation.mutate({ id, amount })}
-                      />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            )}
-            {showAddForm && (
-              <AddBudgetForm
-                categories={categories}
-                onAdd={() => setShowAddForm(false)}
-              />
-            )}
-          </PageCard>
+          {settings.budgets_enabled && (
+            <PageCard
+              title="Budgets"
+              action={
+                <button
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="text-xs px-2.5 py-1 border border-border rounded-md text-muted hover:text-foreground transition-colors"
+                >
+                  {showAddForm ? 'Cancel' : '+ Add Budget'}
+                </button>
+              }
+            >
+              {isLoading ? (
+                <p className="text-muted text-sm py-4 text-center">Catching up…</p>
+              ) : progress.length === 0 ? (
+                <p className="text-muted text-sm py-4 text-center">
+                  No budgets yet. Add one to start tracking.
+                </p>
+              ) : (
+                <motion.div variants={staggerContainerVariants} initial="initial" animate="animate">
+                  <AnimatePresence>
+                    {progress.map((b) => (
+                      <motion.div
+                        key={b.id}
+                        variants={staggerItemVariants}
+                        exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                      >
+                        <BudgetRow
+                          b={b}
+                          onDelete={(id) => deleteMutation.mutate(id)}
+                          onEdit={(id, amount) => editMutation.mutate({ id, amount })}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
+              {showAddForm && (
+                <AddBudgetForm
+                  categories={categories}
+                  onAdd={() => setShowAddForm(false)}
+                />
+              )}
+            </PageCard>
+          )}
+          {settings.subscriptions_enabled && <SubscriptionsSection />}
+          {settings.trips_enabled && <TripsSection />}
         </div>
       ) : (
         <div className="area-left" />
       )}
 
-      {/* ── Right panel: savings overview + goals + trips ── */}
-      {(settings.goals_enabled || settings.trips_enabled) ? (
+      {/* ── Right panel: income-side (savings + goals) ── */}
+      {settings.goals_enabled ? (
         <div
           className="area-right grid-scroll-panel space-y-4"
-          style={!settings.budgets_enabled ? { gridColumn: '1 / -1' } : undefined}
+          style={(!settings.budgets_enabled && !settings.subscriptions_enabled && !settings.trips_enabled)
+            ? { gridColumn: '1 / -1' }
+            : undefined}
         >
-          {settings.goals_enabled && <SavingsOverviewCard />}
-          {settings.goals_enabled && <GoalsSection />}
-          {settings.trips_enabled && <TripsSection />}
+          <SavingsOverviewCard />
+          <GoalsSection />
         </div>
       ) : (
         <div className="area-right" />

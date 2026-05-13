@@ -66,4 +66,23 @@ class TestIngestionPipelineIngest:
         detector = MagicMock()
         pipeline = IngestionPipeline(storage, detector=detector)
         pipeline.ingest(_result())
-        detector.run.assert_called_once()
+        detector.detect_and_suggest.assert_called_once()
+
+    def test_suggestion_callback_fires_when_pattern_detected_and_no_subscription(self, storage, in_memory_db):
+        """Suggestion callback is invoked when pattern found and no subscription exists."""
+        detector = MagicMock()
+        detector.detect_and_suggest.return_value = {"frequency": "monthly", "avg_amount": 12.50}
+        callback = MagicMock()
+        pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
+        pipeline.ingest(_result(merchant="Spotify"))
+        callback.assert_called_once_with("Spotify", "monthly", 12.50)
+
+    def test_suggestion_suppressed_when_subscription_exists(self, storage, in_memory_db):
+        """Suggestion callback is NOT invoked when a subscription already exists for the merchant."""
+        storage.create_subscription(merchant="Spotify", frequency="monthly")
+        detector = MagicMock()
+        detector.detect_and_suggest.return_value = {"frequency": "monthly", "avg_amount": 12.50}
+        callback = MagicMock()
+        pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
+        pipeline.ingest(_result(merchant="Spotify"))
+        callback.assert_not_called()

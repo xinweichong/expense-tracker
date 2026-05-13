@@ -113,9 +113,6 @@ def create_webhook_app(user_manager, bot=None) -> FastAPI:
         if on_transaction:
             on_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
 
-        from src.recurring import RecurringDetector
-        RecurringDetector(storage).run(result.merchant, result.amount, tx_id)
-
         _maybe_notify_first_apple_wallet(storage, bot, username)
         return {"status": "ok", "transaction_id": tx_id}
 

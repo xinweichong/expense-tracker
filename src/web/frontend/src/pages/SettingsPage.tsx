@@ -193,7 +193,10 @@ export function SettingsPage() {
     }
   };
 
-  const toggleSetting = async (key: 'budgets_enabled' | 'goals_enabled' | 'trips_enabled', val: boolean) => {
+  const toggleSetting = async (
+    key: 'budgets_enabled' | 'goals_enabled' | 'trips_enabled' | 'subscriptions_enabled',
+    val: boolean,
+  ) => {
     await api.updateSettings({ [key]: val });
     refetchSettings();
   };
@@ -694,6 +697,7 @@ export function SettingsPage() {
                 { key: 'budgets_enabled' as const, label: 'Budgets', desc: 'Set spending limits and track progress' },
                 { key: 'goals_enabled' as const, label: 'Goals', desc: 'Track savings targets and monthly progress' },
                 { key: 'trips_enabled' as const, label: 'Trips', desc: 'Group transactions by trip and track travel spend' },
+                { key: 'subscriptions_enabled' as const, label: 'Subscriptions', desc: 'Track recurring services and upcoming charges' },
               ]).map(({ key, label, desc }) => (
                 <div key={key} className="flex items-center justify-between py-4">
                   <div>

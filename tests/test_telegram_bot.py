@@ -138,12 +138,11 @@ class TestInsightsCommand:
 
 class TestSubscriptionsCommand:
     @pytest.mark.asyncio
-    async def test_subscriptions_weekly_formatting(self, bot_service, in_memory_db):
-        in_memory_db.execute(
-            """INSERT INTO recurring_transactions (merchant, avg_amount, frequency, category, first_seen, last_seen, occurrences)
-               VALUES ('Netflix', 15.98, 'weekly', 'Entertainment', '2026-01-01', '2026-04-15', 16)"""
+    async def test_subscriptions_shows_declared_subscriptions(self, bot_service, in_memory_db):
+        """New /subscriptions shows declared subscriptions table, not recurring_transactions."""
+        bot_service.storage.create_subscription(
+            merchant="Netflix", frequency="weekly"
         )
-        in_memory_db.commit()
 
         update = MagicMock()
         update.message.reply_text = AsyncMock()
@@ -155,9 +154,20 @@ class TestSubscriptionsCommand:
         text = update.message.reply_text.call_args[0][0]
         assert "Netflix" in text
         assert "weekly" in text
-        assert "22 Apr" in text  # 2026-04-15 + 7 days
-        # 15.98 * 4.33 ≈ 69.19
-        assert "69.1" in text
+        assert "/mo" in text
+
+    @pytest.mark.asyncio
+    async def test_subscriptions_empty_state(self, bot_service):
+        """Empty state message shown when no subscriptions exist."""
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+
+        await bot_service._subscriptions(update, context)
+
+        update.message.reply_text.assert_called_once()
+        text = update.message.reply_text.call_args[0][0]
+        assert "No subscriptions" in text
 
 
 class TestBalanceCommand:

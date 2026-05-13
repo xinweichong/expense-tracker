@@ -42,19 +42,10 @@ class RecurringDetector:
             return None
         return {"frequency": frequency, "avg_amount": avg_amount, "occurrences": len(rows)}
 
-    def save_recurring(self, merchant: str, avg_amount: float, frequency: str, category: Optional[str] = None) -> None:
-        self.storage.save_recurring(merchant, avg_amount, frequency, category)
-
-    def get_all_recurring(self) -> list[dict]:
-        return self.storage.get_recurring_transactions()
-
-    def run(self, merchant: str, amount: float, tx_id: int) -> None:
-        """Detect recurring pattern for merchant/amount and persist if found. Best-effort; logs warnings on error."""
+    def detect_and_suggest(self, merchant: str, amount: float, tx_id: int) -> Optional[dict]:
+        """Detect a recurring pattern and return the result — no DB write. Best-effort; logs on error."""
         try:
-            rec = self.detect(merchant, amount)
-            if rec:
-                tx = self.storage.get_transaction(tx_id)
-                category = tx.get("category") if tx else None
-                self.save_recurring(merchant, rec["avg_amount"], rec["frequency"], category)
+            return self.detect(merchant, amount)
         except Exception as e:
             logger.warning("Recurring detection failed for %s: %s", merchant, e)
+            return None
