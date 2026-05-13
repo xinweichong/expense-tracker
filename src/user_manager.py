@@ -145,9 +145,8 @@ class UserManager:
         from src.gmail_poller import GmailPoller
         from src.ingestion import IngestionPipeline
 
-        conn = sqlite3.connect(db_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
+        from src.main import init_db
+        conn = init_db(db_path)
         storage = Storage(conn)
 
         categories = self._config.get("categories", [])
