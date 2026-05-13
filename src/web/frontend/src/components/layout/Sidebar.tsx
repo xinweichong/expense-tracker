@@ -10,7 +10,11 @@ export function Sidebar() {
     queryFn: () => api.getSettings(),
     staleTime: 30_000,
   });
-  const financeEnabled = settings?.budgets_enabled || settings?.goals_enabled || settings?.trips_enabled;
+  const financeEnabled =
+    settings?.budgets_enabled ||
+    settings?.goals_enabled ||
+    settings?.trips_enabled ||
+    settings?.subscriptions_enabled;
 
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Overview' },
