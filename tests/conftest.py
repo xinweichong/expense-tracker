@@ -135,10 +135,34 @@ def in_memory_db():
         PRIMARY KEY (trip_id, transaction_id)
     );
 
+    CREATE TABLE IF NOT EXISTS subscriptions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        merchant    TEXT NOT NULL,
+        label       TEXT,
+        frequency   TEXT NOT NULL,
+        billing_day INTEGER,
+        status      TEXT DEFAULT 'active',
+        notes       TEXT,
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS upcoming_transactions (
+        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+        subscription_id         INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+        expected_date           TEXT NOT NULL,
+        expected_amount         REAL,
+        matched_transaction_id  INTEGER REFERENCES transactions(id),
+        status                  TEXT DEFAULT 'pending',
+        created_at              DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
         token TEXT PRIMARY KEY,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('subscriptions_enabled', 'false');
     """
     conn.executescript(schema)
     yield conn
