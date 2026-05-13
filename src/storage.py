@@ -1393,10 +1393,9 @@ class Storage:
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return
-        updates["updated_at"] = local_now().isoformat()
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         self._conn.execute(
-            f"UPDATE subscriptions SET {set_clause} WHERE id = ?",
+            f"UPDATE subscriptions SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (*updates.values(), sub_id),
         )
         self._conn.commit()
@@ -1405,6 +1404,7 @@ class Storage:
     def delete_subscription(self, sub_id: int) -> None:
         if not self.get_subscription(sub_id):
             raise ValueError("subscription not found")
+        self._conn.execute("DELETE FROM upcoming_transactions WHERE subscription_id = ?", (sub_id,))
         self._conn.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
         self._conn.commit()
 
