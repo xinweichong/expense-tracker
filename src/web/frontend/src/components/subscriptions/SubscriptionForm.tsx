@@ -54,9 +54,14 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
     ? [merchant, ...merchants]
     : merchants;
 
+  const billingDayNum = billingDay === '' ? undefined : Number(billingDay);
+  const billingDayError =
+    billingDayNum !== undefined && (billingDayNum < 1 || billingDayNum > 31)
+      ? 'Billing day must be between 1 and 31'
+      : null;
+
   const mutation = useMutation({
     mutationFn: async () => {
-      const billingDayNum = billingDay === '' ? undefined : Number(billingDay);
       if (mode === 'create') {
         return api.createSubscription({
           merchant,
@@ -65,6 +70,14 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
           label: label || undefined,
           notes: notes || undefined,
         });
+      }
+      return api.updateSubscription(initial!.id, {
+        merchant,
+        frequency,
+        billing_day: billingDayNum ?? null,
+        label: label || null,
+        notes: notes || null,
+      });
       }
       return api.updateSubscription(initial!.id, {
         merchant,
@@ -144,6 +157,7 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
               placeholder="e.g. 15"
               className="input-field"
             />
+            {billingDayError && <p className="text-sm text-destructive">{billingDayError}</p>}
           </label>
 
           <label className="flex flex-col gap-1">
@@ -168,7 +182,7 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
             </button>
             <button
               onClick={() => mutation.mutate()}
-              disabled={!merchant || mutation.isPending}
+              disabled={!merchant || !!billingDayError || mutation.isPending}
               className="btn-action disabled:opacity-40"
             >
               {mutation.isPending ? 'Saving…' : mode === 'create' ? 'Create' : 'Save'}

@@ -45,6 +45,7 @@ export function SubscriptionSheet({ subId, onClose, onMutate }: SubscriptionShee
   const qc = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [adoptPrompt, setAdoptPrompt] = useState<{ txMerchant: string } | null>(null);
 
   const { data: list } = useQuery({
@@ -110,16 +111,14 @@ export function SubscriptionSheet({ subId, onClose, onMutate }: SubscriptionShee
     },
   });
 
-  // Pull recent transactions for manual match picker — by sub.merchant for the
-  // current year.
+  // Pull recent transactions for manual match picker — last 90 days, no merchant filter.
   const today = new Date().toISOString().slice(0, 10);
-  const startOfYear = `${new Date().getFullYear()}-01-01`;
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const { data: recentTxs = [] } = useQuery({
-    queryKey: ['transactions', sub?.merchant, startOfYear, today],
+    queryKey: ['transactions', 'match-picker', ninetyDaysAgo, today],
     queryFn: () =>
       api.getTransactions({
-        merchant: sub!.merchant,
-        start_date: startOfYear,
+        start_date: ninetyDaysAgo,
         end_date: today,
         limit: 50,
       }) as Promise<Transaction[]>,
@@ -165,36 +164,59 @@ export function SubscriptionSheet({ subId, onClose, onMutate }: SubscriptionShee
 
           {/* Action bar — persistent chrome */}
           {sub && (
-            <div className="shrink-0 flex gap-2 px-4 py-2 border-b border-border">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setShowEdit(true)}
-                aria-label="Edit"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </Button>
-              {sub.status !== 'cancelled' && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-warning"
-                  onClick={() => cancelMutation.mutate()}
-                  aria-label="Cancel subscription"
-                >
-                  <Ban className="w-3.5 h-3.5" />
-                </Button>
+            <div className="shrink-0 border-b border-border">
+              {confirmCancel ? (
+                <div className="flex items-center justify-between px-4 py-2 gap-3">
+                  <span className="text-sm text-foreground">Cancel this subscription?</span>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => setConfirmCancel(false)}
+                      className="px-3 py-1 text-xs text-muted hover:text-foreground"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={() => { setConfirmCancel(false); cancelMutation.mutate(); }}
+                      disabled={cancelMutation.isPending}
+                      className="px-3 py-1 text-xs bg-warning text-background rounded-md disabled:opacity-40"
+                    >
+                      {cancelMutation.isPending ? 'Cancelling…' : 'Confirm'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2 px-4 py-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setShowEdit(true)}
+                    aria-label="Edit"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                  {sub.status !== 'cancelled' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-warning"
+                      onClick={() => setConfirmCancel(true)}
+                      aria-label="Cancel subscription"
+                    >
+                      <Ban className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive"
+                    onClick={() => setConfirmDelete(true)}
+                    aria-label="Delete"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-destructive"
-                onClick={() => setConfirmDelete(true)}
-                aria-label="Delete"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
             </div>
           )}
 

@@ -646,8 +646,8 @@ def create_dashboard_app(
         }
 
     @app.get("/api/recurring")
-    async def recurring(storage=Depends(_get_storage)):
-        return await _db(storage.get_recurring_transactions)
+    async def recurring(_storage=Depends(_get_storage)):
+        return []
 
     @app.get("/api/analytics/comparison")
     async def analytics_comparison(
@@ -1081,6 +1081,11 @@ def create_dashboard_app(
             })
         return {"subscriptions": enriched, "summary": summary}
 
+    def _validate_billing_day(day) -> None:
+        """Raise HTTPException 422 if billing_day is present but out of range."""
+        if day is not None and not (1 <= int(day) <= 31):
+            raise HTTPException(status_code=422, detail="billing_day must be between 1 and 31")
+
     @app.post("/api/subscriptions", status_code=201)
     async def create_subscription(body: dict, storage=Depends(_get_storage)):
         required = {"merchant", "frequency"}
@@ -1092,6 +1097,7 @@ def create_dashboard_app(
                 status_code=422,
                 detail=f"Invalid frequency. Must be one of {VALID_SUBSCRIPTION_FREQUENCIES}",
             )
+        _validate_billing_day(body.get("billing_day"))
         sub_id = await _db(
             storage.create_subscription,
             merchant=body["merchant"],
@@ -1109,6 +1115,8 @@ def create_dashboard_app(
                 status_code=422,
                 detail=f"Invalid frequency. Must be one of {VALID_SUBSCRIPTION_FREQUENCIES}",
             )
+        if "billing_day" in body:
+            _validate_billing_day(body["billing_day"])
         try:
             await _db(storage.update_subscription, sub_id, **body)
         except ValueError as e:

@@ -174,3 +174,49 @@ class TestStalenessDetection:
         SubscriptionMatcher(storage).run()
         sub = storage.get_subscription(sub_id)
         assert sub["status"] == "cancelled"
+
+
+class TestSubscriptionSummary:
+    def test_monthly_total_for_monthly_subscription(self, storage, in_memory_db):
+        sub_id = storage.create_subscription(merchant="Netflix", frequency="monthly")
+        in_memory_db.execute(
+            """INSERT INTO transactions
+               (source, source_id, amount, currency, exchange_rate, merchant,
+                category, transaction_date, type)
+               VALUES ('manual', 'manual_netflix01', 15.98, 'SGD', 1.0,
+                       'Netflix', 'Entertainment', '2026-05-01T10:00:00', 'expense')"""
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute(
+            "SELECT id FROM transactions WHERE source_id = 'manual_netflix01'"
+        ).fetchone()["id"]
+        u_id = storage.create_upcoming_transaction(sub_id, "2026-05-01", 15.98)
+        storage.match_upcoming_transaction(u_id, tx_id)
+        summary = storage.get_subscription_summary()
+        assert abs(summary["total_monthly_sgd"] - 15.98) < 0.01
+
+    def test_monthly_total_for_biweekly_subscription(self, storage, in_memory_db):
+        sub_id = storage.create_subscription(merchant="Gym", frequency="biweekly")
+        in_memory_db.execute(
+            """INSERT INTO transactions
+               (source, source_id, amount, currency, exchange_rate, merchant,
+                category, transaction_date, type)
+               VALUES ('manual', 'manual_gym01', 50.0, 'SGD', 1.0,
+                       'Gym', 'Health', '2026-05-01T10:00:00', 'expense')"""
+        )
+        in_memory_db.commit()
+        tx_id = in_memory_db.execute(
+            "SELECT id FROM transactions WHERE source_id = 'manual_gym01'"
+        ).fetchone()["id"]
+        u_id = storage.create_upcoming_transaction(sub_id, "2026-05-01", 50.0)
+        storage.match_upcoming_transaction(u_id, tx_id)
+        summary = storage.get_subscription_summary()
+        # biweekly × 2.17 = 108.50
+        assert abs(summary["total_monthly_sgd"] - 108.50) < 0.01
+
+    def test_cancelled_subscription_excluded_from_total(self, storage, in_memory_db):
+        sub_id = storage.create_subscription(merchant="Hulu", frequency="monthly")
+        storage.update_subscription(sub_id, status="cancelled")
+        summary = storage.get_subscription_summary()
+        assert summary["total_monthly_sgd"] == 0.0
+        assert summary["active_count"] == 0

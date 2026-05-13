@@ -1540,6 +1540,18 @@ class Storage:
         return None
 
     @_locked
+    def find_subscription_by_merchant(self, merchant: str) -> dict | None:
+        """Return the first non-cancelled subscription matching merchant (case-insensitive), or None."""
+        row = self._conn.execute(
+            """SELECT * FROM subscriptions
+               WHERE LOWER(merchant) = LOWER(?)
+                 AND status NOT IN ('cancelled')
+               LIMIT 1""",
+            (merchant,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    @_locked
     def match_upcoming_transaction(self, upcoming_id: int, transaction_id: int) -> None:
         self._conn.execute(
             """UPDATE upcoming_transactions
@@ -1575,37 +1587,6 @@ class Storage:
                AND (type IS NULL OR type = 'expense')
                ORDER BY transaction_date DESC""",
             (merchant, f"-{days}"),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-    @_locked
-    def save_recurring(
-        self, merchant: str, avg_amount: float, frequency: str, category: Optional[str] = None
-    ) -> None:
-        existing = self._conn.execute(
-            "SELECT id FROM recurring_transactions WHERE merchant = ?", (merchant,)
-        ).fetchone()
-        if existing:
-            self._conn.execute(
-                """UPDATE recurring_transactions
-                   SET avg_amount = ?, frequency = ?, category = ?,
-                       last_seen = CURRENT_TIMESTAMP, occurrences = occurrences + 1
-                   WHERE merchant = ?""",
-                (avg_amount, frequency, category, merchant),
-            )
-        else:
-            self._conn.execute(
-                """INSERT INTO recurring_transactions
-                   (merchant, avg_amount, frequency, category, first_seen, last_seen, occurrences)
-                   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 2)""",
-                (merchant, avg_amount, frequency, category),
-            )
-        self._conn.commit()
-
-    @_locked
-    def get_recurring_transactions(self) -> list[dict]:
-        rows = self._conn.execute(
-            "SELECT * FROM recurring_transactions ORDER BY avg_amount DESC"
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -1956,4 +1937,6 @@ def _to_monthly(amount: float, frequency: str) -> float:
         return amount / 12
     if frequency == "quarterly":
         return amount / 3
-    return amount  # monthly / biweekly treated as monthly for summary
+    if frequency == "biweekly":
+        return amount * 2.17
+    return amount  # monthly fallthrough
