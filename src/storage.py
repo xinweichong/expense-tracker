@@ -1456,6 +1456,11 @@ class Storage:
         ).fetchone()
         return row["sgd_amount"] if row else None
 
+    @_locked
+    def get_subscription_last_amount(self, sub_id: int) -> float | None:
+        """Public accessor for the most recent matched SGD amount."""
+        return self._get_subscription_last_amount(sub_id)
+
     # ── Upcoming Transactions ──────────────────────────────────────
 
     @_locked
