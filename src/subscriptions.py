@@ -95,8 +95,8 @@ class SubscriptionMatcher:
         for sub in active:
             try:
                 self._process(sub)
-            except Exception as e:
-                logger.warning("SubscriptionMatcher error for sub %s: %s", sub["id"], e)
+            except Exception:
+                logger.exception("SubscriptionMatcher error for sub %s", sub["id"])
 
     def _process(self, sub: dict) -> None:
         sub_id = sub["id"]
@@ -104,12 +104,20 @@ class SubscriptionMatcher:
         billing_day = sub["billing_day"]
         interval_days = FREQUENCY_DAYS.get(frequency, 30)
 
-        matched_txs = self.storage.get_subscription_matched_transactions(sub_id, limit=1)
-        last_date = matched_txs[0]["transaction_date"][:10] if matched_txs else None
+        # Anchor next-period math on the latest known upcoming.expected_date
+        # (matched or pending — both are pinned to billing_day). Using the actual
+        # tx.transaction_date would mis-anchor when a charge lands a day or two
+        # before billing_day and stall the subscription.
+        upcomings = self.storage.list_upcoming_transactions(sub_id)
+        latest_upcoming = upcomings[-1] if upcomings else None
+        last_date = latest_upcoming["expected_date"] if latest_upcoming else None
+        has_pending = any(u["status"] == "pending" for u in upcomings)
 
-        # 1. Generate upcoming if none exists for next billing period
+        # 1. Generate upcoming if none exists for next billing period.
+        #    Skip when a pending upcoming is already in flight — it represents
+        #    the next period and we shouldn't get ahead of it.
         next_date = compute_next_billing_date(frequency, billing_day, last_date=last_date)
-        if not self.storage.upcoming_exists_for_period(sub_id, next_date):
+        if not has_pending and not self.storage.upcoming_exists_for_period(sub_id, next_date):
             expected_amount = self._infer_expected_amount(sub_id)
             self.storage.create_upcoming_transaction(sub_id, next_date, expected_amount)
             logger.info(

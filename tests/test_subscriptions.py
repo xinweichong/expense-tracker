@@ -66,6 +66,29 @@ class TestUpcomingGeneration:
         upcoming = storage.list_upcoming_transactions(sub_id)
         assert len(upcoming) == 0
 
+    def test_advances_when_charged_before_billing_day(self, storage, sub_id, in_memory_db):
+        """Regression: charge on 12th with billing_day=15 must still generate next month's upcoming."""
+        in_memory_db.execute(
+            """INSERT INTO transactions
+               (source, source_id, amount, currency, exchange_rate, merchant,
+                category, transaction_date, type)
+               VALUES ('apple_wallet', 'test-spotify-early', 13.98, 'SGD', 1.0,
+                       'Spotify', 'Entertainment', '2026-05-12T10:00:00', 'expense')"""
+        )
+        in_memory_db.commit()
+        tx = in_memory_db.execute(
+            "SELECT id FROM transactions WHERE source_id = 'test-spotify-early'"
+        ).fetchone()
+        upcoming_id = storage.create_upcoming_transaction(sub_id, "2026-05-15", 13.98)
+        storage.match_upcoming_transaction(upcoming_id, tx["id"])
+
+        SubscriptionMatcher(storage).run()
+        upcomings = storage.list_upcoming_transactions(sub_id)
+        # Should have the matched May upcoming AND a new pending June upcoming
+        pending = [u for u in upcomings if u["status"] == "pending"]
+        assert len(pending) == 1
+        assert pending[0]["expected_date"] == "2026-06-15"
+
 
 class TestAutoMatch:
     def test_auto_matches_transaction_in_window(self, storage, sub_id, in_memory_db):
