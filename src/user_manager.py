@@ -116,7 +116,12 @@ class UserManager:
         ctx = self._registry.pop(username, None)
         if ctx and ctx.poller:
             ctx.poller.stop()
-        for job_id in [f"weekly_{username}", f"monthly_{username}", f"daily_{username}"]:
+        for job_id in [
+            f"weekly_{username}",
+            f"monthly_{username}",
+            f"daily_{username}",
+            f"subscription_matcher_{username}",
+        ]:
             if self._scheduler is not None:
                 try:
                     self._scheduler.remove_job(job_id)
