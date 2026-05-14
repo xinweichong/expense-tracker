@@ -28,7 +28,7 @@ import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
 import {
   Pencil, Trash2, Plus, X, ChevronDown,
-  CheckCircle2, Wifi, WifiOff,
+  CheckCircle2, Wifi, WifiOff, AlertTriangle,
 } from 'lucide-react';
 import { TelegramStep, GmailStep, AppleWalletStep } from '@/components/onboarding/steps';
 
@@ -77,6 +77,12 @@ export function SettingsPage() {
   const { data: currentUser } = useCurrentUser();
   const invalidateCurrentUser = useInvalidateCurrentUser();
   const { logout } = useAuth();
+  const { data: status } = useQuery({ queryKey: ['status'], queryFn: api.getStatus, staleTime: 30_000 });
+
+  const gmailAuthError =
+    currentUser?.gmail_connected && status?.gmail?.last_auth_error
+      ? status.gmail.last_auth_error
+      : null;
 
   // Smooth-scroll to hash anchor
   useEffect(() => {
@@ -278,6 +284,7 @@ export function SettingsPage() {
   const handleConnectionStepComplete = async () => {
     setActiveConnectionStep(null);
     await invalidateCurrentUser();
+    qc.invalidateQueries({ queryKey: ['status'] });
   };
 
   return (
@@ -425,19 +432,40 @@ export function SettingsPage() {
               {/* Gmail */}
               <div className="flex items-center justify-between py-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  {currentUser?.gmail_connected ? (
+                  {gmailAuthError ? (
+                    <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
+                  ) : currentUser?.gmail_connected ? (
                     <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
                   ) : (
                     <WifiOff className="w-4 h-4 text-muted shrink-0" />
                   )}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">Gmail</p>
-                    <p className="text-xs text-muted font-mono">
-                      {currentUser?.gmail_connected ? 'Connected' : 'Not connected'}
+                    <p className={gmailAuthError ? 'text-xs font-mono truncate text-warning' : 'text-xs text-muted font-mono'}>
+                      {gmailAuthError ? 'Auth error — reconnect required' : currentUser?.gmail_connected ? 'Connected' : 'Not connected'}
                     </p>
                   </div>
                 </div>
-                {currentUser?.gmail_connected ? (
+                {gmailAuthError ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => setActiveConnectionStep('gmail')}
+                    >
+                      Reconnect
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-destructive"
+                      onClick={handleDisconnectGmail}
+                      disabled={disconnectingGmail}
+                    >
+                      Disconnect
+                    </Button>
+                  </div>
+                ) : currentUser?.gmail_connected ? (
                   <Button
                     variant="outline"
                     size="sm"
