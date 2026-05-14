@@ -1166,6 +1166,17 @@ def create_dashboard_app(
         await _db(storage.dismiss_upcoming_transaction, upcoming_id)
         return {"status": "ok"}
 
+    @app.post("/api/subscriptions/{sub_id}/link-transaction", status_code=201)
+    async def link_transaction(sub_id: int, body: dict, storage=Depends(_get_storage)):
+        tx_id = body.get("transaction_id")
+        if not isinstance(tx_id, int):
+            raise HTTPException(status_code=422, detail="transaction_id must be an integer")
+        try:
+            await _db(storage.link_transaction_to_subscription, sub_id, tx_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok"}
+
     # Serve React SPA
 
     static_dist = os.path.join(os.path.dirname(__file__), "dist")

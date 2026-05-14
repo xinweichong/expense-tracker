@@ -1563,6 +1563,37 @@ class Storage:
         self._conn.commit()
 
     @_locked
+    def link_transaction_to_subscription(self, sub_id: int, tx_id: int) -> None:
+        """Directly link a past transaction to a subscription.
+
+        Creates a matched upcoming_transactions row (idempotent — no-op if
+        the transaction is already linked to this subscription).
+        Raises ValueError if the subscription or transaction is not found.
+        """
+        if not self.get_subscription(sub_id):
+            raise ValueError("subscription not found")
+        tx = self._conn.execute(
+            "SELECT transaction_date, amount, exchange_rate FROM transactions WHERE id = ?", (tx_id,)
+        ).fetchone()
+        if not tx:
+            raise ValueError("transaction not found")
+        existing = self._conn.execute(
+            "SELECT id FROM upcoming_transactions WHERE subscription_id = ? AND matched_transaction_id = ?",
+            (sub_id, tx_id),
+        ).fetchone()
+        if existing:
+            return
+        expected_date = dict(tx)["transaction_date"][:10]
+        expected_amount = round(dict(tx)["amount"] * (dict(tx)["exchange_rate"] or 1.0), 2)
+        self._conn.execute(
+            """INSERT INTO upcoming_transactions
+                   (subscription_id, expected_date, expected_amount, matched_transaction_id, status)
+               VALUES (?, ?, ?, ?, 'matched')""",
+            (sub_id, expected_date, expected_amount, tx_id),
+        )
+        self._conn.commit()
+
+    @_locked
     def dismiss_upcoming_transaction(self, upcoming_id: int) -> None:
         self._conn.execute(
             "UPDATE upcoming_transactions SET status = 'dismissed' WHERE id = ?",

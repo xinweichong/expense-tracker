@@ -6,11 +6,12 @@ import { api, type BudgetProgress, type Category, type GoalProgress, type Trip }
 import { PageCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { cn, getBudgetTone, getGoalTone } from '@/lib/utils';
-import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
+import { springs, staggerContainerVariants, staggerItemVariants, slideInRightVariants } from '@/lib/animations';
 import { Pencil, Trash2, X, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
 import { SubscriptionsSection } from '@/components/subscriptions/SubscriptionsSection';
+import { SubscriptionDetail } from '@/components/subscriptions/SubscriptionDetail';
 
 function SavingsOverviewCard() {
   const { data: overview } = useQuery({
@@ -1000,6 +1001,7 @@ export function FinancePage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedSubId, setSelectedSubId] = useState<number | null>(null);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -1050,7 +1052,9 @@ export function FinancePage() {
   }
 
   return (
-    <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-finance">
+    <div className="flex h-full overflow-hidden">
+      {/* Finance grid content */}
+      <div className={`flex-1 min-w-0 overflow-y-auto md:overflow-hidden p-4 space-y-4 md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-finance ${selectedSubId != null ? 'hidden md:block' : ''}`}>
 
       {/* ── Top area: title ── */}
       <div className="area-top">
@@ -1115,7 +1119,12 @@ export function FinancePage() {
               )}
             </PageCard>
           )}
-          {settings.subscriptions_enabled && <SubscriptionsSection />}
+          {settings.subscriptions_enabled && (
+            <SubscriptionsSection
+              selectedSubId={selectedSubId}
+              onSelectSub={setSelectedSubId}
+            />
+          )}
           {settings.trips_enabled && <TripsSection />}
         </div>
       ) : (
@@ -1136,6 +1145,26 @@ export function FinancePage() {
       ) : (
         <div className="area-right" />
       )}
+
+      </div>{/* end flex-1 finance grid */}
+
+      {/* Subscription detail panel — slides in from right, mirrors MerchantsPage */}
+      <AnimatePresence>
+        {selectedSubId != null && (
+          <motion.div
+            className="w-full md:w-[420px] border-l border-border bg-card flex-shrink-0 overflow-hidden"
+            variants={slideInRightVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            <SubscriptionDetail
+              subId={selectedSubId}
+              onClose={() => setSelectedSubId(null)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

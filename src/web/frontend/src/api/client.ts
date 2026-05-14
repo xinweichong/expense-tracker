@@ -606,6 +606,12 @@ export const api = {
       { method: 'POST' },
     ),
 
+  linkTransaction: (subId: number, transactionId: number) =>
+    request<{ status: string }>(
+      `/api/subscriptions/${subId}/link-transaction`,
+      { method: 'POST', body: JSON.stringify({ transaction_id: transactionId }) },
+    ),
+
   getStatus: () =>
     request<{
       gmail: { authenticated: boolean | null; last_auth_error: string | null; last_poll_at: string | null };

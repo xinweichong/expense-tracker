@@ -1,10 +1,9 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { api, type Subscription } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
-import { SubscriptionSheet } from './SubscriptionSheet';
+import { useState } from 'react';
 import { SubscriptionForm } from './SubscriptionForm';
 
 const FREQUENCY_LABELS: Record<Subscription['frequency'], string> = {
@@ -15,8 +14,12 @@ const FREQUENCY_LABELS: Record<Subscription['frequency'], string> = {
   annual: 'Annual',
 };
 
-export function SubscriptionsSection() {
-  const [selectedSubId, setSelectedSubId] = useState<number | null>(null);
+interface SubscriptionsSectionProps {
+  selectedSubId: number | null;
+  onSelectSub: (id: number) => void;
+}
+
+export function SubscriptionsSection({ selectedSubId, onSelectSub }: SubscriptionsSectionProps) {
   const [showForm, setShowForm] = useState(false);
 
   const { data, refetch } = useQuery({
@@ -61,8 +64,10 @@ export function SubscriptionsSection() {
           {subs.map((sub) => (
             <button
               key={sub.id}
-              onClick={() => setSelectedSubId(sub.id)}
-              className="w-full flex items-center justify-between py-3 text-left hover:bg-foreground/5 transition-colors -mx-4 px-4"
+              onClick={() => onSelectSub(sub.id)}
+              className={`w-full flex items-center justify-between py-3 text-left hover:bg-foreground/5 transition-colors -mx-4 px-4 ${
+                selectedSubId === sub.id ? 'bg-foreground/10' : ''
+              }`}
             >
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-sm font-medium text-foreground truncate">
@@ -95,17 +100,6 @@ export function SubscriptionsSection() {
           )}
         </div>
       </PageCard>
-
-      {selectedSubId != null && (
-        <SubscriptionSheet
-          subId={selectedSubId}
-          onClose={() => setSelectedSubId(null)}
-          onMutate={() => {
-            refetch();
-            setSelectedSubId(null);
-          }}
-        />
-      )}
 
       {showForm && (
         <SubscriptionForm
