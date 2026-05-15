@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { CasheWordmark } from '@/components/ui/Brand';
+import { CasheWordmark, CasheIcon } from '@/components/ui/Brand';
 
 export function Sidebar() {
   const { data: settings } = useQuery({
@@ -25,8 +25,9 @@ export function Sidebar() {
 
   return (
     <aside className="hidden md:flex flex-col w-14 lg:w-56 bg-card/80 backdrop-blur-sm border-r border-border h-screen sticky top-0">
-      <div className="flex items-center gap-3 px-3 py-5 lg:px-4">
-        <CasheWordmark size={22} />
+      <div className="flex items-center justify-center lg:justify-start gap-3 px-3 py-5 lg:px-4">
+        <CasheIcon size={32} className="lg:hidden" />
+        <CasheWordmark size={22} className="hidden lg:inline-flex" />
       </div>
       <nav className="flex-1 px-2 lg:px-3 space-y-1">
         {navItems.map(({ to, icon: Icon, label }) => (
