@@ -71,9 +71,9 @@ def create_dashboard_app(
             return Response(content="<h2>Unknown user.</h2>", media_type="text/html", status_code=404)
         try:
             redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-            ctx.poller.complete_reauth(code, username)
-            user_manager.start_poller(username)
             loop = asyncio.get_event_loop()
+            await loop.run_in_executor(_DB_EXECUTOR, partial(ctx.poller.complete_reauth, code, username))
+            user_manager.start_poller(username)
             await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=1))
             return Response(
                 content="<h2>Gmail connected. You can close this tab.</h2>",
