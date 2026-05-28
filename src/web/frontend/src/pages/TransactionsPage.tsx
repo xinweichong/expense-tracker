@@ -88,7 +88,7 @@ export function TransactionsPage() {
     <div className="flex h-full overflow-hidden">
       {/* Left: transaction list */}
       <div
-        className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4"
+        className={`flex-1 overflow-y-auto p-4 md:p-6 space-y-4 transition-[margin-right] duration-300 ease-out${selectedTransaction ? ' hidden md:block md:mr-96' : ''}`}
       >
         <div className="flex items-start justify-between pb-5 border-b border-border">
           <div className="flex flex-col gap-1">
