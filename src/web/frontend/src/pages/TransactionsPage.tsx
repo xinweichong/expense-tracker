@@ -86,11 +86,9 @@ export function TransactionsPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Left: transaction list — hidden on mobile when detail is open */}
+      {/* Left: transaction list */}
       <div
-        className={`flex-1 overflow-y-auto p-4 md:p-6 space-y-4 ${
-          selectedTransaction ? 'hidden md:block' : ''
-        }`}
+        className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4"
       >
         <div className="flex items-start justify-between pb-5 border-b border-border">
           <div className="flex flex-col gap-1">
@@ -147,11 +145,24 @@ export function TransactionsPage() {
         </Card>
       </div>
 
-      {/* Right: transaction detail panel */}
+      {/* Mobile backdrop — closes panel when tapped */}
       <AnimatePresence>
         {selectedTransaction && (
           <motion.div
-            className="w-full md:w-96 border-l border-border bg-card flex-shrink-0 overflow-hidden"
+            className="fixed inset-0 bg-black/30 z-40 md:hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => navigate('/transactions')}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Right: transaction detail panel — fixed overlay */}
+      <AnimatePresence>
+        {selectedTransaction && (
+          <motion.div
+            className="fixed inset-y-0 right-0 w-full md:w-96 z-50 border-l border-border bg-card shadow-xl overflow-hidden"
             variants={slideInRightVariants}
             initial="initial"
             animate="animate"
