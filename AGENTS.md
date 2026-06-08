@@ -198,12 +198,8 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 | Parser | Strategy |
 |--------|----------|
-| `dbs_paylah` | DBS "Transaction Ref" field from email |
-| `uob_card` | `sha256(date:amount:merchant:card_last4)[:16]` |
-| `uob_paynow` | `sha256(full_body)[:16]` |
-| `uob_transfer` | `sha256(full_body)[:16]` |
-| `uob_nets` | `sha256(full_body)[:16]` |
-| `apple_wallet` | `sha256(merchant:amount::date)[:16]` — double colon is intentional (empty card-field slot for backward compat) |
+| Email parsers (`dbs_paylah`, `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`) | Gmail RFC822 `Message-ID` header (falls back to `msg["id"]`). Assigned in `GmailPoller._parse_message` — overwrites whatever `source_id` the parser returned (e.g. DBS Transaction Ref is discarded). Email parsers therefore set `source_id=""` or `None`. |
+| `apple_wallet` | `sha256(merchant:amount::date)[:16]` — double colon is intentional (empty card-field slot for backward compat). Set by the parser, not overwritten. |
 | web manual | `manual_{uuid4().hex[:12]}` |
 | bot `/add`, `/cash` | `manual-{YYYYMMDDHHMMSS}-{amount}` |
 
