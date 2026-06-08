@@ -433,6 +433,46 @@ class TestUobParser:
         assert result.tx_type == "income"
         assert result.transaction_date == "2026-03-20T17:28:00"
 
+    # --- Pattern 6: NETS QR payment (expense, 12h time) ---
+
+    def test_parse_nets_qr_payment(self):
+        """Real email format: zero-padded day, single-digit hour."""
+        body = (
+            "You made a NETS QR payment of SGD 8.20 to BAN MIAN "
+            "on your a/c ending 9000 at 1:35PM SGT, 08 Jun 26. "
+            "If unauthorised, call UOB 24/7 Fraud Hotline."
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(8.20)
+        assert result.currency == "SGD"
+        assert result.merchant == "BAN MIAN"
+        assert result.source == "uob_nets"
+        assert result.tx_type == "expense"
+        assert result.transaction_date == "2026-06-08T13:35:00"
+        assert result.description == "NETS QR - BAN MIAN"
+
+    def test_parse_nets_qr_am(self):
+        body = (
+            "You made a NETS QR payment of SGD 4.50 to KOPITIAM "
+            "on your a/c ending 9000 at 8:15AM SGT, 1 Jul 26."
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(4.50)
+        assert result.merchant == "KOPITIAM"
+        assert result.transaction_date == "2026-07-01T08:15:00"
+
+    def test_parse_nets_qr_comma_amount(self):
+        body = (
+            "You made a NETS QR payment of SGD 1,234.56 to MERCHANT NAME "
+            "on your a/c ending 9000 at 12:00PM SGT, 15 Dec 26."
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(1234.56)
+        assert result.transaction_date == "2026-12-15T12:00:00"
+
     # --- No match ---
 
     def test_parse_no_match_returns_none(self):

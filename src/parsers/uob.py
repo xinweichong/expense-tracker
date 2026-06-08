@@ -8,12 +8,13 @@ from src.parsers.base import ParseResult
 class UobParser:
     """Handles all UOB alert email formats from @uobgroup.com.
 
-    Five patterns in priority order:
+    Six patterns in priority order:
       1. Card purchase       (any currency, DD/MM/YY, no time)
       2. Accumulated transit (DD/MM/YY, no time)
       3. Card reversal       (DD Mon YY H:MMAM/PM — income)
       4. PayNow received     (DD-MON-YYYY H:MMAM/PM — income)
       5. One-time transfer   (H:MMAM/PM SGT, D Mon YY — expense)
+      6. NETS QR payment     (H:MMAM/PM SGT, DD Mon YY — expense)
     """
 
     @property
@@ -52,6 +53,14 @@ class UobParser:
         r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2}),",
         re.IGNORECASE,
     )
+    # Pattern 6: NETS QR payment (expense)
+    NETS_QR_PATTERN = re.compile(
+        r"You made a NETS QR payment of SGD\s+([0-9,]+\.\d{2})\s+to\s+(.+?)"
+        r"\s+on your a/c ending\s+\d+"
+        r"\s+at\s+(\d{1,2}:\d{2}(?:AM|PM))\s+SGT,\s+(\d{1,2})\s+"
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2})",
+        re.IGNORECASE,
+    )
 
     def can_parse(self, sender: str, subject: str) -> bool:
         return self.sender_domain in sender.lower()
@@ -63,6 +72,7 @@ class UobParser:
             or self._parse_reversal(email_body)
             or self._parse_paynow_received(email_body)
             or self._parse_transfer(email_body)
+            or self._parse_nets_qr(email_body)
         )
 
     @staticmethod
@@ -180,6 +190,26 @@ class UobParser:
             amount=amount,
             merchant=recipient,
             description=f"Transfer to {recipient}",
+            transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
+            raw_data=body,
+        )
+
+    def _parse_nets_qr(self, body: str) -> Optional[ParseResult]:
+        m = self.NETS_QR_PATTERN.search(body)
+        if not m:
+            return None
+        amount = float(m.group(1).replace(",", ""))
+        merchant = m.group(2).strip()
+        time_str = m.group(3)
+        day, month_str, short_year = int(m.group(4)), m.group(5), int(m.group(6))
+        iso_date = self._iso_from_dmmy(day, month_str, short_year)
+        h, mi = self._parse_time_12h(time_str)
+        return ParseResult(
+            source="uob_nets",
+            source_id="",
+            amount=amount,
+            merchant=merchant,
+            description=f"NETS QR - {merchant}",
             transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
             raw_data=body,
         )
