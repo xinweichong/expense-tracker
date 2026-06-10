@@ -48,7 +48,8 @@ class TestRecurringDetection:
         assert result is None
 
     def test_no_match_with_inconsistent_intervals(self, detector, in_memory_db):
-        dates = [datetime(2026, 4, 17), datetime(2026, 4, 10), datetime(2026, 3, 1)]
+        now = datetime.now()
+        dates = [now, now - timedelta(days=7), now - timedelta(days=47)]
         for i, d in enumerate(dates):
             in_memory_db.execute(
                 f"INSERT INTO transactions (source, source_id, amount, merchant, transaction_date) "

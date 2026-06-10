@@ -198,7 +198,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 | Parser | Strategy |
 |--------|----------|
-| Email parsers (`dbs_paylah`, `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`) | Gmail RFC822 `Message-ID` header (falls back to `msg["id"]`). Assigned in `GmailPoller._parse_message` — overwrites whatever `source_id` the parser returned (e.g. DBS Transaction Ref is discarded). Email parsers therefore set `source_id=""` or `None`. |
+| Email parsers (`dbs_paylah`, `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`, `uob_paynow_sent`) | Gmail RFC822 `Message-ID` header (falls back to `msg["id"]`). Assigned in `GmailPoller._parse_message` — overwrites whatever `source_id` the parser returned (e.g. DBS Transaction Ref is discarded). Email parsers therefore set `source_id=""` or `None`. |
 | `apple_wallet` | `sha256(merchant:amount::date)[:16]` — double colon is intentional (empty card-field slot for backward compat). Set by the parser, not overwritten. |
 | web manual | `manual_{uuid4().hex[:12]}` |
 | bot `/add`, `/cash` | `manual-{YYYYMMDDHHMMSS}-{amount}` |
@@ -206,7 +206,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - Apple Wallet hash uses `f"{merchant}:{amount}::{date}"` — the double colon is a deliberate empty card-field slot for backward compatibility with pre-card-name records. Do not add the card field into this hash.
 - Currency parsing precedence: ISO code prefix (`PLN 3.78`) → multi-char symbols (`S$`, `A$`, `HK$`, `RM`...) → single-char symbols (`£`, `€`...) → bare number defaults to SGD. Multi-char must be checked before single-char to avoid `S$` matching as `$`.
 - DBS PayLah! infers `datetime.now().year` because the email format omits the year. A December email processed in January will have the wrong year — this is a known limitation.
-- `UobParser` handles all UOB email formats in a single class (card purchase, accumulated transit, card reversal, PayNow received, one-time transfer, NETS QR payment). Source values: `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`. Card reversals emit `tx_type="income"`.
+- `UobParser` handles all UOB email formats in a single class (card purchase, accumulated transit, card reversal, PayNow received, one-time transfer, NETS QR payment, PayNow transfer sent). Source values: `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`, `uob_paynow_sent`. Card reversals emit `tx_type="income"`. `uob_paynow` is incoming PayNow (income); `uob_paynow_sent` is outbound PayNow transfer (expense).
 
 ### Telegram Bot
 
@@ -227,7 +227,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - DB path resolution: `DATA_DIR = "/data" if os.path.isdir("/data") else "data"`. Per-user DB: `{DATA_DIR}/users/{username}/expense_tracker.db`. Admin DB: `{DATA_DIR}/app.db`. The `EXPENSE_DB_PATH` env var overrides only the legacy single-user path, not per-user paths.
 - Migrations in `init_db` wrap each `ALTER TABLE` in bare `except: pass` — SQLite has no `ADD COLUMN IF NOT EXISTS`. All new column migrations must follow this pattern.
 - `RecurringDetector` runs inside `IngestionPipeline.ingest()` (both Gmail and Webhook paths). It looks back 90 days and is instantiated per-`UserContext` (stateful — reused across ingestion calls for the same user).
-- The `source` column has no `CHECK` constraint — invalid values insert silently. Valid values: `dbs_paylah`, `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`, `apple_wallet`, `manual`, `cash`.
+- The `source` column has no `CHECK` constraint — invalid values insert silently. Valid values: `dbs_paylah`, `uob_card`, `uob_paynow`, `uob_paynow_sent`, `uob_transfer`, `uob_nets`, `apple_wallet`, `manual`, `cash`.
 
 ### Testing Conventions
 

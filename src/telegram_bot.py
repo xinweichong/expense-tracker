@@ -21,13 +21,15 @@ EDIT_SELECT_FIELD = 0
 EDIT_ENTER_VALUE = 1
 
 SOURCE_LABELS: dict[str, str] = {
-    "dbs_paylah":   "DBS PayLah!",
-    "uob_paynow":   "UOB PayNow",
-    "uob_card":     "UOB Card",
-    "uob_transfer": "UOB Transfer",
-    "apple_wallet": "Apple Wallet",
-    "manual":       "Manual",
-    "cash":         "Cash",
+    "dbs_paylah":      "DBS PayLah!",
+    "uob_paynow":      "UOB PayNow",
+    "uob_paynow_sent": "UOB PayNow Sent",
+    "uob_card":        "UOB Card",
+    "uob_transfer":    "UOB Transfer",
+    "uob_nets":        "UOB NETS QR",
+    "apple_wallet":    "Apple Wallet",
+    "manual":          "Manual",
+    "cash":            "Cash",
 }
 
 
