@@ -473,6 +473,47 @@ class TestUobParser:
         assert result.amount == pytest.approx(1234.56)
         assert result.transaction_date == "2026-12-15T12:00:00"
 
+    # --- Pattern 7: PayNow transfer (expense, outbound, 12h time) ---
+
+    def test_parse_paynow_sent_with_uen(self):
+        """Real email format: UEN-registered recipient, single-digit hour/day."""
+        body = (
+            "You made a PayNow transfer of SGD 14.79 to FOMO PAY PTE. LTD. (UEN ending D002) "
+            "on your a/c ending 9000 at 1:06PM SGT, 10 Jun 26. "
+            "If unauthorised, call UOB 24/7 Fraud Hotline."
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(14.79)
+        assert result.currency == "SGD"
+        assert result.merchant == "FOMO PAY PTE. LTD. (UEN ending D002)"
+        assert result.source == "uob_paynow_sent"
+        assert result.tx_type == "expense"
+        assert result.transaction_date == "2026-06-10T13:06:00"
+        assert result.description == "PayNow transfer to FOMO PAY PTE. LTD. (UEN ending D002)"
+
+    def test_parse_paynow_sent_am(self):
+        body = (
+            "You made a PayNow transfer of SGD 5.00 to JANE DOE "
+            "on your a/c ending 9000 at 8:30AM SGT, 1 Jan 26."
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(5.00)
+        assert result.merchant == "JANE DOE"
+        assert result.source == "uob_paynow_sent"
+        assert result.transaction_date == "2026-01-01T08:30:00"
+
+    def test_parse_paynow_sent_comma_amount(self):
+        body = (
+            "You made a PayNow transfer of SGD 1,234.56 to SOME RECIPIENT "
+            "on your a/c ending 9000 at 11:59PM SGT, 31 Dec 26."
+        )
+        result = self.parser.parse(body)
+        assert result is not None
+        assert result.amount == pytest.approx(1234.56)
+        assert result.transaction_date == "2026-12-31T23:59:00"
+
     # --- No match ---
 
     def test_parse_no_match_returns_none(self):
