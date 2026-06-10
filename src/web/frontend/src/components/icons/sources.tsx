@@ -1,7 +1,10 @@
 export const SOURCE_LABELS: Record<string, string> = {
   dbs_paylah: 'D',
   uob_paynow: 'U',
+  uob_paynow_sent: 'U',
   uob_card: 'U',
+  uob_transfer: 'U',
+  uob_nets: 'U',
   apple_wallet: '',
   manual: '·',
   cash: '$',
