@@ -12,6 +12,7 @@ import { formatCurrency } from '@/lib/utils';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { springs } from '@/lib/animations';
+import { COLOR_TRACK, COLOR_FOREGROUND } from '@/lib/chartTheme';
 
 const PILLAR_ORDER = [
   'savings_rate',
@@ -32,7 +33,7 @@ function HealthScoreBreakdown() {
   const score = data?.score ?? null;
   const isHighlighted = score != null && score >= 70;
   const ringColor =
-    !score ? '#2A2A32' :
+    !score ? COLOR_TRACK :
     score >= 80 ? '#30D158' :
     score >= 60 ? '#64D2FF' :
     score >= 40 ? '#FFD60A' :
@@ -67,7 +68,7 @@ function HealthScoreBreakdown() {
       {/* Score header */}
       <div className="flex items-center gap-6">
         <svg width="96" height="96" className="shrink-0">
-          <circle cx="48" cy="48" r={r} fill="none" stroke="#2A2A32" strokeWidth="6" />
+          <circle cx="48" cy="48" r={r} fill="none" stroke={COLOR_TRACK} strokeWidth="6" />
           <motion.circle
             cx="48" cy="48" r={r} fill="none"
             stroke={ringColor}
@@ -79,7 +80,7 @@ function HealthScoreBreakdown() {
             animate={{ strokeDashoffset }}
             transition={springs.gentle}
           />
-          <text x="48" y="52" textAnchor="middle" fontSize="20" fontWeight="700" fill="#E8E8ED">
+          <text x="48" y="52" textAnchor="middle" fontSize="20" fontWeight="700" fill={COLOR_FOREGROUND}>
             {score}
           </text>
         </svg>

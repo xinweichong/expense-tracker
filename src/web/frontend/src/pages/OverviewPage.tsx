@@ -17,7 +17,7 @@ import { TransactionRow } from '@/components/transactions/TransactionRow';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { springs, staggerContainerVariants, staggerItemVariants, AnimatedCurrency } from '@/lib/animations';
-import { COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL } from '@/lib/chartTheme';
+import { COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL, COLOR_TRACK, COLOR_FOREGROUND } from '@/lib/chartTheme';
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -115,7 +115,7 @@ function HealthScoreCard() {
     >
       {/* Score ring */}
       <svg width="56" height="56" className="shrink-0">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="#2A2A32" strokeWidth="4" />
+        <circle cx="28" cy="28" r={r} fill="none" stroke={COLOR_TRACK} strokeWidth="4" />
         <motion.circle
           cx="28" cy="28" r={r} fill="none"
           stroke={ringColor}
@@ -127,7 +127,7 @@ function HealthScoreCard() {
           animate={{ strokeDashoffset }}
           transition={springs.gentle}
         />
-        <text x="28" y="32" textAnchor="middle" fontSize="11" fontWeight="700" fill="#E8E8ED">
+        <text x="28" y="32" textAnchor="middle" fontSize="11" fontWeight="700" fill={COLOR_FOREGROUND}>
           {score}
         </text>
       </svg>
