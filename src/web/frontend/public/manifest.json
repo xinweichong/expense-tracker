@@ -1,4 +1,7 @@
 {
+  "id": "/",
+  "scope": "/",
+  "lang": "en",
   "name": "cashe",
   "short_name": "cashe",
   "description": "cash, caught.",

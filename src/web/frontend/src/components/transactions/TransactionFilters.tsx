@@ -135,7 +135,7 @@ export function TransactionFilters({
               key={q.label}
               type="button"
               onClick={() => { setStartDate(q.start); setEndDate(q.end); }}
-              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+              className={`px-2.5 py-2 md:py-1 text-xs rounded-full border transition-colors ${
                 isActive
                   ? 'border-foreground text-foreground bg-foreground/10'
                   : 'border-border text-muted hover:text-foreground'
