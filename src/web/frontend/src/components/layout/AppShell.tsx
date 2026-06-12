@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { BottomTabs } from './BottomTabs';
 import { CasheWordmark, B2_WASH } from '@/components/ui/Brand';
+import { CommandPalette } from '@/components/CommandPalette';
 import { pageVariants } from '@/lib/animations';
 
 export function AppShell() {
@@ -12,6 +13,7 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen flex" style={{ background: B2_WASH }}>
+      <CommandPalette />
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Mobile-only top bar — hidden on md+ where sidebar provides branding */}
