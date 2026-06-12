@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/animations';
 import { Search } from 'lucide-react';
+import { LoadFailed } from '@/components/ui/LoadFailed';
 import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
 
@@ -38,7 +39,7 @@ export function MerchantsPage() {
     if (merchantName) setSelectedMerchant(merchantName);
   }, [merchantName]);
 
-  const { data: merchants = [], isLoading } = useQuery({
+  const { data: merchants = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['merchant-intelligence', sortBy, tagFilter, search],
     queryFn: () =>
       api.getMerchantIntelligenceList({
@@ -130,14 +131,16 @@ export function MerchantsPage() {
              table headers/rows own their px-4 spacing and render edge-to-edge, consistent with
              TransactionsPage which also uses a bare <Card className="overflow-hidden">.
              Do NOT wrap in PageCard — its mandatory p-4 CardContent padding would break the layout. */}
-        {isLoading ? (
+        {isError ? (
+          <LoadFailed onRetry={() => refetch()} />
+        ) : isLoading ? (
           <div className="space-y-2 py-2">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-10" />
             ))}
           </div>
         ) : merchants.length === 0 ? (
-          <div className="text-muted text-sm py-8 text-center">No merchants found.</div>
+          <div className="text-muted text-sm py-8 text-center">Nothing captured yet.</div>
         ) : (
           <div className="overflow-x-auto">
           <Card>

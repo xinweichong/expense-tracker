@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { PageCard, ChartCard, HighlightCard } from '@/components/ui/cards';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LoadFailed } from '@/components/ui/LoadFailed';
 import { ComparisonBarChart } from '@/components/charts/ComparisonBarChart';
 import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { MerchantTable } from '@/components/charts/MerchantTable';
@@ -25,7 +26,7 @@ const PILLAR_ORDER = [
 
 function HealthScoreBreakdown() {
   const [months, setMonths] = useState(1);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['health-score', months],
     queryFn: () => api.getHealthScore(months),
     staleTime: 60_000,
@@ -57,7 +58,9 @@ function HealthScoreBreakdown() {
     </select>
   );
 
-  const scoreContent = isLoading ? (
+  const scoreContent = isError ? (
+    <LoadFailed onRetry={() => refetch()} />
+  ) : isLoading ? (
     <Skeleton className="h-48" />
   ) : !data?.has_income_data ? (
     <div className="py-8 text-center">

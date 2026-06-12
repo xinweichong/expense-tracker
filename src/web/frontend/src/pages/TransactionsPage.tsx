@@ -13,6 +13,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type Transaction } from '@/api/client';
 import { slideInRightVariants, fadeUpVariants } from '@/lib/animations';
 import { Plus } from 'lucide-react';
+import { LoadFailed } from '@/components/ui/LoadFailed';
 
 const PAGE_SIZE = 20;
 
@@ -38,7 +39,7 @@ export function TransactionsPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
     useInfiniteQuery({
       queryKey: ['transactions', debouncedSearch, category, startDate, endDate],
       queryFn: ({ pageParam = 0 }) => {
@@ -145,14 +146,18 @@ export function TransactionsPage() {
         )}
 
         <Card className="overflow-hidden">
-          <TransactionList
-            transactions={txs}
-            onLoadMore={loadMore}
-            hasMore={!!hasNextPage}
-            isLoading={isLoading || isFetchingNextPage}
-            onTransactionClick={handleTransactionClick}
-            selectedTransactionId={selectedId}
-          />
+          {isError ? (
+            <LoadFailed onRetry={() => refetch()} />
+          ) : (
+            <TransactionList
+              transactions={txs}
+              onLoadMore={loadMore}
+              hasMore={!!hasNextPage}
+              isLoading={isLoading || isFetchingNextPage}
+              onTransactionClick={handleTransactionClick}
+              selectedTransactionId={selectedId}
+            />
+          )}
         </Card>
       </div>
 

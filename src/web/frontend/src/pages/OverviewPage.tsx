@@ -9,13 +9,14 @@ import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummary, useTrend, useTrendByCategory, useBalance } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
 import { api, type Transaction, type BudgetProgress, type GoalProgress } from '@/api/client';
-import { formatCurrency, formatDate, getCategoryColor, cn } from '@/lib/utils';
+import { formatCurrency, formatCurrencyWhole, formatDate, getCategoryColor, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LoadFailed } from '@/components/ui/LoadFailed';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { springs, staggerContainerVariants, staggerItemVariants, AnimatedCurrency } from '@/lib/animations';
 import { COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL, COLOR_TRACK, COLOR_FOREGROUND } from '@/lib/chartTheme';
@@ -65,7 +66,7 @@ const PERIOD_OPTIONS: Period[] = ['day', 'week', 'month'];
 
 function HealthScoreCard() {
   const navigate = useNavigate();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['health-score'],
     queryFn: () => api.getHealthScore(1),
     staleTime: 60_000,
@@ -76,6 +77,16 @@ function HealthScoreCard() {
       <Card>
         <CardContent className="p-4">
           <Skeleton className="h-16" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <LoadFailed onRetry={() => refetch()} />
         </CardContent>
       </Card>
     );
@@ -464,7 +475,7 @@ export function OverviewPage() {
                       />
                     </div>
                     <div className="flex justify-between text-xs text-muted">
-                      <span>${g.saved_amount.toFixed(0)} of ${g.target_amount.toFixed(0)}</span>
+                      <span>{formatCurrencyWhole(g.saved_amount)} of {formatCurrencyWhole(g.target_amount)}</span>
                       {g.target_date && <span>by {g.target_date}</span>}
                     </div>
                   </div>
@@ -573,9 +584,9 @@ export function OverviewPage() {
           }
         >
           {!recentTransactions || recentTransactions.length === 0 ? (
-            <p className="text-muted text-sm py-4 text-center">No transactions in this period</p>
+            <p className="text-muted text-sm py-4 text-center">Nothing captured this period.</p>
           ) : filteredTransactions.length === 0 ? (
-            <p className="text-muted text-sm py-4 text-center">No transactions for this category</p>
+            <p className="text-muted text-sm py-4 text-center">Nothing captured for this category.</p>
           ) : (
             <div className="flex flex-col -mx-4">
               {pageTxs.map((tx: Transaction) => (
