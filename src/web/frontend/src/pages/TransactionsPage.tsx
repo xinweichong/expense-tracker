@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { TransactionFilters } from '@/components/transactions/TransactionFilters
 import { TransactionDetail } from '@/components/transactions/TransactionDetail';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { useCategories } from '@/hooks/useCategories';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type Transaction } from '@/api/client';
 import { slideInRightVariants, fadeUpVariants } from '@/lib/animations';
 import { Plus } from 'lucide-react';
@@ -22,6 +23,7 @@ export function TransactionsPage() {
   const selectedId = isNaN(parsed) ? undefined : parsed;
 
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [category, setCategory] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -30,13 +32,13 @@ export function TransactionsPage() {
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
     useInfiniteQuery({
-      queryKey: ['transactions', search, category, startDate, endDate],
+      queryKey: ['transactions', debouncedSearch, category, startDate, endDate],
       queryFn: ({ pageParam = 0 }) => {
         const params: Record<string, string | number> = {
           limit: PAGE_SIZE,
           offset: pageParam as number,
         };
-        if (search) params.merchant = search;
+        if (debouncedSearch) params.merchant = debouncedSearch;
         if (category && category !== 'all') params.category = category;
         if (startDate) params.start_date = startDate;
         if (endDate) params.end_date = endDate;
@@ -47,6 +49,7 @@ export function TransactionsPage() {
         if (lastPage.length < PAGE_SIZE) return undefined;
         return allPages.length * PAGE_SIZE;
       },
+      placeholderData: keepPreviousData,
     });
 
   const txs = data?.pages.flat() ?? [];
