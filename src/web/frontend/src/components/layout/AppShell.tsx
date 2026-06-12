@@ -1,8 +1,11 @@
+import { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { BottomTabs } from './BottomTabs';
 import { CasheWordmark, B2_WASH } from '@/components/ui/Brand';
+import { CommandPalette } from '@/components/CommandPalette';
+import { PullToRefresh } from './PullToRefresh';
 import { pageVariants } from '@/lib/animations';
 
 export function AppShell() {
@@ -11,6 +14,7 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen flex" style={{ background: B2_WASH }}>
+      <CommandPalette />
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Mobile-only top bar — hidden on md+ where sidebar provides branding */}
@@ -27,7 +31,19 @@ export function AppShell() {
               exit={shouldReduce ? undefined : 'exit'}
               className="md:h-full"
             >
-              <Outlet />
+              <PullToRefresh>
+                <Suspense
+                  fallback={
+                    <div className="h-full flex items-center justify-center py-24">
+                      <span className="text-xs text-muted font-mono uppercase tracking-[0.22em]">
+                        Catching up…
+                      </span>
+                    </div>
+                  }
+                >
+                  <Outlet />
+                </Suspense>
+              </PullToRefresh>
             </motion.div>
           </AnimatePresence>
         </main>

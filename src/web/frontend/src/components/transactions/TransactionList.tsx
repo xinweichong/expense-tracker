@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { type Transaction } from '@/api/client';
 import { TransactionRow } from './TransactionRow';
+import { Skeleton } from '@/components/ui/skeleton';
 import { springs } from '@/lib/animations';
 
 const STAGGER_LIMIT = 10;
@@ -13,6 +14,22 @@ interface TransactionListProps {
   isLoading: boolean;
   onTransactionClick: (tx: Transaction) => void;
   selectedTransactionId?: number;
+}
+
+function TransactionRowSkeleton() {
+  return (
+    <div
+      data-testid="tx-skeleton"
+      className="flex items-center gap-3 px-4 py-3 border-b border-border/50"
+    >
+      <Skeleton className="h-8 w-8 rounded-full" />
+      <div className="flex-1 space-y-1.5">
+        <Skeleton className="h-3.5 w-40" />
+        <Skeleton className="h-3 w-24" />
+      </div>
+      <Skeleton className="h-4 w-16" />
+    </div>
+  );
 }
 
 export function TransactionList({
@@ -37,6 +54,16 @@ export function TransactionList({
     observer.observe(el);
     return () => observer.disconnect();
   }, [hasMore, isLoading, onLoadMore]);
+
+  if (transactions.length === 0 && isLoading) {
+    return (
+      <div>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <TransactionRowSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
 
   if (transactions.length === 0 && !isLoading) {
     return (

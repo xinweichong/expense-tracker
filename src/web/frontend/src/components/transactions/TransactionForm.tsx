@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useCreateTransaction } from '@/hooks/useTransactions';
+import { useToast } from '@/components/ui/toast';
 import { type Category } from '@/api/client';
 
 const TX_TYPES = [
@@ -42,6 +43,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   });
 
   const createTx = useCreateTransaction();
+  const toast = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +60,12 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
         source: type === 'cash' ? 'cash' : 'manual',
         transaction_date: datetime ? datetime + ':00' : undefined,
       },
-      { onSuccess: onClose }
+      {
+        onSuccess: () => {
+          toast('Captured.');
+          onClose();
+        },
+      }
     );
   };
 

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgress, type Category, type GoalProgress, type Trip } from '@/api/client';
 import { PageCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn, getBudgetTone, getGoalTone } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants, slideInRightVariants } from '@/lib/animations';
 import { Pencil, Trash2, X, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -497,10 +498,10 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="font-medium text-foreground mr-1">${c.amount.toFixed(0)}</span>
-                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => startEditContrib(c)} title="Edit">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 md:h-5 md:w-5" onClick={() => startEditContrib(c)} title="Edit">
                       <Pencil className="w-2.5 h-2.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive" onClick={() => deleteContribMutation.mutate(c.id)} disabled={deleteContribMutation.isPending} title="Delete">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 md:h-5 md:w-5 text-destructive" onClick={() => deleteContribMutation.mutate(c.id)} disabled={deleteContribMutation.isPending} title="Delete">
                       <Trash2 className="w-2.5 h-2.5" />
                     </Button>
                   </div>
@@ -982,7 +983,7 @@ function TripsSection() {
         )}
 
         {isLoading ? (
-          <div className="h-24 animate-pulse bg-foreground/10 rounded-md" />
+          <Skeleton className="h-24" />
         ) : trips.length === 0 ? (
           <p className="text-muted text-sm text-center py-8">
             No trips yet. Create one to start grouping transactions.

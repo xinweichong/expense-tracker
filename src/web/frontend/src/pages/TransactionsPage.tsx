@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,9 +9,11 @@ import { TransactionFilters } from '@/components/transactions/TransactionFilters
 import { TransactionDetail } from '@/components/transactions/TransactionDetail';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { useCategories } from '@/hooks/useCategories';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type Transaction } from '@/api/client';
 import { slideInRightVariants, fadeUpVariants } from '@/lib/animations';
 import { Plus } from 'lucide-react';
+import { LoadFailed } from '@/components/ui/LoadFailed';
 
 const PAGE_SIZE = 20;
 
@@ -22,21 +24,30 @@ export function TransactionsPage() {
   const selectedId = isNaN(parsed) ? undefined : parsed;
 
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [category, setCategory] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showForm, setShowForm] = useState(false);
   const { data: categories } = useCategories();
 
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('add') === '1') {
+      setShowForm(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
     useInfiniteQuery({
-      queryKey: ['transactions', search, category, startDate, endDate],
+      queryKey: ['transactions', debouncedSearch, category, startDate, endDate],
       queryFn: ({ pageParam = 0 }) => {
         const params: Record<string, string | number> = {
           limit: PAGE_SIZE,
           offset: pageParam as number,
         };
-        if (search) params.merchant = search;
+        if (debouncedSearch) params.merchant = debouncedSearch;
         if (category && category !== 'all') params.category = category;
         if (startDate) params.start_date = startDate;
         if (endDate) params.end_date = endDate;
@@ -47,6 +58,7 @@ export function TransactionsPage() {
         if (lastPage.length < PAGE_SIZE) return undefined;
         return allPages.length * PAGE_SIZE;
       },
+      placeholderData: keepPreviousData,
     });
 
   const txs = data?.pages.flat() ?? [];
@@ -134,14 +146,18 @@ export function TransactionsPage() {
         )}
 
         <Card className="overflow-hidden">
-          <TransactionList
-            transactions={txs}
-            onLoadMore={loadMore}
-            hasMore={!!hasNextPage}
-            isLoading={isLoading || isFetchingNextPage}
-            onTransactionClick={handleTransactionClick}
-            selectedTransactionId={selectedId}
-          />
+          {isError ? (
+            <LoadFailed onRetry={() => refetch()} />
+          ) : (
+            <TransactionList
+              transactions={txs}
+              onLoadMore={loadMore}
+              hasMore={!!hasNextPage}
+              isLoading={isLoading || isFetchingNextPage}
+              onTransactionClick={handleTransactionClick}
+              selectedTransactionId={selectedId}
+            />
+          )}
         </Card>
       </div>
 

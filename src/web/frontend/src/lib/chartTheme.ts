@@ -29,6 +29,11 @@ export const COLOR_TANGERINE = '#FB923C';
 export const COLOR_CORAL     = '#FF6B6B';
 export const COLOR_MUTED_BAR = '#3A3A46';
 
+/** Ring/gauge track — = --color-border */
+export const COLOR_TRACK = '#2A2A3F';
+/** SVG text fill — = --color-foreground */
+export const COLOR_FOREGROUND = '#EEEAF5';
+
 // 10-color cohesive palette sampled along the spectrum.
 // Used for category fills (donut chart, category pills).
 export const SPECTRUM_PALETTE = [

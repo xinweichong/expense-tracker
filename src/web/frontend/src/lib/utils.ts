@@ -14,6 +14,15 @@ export function formatCurrency(amount: number, currency = 'SGD'): string {
   }).format(amount);
 }
 
+export function formatCurrencyWhole(amount: number, currency = 'SGD'): string {
+  return new Intl.NumberFormat('en-SG', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 export function formatDate(date: string): string {
   const [y, m, d] = date.split('T')[0].split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-SG', {

@@ -242,7 +242,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {!sub && <p className="text-sm text-muted">Loading…</p>}
+          {!sub && <p className="text-sm text-muted">Catching up…</p>}
 
           {sub && (
             <>

@@ -274,18 +274,19 @@ Defined in `src/web/frontend/src/index.css` under `@theme`. These become both CS
 
 | Token | Hex | Role |
 |---|---|---|
-| `--color-background` | `#0D0D0F` | Page background |
-| `--color-card` | `#16161A` | Card surfaces, tooltip background |
-| `--color-card-hover` | `#1C1C22` | Bar chart hover cursor |
-| `--color-border` | `#2A2A32` | All borders and dividers |
-| `--color-foreground` | `#E8E8ED` | Primary text |
-| `--color-muted` | `#72727E` | Secondary text, axis ticks, labels |
-| `--color-teal` / `--color-ring` | `#00D4AA` | CTAs, active states, trend lines, current-period bars, focus ring |
-| `--color-accent` | `#EEEAF5` | Radix UI compat token only — equals foreground; **not** the brand teal |
+| `--color-background` | `#0B0B14` | Page background |
+| `--color-card` | `#161624` | Card surfaces, tooltip background |
+| `--color-card-elev` | `#1B1B2C` | Elevated surfaces (dialogs, dropdowns, toasts) |
+| `--color-card-hover` | `#1C1C22` | Bar chart hover cursor (Radix compat) |
+| `--color-border` | `#2A2A3F` | All borders and dividers |
+| `--color-foreground` | `#EEEAF5` | Primary text |
+| `--color-muted` | `#7A7488` | Secondary text, axis ticks, labels |
+| `--color-teal` / `--color-ring` | `#00D4AA` | CTAs, active states, trend lines, focus ring |
+| `--color-accent` | `#EEEAF5` | Radix UI compat token only — **not** the brand teal |
 | `--color-destructive` | `#FF453A` | Delete actions, error messages, overspend alerts |
-| `--color-success` | `#00D4AA` (= `--color-teal`) | Income amounts, "on track" / saved status |
-| `--color-warning` | `#FBBF24` (= `--color-honey`) | Unusual spending alerts |
-| `--color-info` | `#34D399` (= `--color-mint`) | Informational, "under pace" velocity |
+| `--color-success` | `#00D4AA` (= teal) | Income amounts, "on track" / saved status |
+| `--color-warning` | `#FBBF24` (= honey) | Unusual spending alerts |
+| `--color-info` | `#34D399` (= mint) | Informational, "under pace" velocity |
 
 **Semantic color rules — these have caused real bugs, apply carefully:**
 - `text-destructive` for delete buttons, error messages, and "spending ahead of pace" — **never `text-accent`**.
@@ -300,6 +301,8 @@ Defined in `src/web/frontend/src/index.css` under `@theme`. These become both CS
 - `ghost` → no border, neutral hover — use for icon buttons and tertiary actions
 - `destructive` → red background — use only for irreversible destructive confirmation buttons
 - Never use `destructive` variant for label/toggle buttons that merely navigate to a destructive action.
+
+Spectrum + state/feedback/motion/a11y/money rules: see docs/design-language.md §2, §12–§16.
 
 ### Category Color System
 

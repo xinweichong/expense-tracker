@@ -41,6 +41,23 @@
   --radius-lg:   14px;
   --radius-2xl:  24px;
   --radius-pill: 9999px;
+
+  /* Type — §3.2 */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* Elevation — §6 */
+  --shadow-elev-xs:   0 0 0 1px var(--color-border), 0 2px 6px rgba(0,0,0,.3);
+  --shadow-elev-md:   0 0 0 1px var(--color-border), 0 8px 24px rgba(0,0,0,.5);
+  --shadow-glow-teal: 0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.28);
+  --shadow-glow-warm: 0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34);
+}
+
+@layer base {
+  /* §9.2 — all lucide icons render at 1.5 stroke, overridden once, never per-instance */
+  svg.lucide {
+    stroke-width: 1.5;
+  }
 }
 
 body {

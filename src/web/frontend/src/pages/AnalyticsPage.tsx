@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { PageCard, ChartCard, HighlightCard } from '@/components/ui/cards';
+import { Skeleton } from '@/components/ui/skeleton';
+import { LoadFailed } from '@/components/ui/LoadFailed';
 import { ComparisonBarChart } from '@/components/charts/ComparisonBarChart';
 import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { MerchantTable } from '@/components/charts/MerchantTable';
@@ -12,6 +14,7 @@ import { formatCurrency } from '@/lib/utils';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { springs } from '@/lib/animations';
+import { COLOR_TRACK, COLOR_FOREGROUND } from '@/lib/chartTheme';
 
 const PILLAR_ORDER = [
   'savings_rate',
@@ -23,7 +26,7 @@ const PILLAR_ORDER = [
 
 function HealthScoreBreakdown() {
   const [months, setMonths] = useState(1);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['health-score', months],
     queryFn: () => api.getHealthScore(months),
     staleTime: 60_000,
@@ -32,7 +35,7 @@ function HealthScoreBreakdown() {
   const score = data?.score ?? null;
   const isHighlighted = score != null && score >= 70;
   const ringColor =
-    !score ? '#2A2A32' :
+    !score ? COLOR_TRACK :
     score >= 80 ? '#30D158' :
     score >= 60 ? '#64D2FF' :
     score >= 40 ? '#FFD60A' :
@@ -55,8 +58,10 @@ function HealthScoreBreakdown() {
     </select>
   );
 
-  const scoreContent = isLoading ? (
-    <div className="h-48 animate-pulse bg-foreground/10 rounded-md" />
+  const scoreContent = isError ? (
+    <LoadFailed onRetry={() => refetch()} />
+  ) : isLoading ? (
+    <Skeleton className="h-48" />
   ) : !data?.has_income_data ? (
     <div className="py-8 text-center">
       <p className="text-muted text-sm">No income transactions found for this period.</p>
@@ -67,7 +72,7 @@ function HealthScoreBreakdown() {
       {/* Score header */}
       <div className="flex items-center gap-6">
         <svg width="96" height="96" className="shrink-0">
-          <circle cx="48" cy="48" r={r} fill="none" stroke="#2A2A32" strokeWidth="6" />
+          <circle cx="48" cy="48" r={r} fill="none" stroke={COLOR_TRACK} strokeWidth="6" />
           <motion.circle
             cx="48" cy="48" r={r} fill="none"
             stroke={ringColor}
@@ -79,7 +84,7 @@ function HealthScoreBreakdown() {
             animate={{ strokeDashoffset }}
             transition={springs.gentle}
           />
-          <text x="48" y="52" textAnchor="middle" fontSize="20" fontWeight="700" fill="#E8E8ED">
+          <text x="48" y="52" textAnchor="middle" fontSize="20" fontWeight="700" fill={COLOR_FOREGROUND}>
             {score}
           </text>
         </svg>
