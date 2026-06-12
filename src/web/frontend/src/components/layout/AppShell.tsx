@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar';
 import { BottomTabs } from './BottomTabs';
 import { CasheWordmark, B2_WASH } from '@/components/ui/Brand';
 import { CommandPalette } from '@/components/CommandPalette';
+import { PullToRefresh } from './PullToRefresh';
 import { pageVariants } from '@/lib/animations';
 
 export function AppShell() {
@@ -30,17 +31,19 @@ export function AppShell() {
               exit={shouldReduce ? undefined : 'exit'}
               className="md:h-full"
             >
-              <Suspense
-                fallback={
-                  <div className="h-full flex items-center justify-center py-24">
-                    <span className="text-xs text-muted font-mono uppercase tracking-[0.22em]">
-                      Catching up…
-                    </span>
-                  </div>
-                }
-              >
-                <Outlet />
-              </Suspense>
+              <PullToRefresh>
+                <Suspense
+                  fallback={
+                    <div className="h-full flex items-center justify-center py-24">
+                      <span className="text-xs text-muted font-mono uppercase tracking-[0.22em]">
+                        Catching up…
+                      </span>
+                    </div>
+                  }
+                >
+                  <Outlet />
+                </Suspense>
+              </PullToRefresh>
             </motion.div>
           </AnimatePresence>
         </main>
