@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgress, type Category, type GoalProgress, type Trip } from '@/api/client';
 import { PageCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn, getBudgetTone, getGoalTone } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants, slideInRightVariants } from '@/lib/animations';
 import { Pencil, Trash2, X, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -982,7 +983,7 @@ function TripsSection() {
         )}
 
         {isLoading ? (
-          <div className="h-24 animate-pulse bg-foreground/10 rounded-md" />
+          <Skeleton className="h-24" />
         ) : trips.length === 0 ? (
           <p className="text-muted text-sm text-center py-8">
             No trips yet. Create one to start grouping transactions.

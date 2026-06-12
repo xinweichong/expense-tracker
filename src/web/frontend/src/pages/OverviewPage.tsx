@@ -15,6 +15,7 @@ import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { TransactionRow } from '@/components/transactions/TransactionRow';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { springs, staggerContainerVariants, staggerItemVariants, AnimatedCurrency } from '@/lib/animations';
 import { COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL, COLOR_TRACK, COLOR_FOREGROUND } from '@/lib/chartTheme';
@@ -74,7 +75,7 @@ function HealthScoreCard() {
     return (
       <Card>
         <CardContent className="p-4">
-          <div className="h-16 animate-pulse bg-foreground/10 rounded-md" />
+          <Skeleton className="h-16" />
         </CardContent>
       </Card>
     );

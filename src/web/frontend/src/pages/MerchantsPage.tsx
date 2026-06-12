@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { api, type MerchantSummary } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/animations';
 import { Search } from 'lucide-react';
@@ -130,7 +131,11 @@ export function MerchantsPage() {
              TransactionsPage which also uses a bare <Card className="overflow-hidden">.
              Do NOT wrap in PageCard — its mandatory p-4 CardContent padding would break the layout. */}
         {isLoading ? (
-          <div className="text-muted text-sm py-8 text-center">Loading merchants…</div>
+          <div className="space-y-2 py-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-10" />
+            ))}
+          </div>
         ) : merchants.length === 0 ? (
           <div className="text-muted text-sm py-8 text-center">No merchants found.</div>
         ) : (

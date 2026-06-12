@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { PageCard, ChartCard, HighlightCard } from '@/components/ui/cards';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ComparisonBarChart } from '@/components/charts/ComparisonBarChart';
 import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { MerchantTable } from '@/components/charts/MerchantTable';
@@ -57,7 +58,7 @@ function HealthScoreBreakdown() {
   );
 
   const scoreContent = isLoading ? (
-    <div className="h-48 animate-pulse bg-foreground/10 rounded-md" />
+    <Skeleton className="h-48" />
   ) : !data?.has_income_data ? (
     <div className="py-8 text-center">
       <p className="text-muted text-sm">No income transactions found for this period.</p>
