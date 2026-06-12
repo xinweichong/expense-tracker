@@ -640,4 +640,102 @@ A flat table of every token defined in this document, for IDE autocomplete refer
 - **Page layouts.** Per-page grid templates, card placements, and information hierarchy live in the application redesign spec.
 - **Backend / API.** This is a pure design language doc. No data model, no endpoints, no parser specs.
 - **Telegram bot UI.** Telegram has its own constraints; only the bot's *copy* needs to follow the voice rules here.
-- **Animation specifics.** Framer-motion spring presets are referenced in [`src/web/frontend/src/lib/animations.ts`](../src/web/frontend/src/lib/animations.ts) and are unchanged by this language.
+- **Animation implementation.** Spring presets live in [`src/web/frontend/src/lib/animations.tsx`](../src/web/frontend/src/lib/animations.tsx); the rules for *when and how* to use them are in §14.
+
+---
+
+## 12 · States
+
+Every data surface has four possible states: loading, empty, error, loaded. The first three each have exactly one pattern. No page invents its own.
+
+### 12.1 Loading — skeletons
+
+- **Primitive:** `<Skeleton>` (`src/components/ui/skeleton.tsx`) — `bg-foreground/10 animate-pulse rounded-md`, sized by the caller.
+- Skeletons **mirror the shape of the content they replace** — rows for lists, blocks for charts, rings for rings. Never a spinner, never a bare pulse rectangle where structure is known.
+- Skeletons carry no copy. The text "Catching up…" appears only on full-screen boots (splash), in-shell route loads, and infinite-scroll footers — styled as a Tier A mono eyebrow (`font-mono text-xs uppercase tracking-[0.22em] text-muted`) for the first two, `text-xs text-muted` for footers.
+
+### 12.2 Empty
+
+- **Anatomy:** one voice-conformant line (`text-sm text-muted`, centered, `py-8`–`py-12`) plus at most one CTA (`default` button) when there is a single obvious next action.
+- No illustrations, no oversized icons (§9.3 still applies). The copy carries the moment: "Nothing captured this period."
+- Empty is not an error — never show Retry on an empty state.
+
+### 12.3 Error
+
+- **Recoverable load failure:** the `<LoadFailed>` pattern (`src/components/ui/LoadFailed.tsx`) — "Couldn't load this — try refreshing." (`text-sm text-muted`) + ghost `Retry` button. Used wherever a page-level query fails.
+- **Field/form errors:** `text-sm text-destructive`, inline below the field or submit button (unchanged rule, restated for completeness).
+- **Mutation failures after an optimistic update:** rollback the UI, then toast (§13). The interface never lies silently.
+
+---
+
+## 13 · Feedback — toasts
+
+The voice's signature line — "Captured." — finally has a home.
+
+### 13.1 Surface
+
+- One toast at a time. A new toast **replaces** the current one; toasts never stack.
+- Position: bottom-center above the tab bar on mobile (`bottom-20`), bottom-right on desktop (`bottom-6 right-6`).
+- Style: `bg-card-elev border border-border shadow-elev-md rounded-md px-4 py-2.5 text-sm text-foreground`. `role="status" aria-live="polite"`.
+- Auto-dismiss after 3s. No close button. At most one inline action (e.g. Undo), rendered `text-teal`.
+
+### 13.2 When to toast
+
+| Situation | Toast? | Copy |
+|---|---|---|
+| Mutation whose result is no longer visible in place (form closed, row left the screen) | Yes | "Captured." / "Saved." / "Deleted." |
+| Optimistic rollback (the UI just snapped back) | Yes | "Couldn't save — reverted." / "Couldn't delete — restored." |
+| Mutation whose result is visible right where the user is looking | No | the change *is* the feedback |
+| Navigation, background refetch, polling | Never | — |
+
+Voice rules apply (§8): past-tense, period, no exclamation marks, no "Successfully".
+
+---
+
+## 14 · Motion
+
+Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/lib/animations.tsx).
+
+### 14.1 Presets
+
+| Export | Spring / timing | Use |
+|---|---|---|
+| `springs.gentle` | 200 / 25 | Default. Page entrances, list items, card reveals |
+| `springs.snappy` | 350 / 30 | Spatial chrome — detail panels, drawers, sheets |
+| `springs.bouncy` | 400 / 20 | Celebration only (goal completed). ≤1 place per page |
+| `pageVariants` | gentle in, 0.12s ease-in out | Route transitions (AppShell) |
+| `fadeUpVariants` | gentle in, 0.12s ease-in out | Form expands, card entrances |
+| `slideInRightVariants` | snappy in, 0.15s ease-in out | Right-side detail panels |
+| `slideUpVariants` | snappy in, 0.2s ease-in out | Bottom drawers (mobile) |
+| `staggerContainer/ItemVariants` | 0.04s children | Lists — cap staggering at 10 items (`STAGGER_LIMIT`) |
+| `AnimatedCurrency` | 0.7s ease-out count-up | Hero numerics only — one count-up per page |
+
+### 14.2 Rules
+
+- Motion expresses **state change or spatial continuity** — never decoration. No idle loops, no attention-seeking pulses (the skeleton pulse is the one exception, and it means "working").
+- Entrances spring; exits are fast fades (0.1–0.2s ease-in). Leaving must always be quicker than arriving.
+- **Reduced motion:** every page-level or repeating animation gates on `useReducedMotion` — the pattern in `AppShell.tsx` is canonical. New animated surfaces must do the same.
+
+---
+
+## 15 · Accessibility
+
+- **Contrast:** `--color-foreground` on `--color-background` is ~15:1. `--color-muted` (`#7A7488`) on background is ~4.5:1 — the AA floor. Rules: never introduce text colour dimmer than `muted`; `muted` body copy is 12px (`text-xs`) minimum. The 11px mono eyebrows compensate with uppercase, tracking, and weight, and must label — not carry — primary information.
+- **Focus:** every interactive element shows `focus-visible:ring-2 ring-ring` (teal). Never `outline-none` without a focus-visible replacement. (The Button CVA already complies — match it.)
+- **Touch targets:** ≥36px effective target on touch viewports. Bump with responsive padding (`py-2 md:py-1`), never by changing the desktop design.
+- **Icon-only buttons** always carry `title` and `aria-label`.
+- **Reduced motion:** see §14.2.
+
+---
+
+## 16 · Money & numbers
+
+A finance app's most-repeated UI element is a number. One grammar, everywhere:
+
+- **All monetary values go through `formatCurrency`** (`src/lib/utils.ts` — Intl `en-SG`, 2 decimals). Never `toFixed` + `"$"` string concatenation.
+- **Whole-dollar contexts** (dense summaries like "$1,200 of $5,000") use `formatCurrencyWhole` — same Intl formatter with 0 fraction digits. The choice is per-surface, not per-value: a surface shows either all-cents or all-whole.
+- **SGD renders a bare `$`** (Intl en-SG default). Foreign currencies render their own symbol/code via Intl; rows show the **original** currency, while all summaries use the SGD-converted value (`amount × exchange_rate` — backend rule, restated).
+- **Signs:** expenses are unsigned — spending is the default story. Income takes a `+` prefix and `text-success`. A minus sign appears only for true reversals/refunds.
+- **Hero numerics** use `AnimatedCurrency` (§14) and keep cents.
+- **Percentages** round to whole (`toFixed(0)` + `%`).
+- Amounts in rows, tables, and KPIs are `font-mono` (§3.1).
