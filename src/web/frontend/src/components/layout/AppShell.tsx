@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
@@ -27,7 +28,17 @@ export function AppShell() {
               exit={shouldReduce ? undefined : 'exit'}
               className="md:h-full"
             >
-              <Outlet />
+              <Suspense
+                fallback={
+                  <div className="h-full flex items-center justify-center py-24">
+                    <span className="text-xs text-muted font-mono uppercase tracking-[0.22em]">
+                      Catching up…
+                    </span>
+                  </div>
+                }
+              >
+                <Outlet />
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </main>

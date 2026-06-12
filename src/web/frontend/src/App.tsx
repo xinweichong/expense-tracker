@@ -1,24 +1,25 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { LoginScreen } from '@/components/auth/LoginScreen';
 import { AppShell } from '@/components/layout/AppShell';
-import { OverviewPage } from '@/pages/OverviewPage';
-import { TransactionsPage } from '@/pages/TransactionsPage';
-import { AnalyticsPage } from '@/pages/AnalyticsPage';
-import { SettingsPage } from '@/pages/SettingsPage';
-import { MerchantsPage } from '@/pages/MerchantsPage';
-import { FinancePage } from '@/pages/FinancePage';
-import { OnboardingPage } from '@/pages/OnboardingPage';
-import { AdminPage } from '@/pages/AdminPage';
-import { SetPasswordPage } from '@/pages/SetPasswordPage';
+import { SplashScreen } from '@/components/ui/SplashScreen';
 import { api } from '@/api/client';
 import { setCategoryColors, nearestSpectrum } from '@/lib/utils';
-import { CasheWordmark, B1_WASH } from '@/components/ui/Brand';
 import { ToastProvider } from '@/components/ui/toast';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
+
+const OverviewPage = lazy(() => import('@/pages/OverviewPage').then(m => ({ default: m.OverviewPage })));
+const TransactionsPage = lazy(() => import('@/pages/TransactionsPage').then(m => ({ default: m.TransactionsPage })));
+const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const MerchantsPage = lazy(() => import('@/pages/MerchantsPage').then(m => ({ default: m.MerchantsPage })));
+const FinancePage = lazy(() => import('@/pages/FinancePage').then(m => ({ default: m.FinancePage })));
+const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
+const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })));
+const SetPasswordPage = lazy(() => import('@/pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -92,14 +93,7 @@ function AppContent() {
   const { data: currentUser, isLoading: userLoading } = useCurrentUser();
 
   if (loading || (isAuthenticated && userLoading)) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={{ background: B1_WASH }}>
-        <CasheWordmark size={42} />
-        <span className="text-xs text-muted font-mono uppercase tracking-[0.22em]">
-          Catching up…
-        </span>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (!isAuthenticated) return <LoginScreen />;
@@ -143,19 +137,21 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <BrowserRouter>
-          <Routes>
-            {/* Admin routes bypass the regular user auth flow entirely */}
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/admin/*" element={<AdminPage />} />
-            <Route
-              path="*"
-              element={
-                <AuthProvider>
-                  <AppContent />
-                </AuthProvider>
-              }
-            />
-          </Routes>
+          <Suspense fallback={<SplashScreen />}>
+            <Routes>
+              {/* Admin routes bypass the regular user auth flow entirely */}
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/*" element={<AdminPage />} />
+              <Route
+                path="*"
+                element={
+                  <AuthProvider>
+                    <AppContent />
+                  </AuthProvider>
+                }
+              />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </ToastProvider>
     </QueryClientProvider>
