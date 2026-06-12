@@ -17,6 +17,7 @@ import { SetPasswordPage } from '@/pages/SetPasswordPage';
 import { api } from '@/api/client';
 import { setCategoryColors, nearestSpectrum } from '@/lib/utils';
 import { CasheWordmark, B1_WASH } from '@/components/ui/Brand';
+import { ToastProvider } from '@/components/ui/toast';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
 
 const queryClient = new QueryClient({
@@ -140,21 +141,23 @@ function AppContent() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          {/* Admin routes bypass the regular user auth flow entirely */}
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/*" element={<AdminPage />} />
-          <Route
-            path="*"
-            element={
-              <AuthProvider>
-                <AppContent />
-              </AuthProvider>
-            }
-          />
-        </Routes>
-      </BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Admin routes bypass the regular user auth flow entirely */}
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/admin/*" element={<AdminPage />} />
+            <Route
+              path="*"
+              element={
+                <AuthProvider>
+                  <AppContent />
+                </AuthProvider>
+              }
+            />
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
