@@ -137,3 +137,133 @@ class TestExtractBody:
         }
         result = self.poller._extract_body(msg)
         assert "direct html body" in result
+
+
+class _StubParser:
+    """Always parses; returns a fixed ParseResult. Used by poll_once tests."""
+
+    def __init__(self, source: str = "uob_paynow_sent"):
+        self._source = source
+
+    @property
+    def sender_domain(self) -> str:
+        return "uobgroup.com"
+
+    def can_parse(self, sender: str, subject: str) -> bool:
+        return self.sender_domain in sender.lower()
+
+    def parse(self, body: str):
+        return ParseResult(
+            source=self._source,
+            source_id="",
+            amount=14.79,
+            merchant="FOMO PAY PTE. LTD.",
+        )
+
+
+class _FakeGmailService:
+    """Minimal stub for the googleapiclient service used by GmailPoller.
+
+    Records every modify() call so tests can assert on mark-as-read behaviour.
+    """
+
+    def __init__(self, msgs: list[dict]):
+        self._msgs_by_id = {m["id"]: m for m in msgs}
+        self._summary_list = [{"id": m["id"]} for m in msgs]
+        self.modify_calls: list[dict] = []
+        self._self = self
+
+    def users(self):
+        return self
+
+    def messages(self):
+        return self
+
+    def list(self, userId: str, q: str):
+        return _FakeRequest({"messages": list(self._summary_list)})
+
+    def get(self, userId: str, id: str, format: str):
+        return _FakeRequest(self._msgs_by_id[id])
+
+    def modify(self, userId: str, id: str, body: dict):
+        self.modify_calls.append({"id": id, "body": body})
+        return _FakeRequest({})
+
+
+class _FakeRequest:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def execute(self):
+        return self._payload
+
+
+def _make_msg(msg_id: str, message_id_header: str, body_text: str) -> dict:
+    return {
+        "id": msg_id,
+        "payload": {
+            "headers": [
+                {"name": "From", "value": "unialerts@uobgroup.com"},
+                {"name": "Subject", "value": "UOB Alert"},
+                {"name": "Message-ID", "value": message_id_header},
+            ],
+            "parts": [
+                {
+                    "mimeType": "text/plain",
+                    "body": {
+                        "data": base64.urlsafe_b64encode(body_text.encode()).decode("ascii")
+                    },
+                }
+            ],
+        },
+    }
+
+
+class TestPollOnceMarkAsRead:
+    """poll_once must mark messages as read whenever the parser succeeds,
+    even when the message is a known duplicate. Otherwise mark-as-read
+    transient failures cause the same email to loop forever in is:unread.
+    """
+
+    def _make_configured_poller(self, storage, service):
+        poller = _make_poller()
+        poller.service = service
+        poller.storage = storage
+        poller.sender_filters = ["unialerts@uobgroup.com"]
+        poller.parsers = [_StubParser(source="uob_paynow_sent")]
+        return poller
+
+    def test_marks_new_email_as_read(self):
+        storage = _make_storage()
+        msg = _make_msg("gmail-1", "<MSG-1@uobgroup.com>", "body irrelevant — parser is stubbed")
+        service = _FakeGmailService([msg])
+        poller = self._make_configured_poller(storage, service)
+
+        results = poller.poll_once()
+
+        assert len(results) == 1
+        assert len(service.modify_calls) == 1
+        assert service.modify_calls[0] == {
+            "id": "gmail-1",
+            "body": {"removeLabelIds": ["UNREAD"]},
+        }
+
+    def test_marks_already_stored_email_as_read(self):
+        """Regression: when is_duplicate(source, message_id) is True,
+        mark-as-read must still fire so the email exits is:unread."""
+        storage = _make_storage()
+        storage._conn.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant) "
+            "VALUES ('uob_paynow_sent', '<MSG-1@uobgroup.com>', 14.79, 'FOMO PAY PTE. LTD.')"
+        )
+        storage._conn.commit()
+
+        msg = _make_msg("gmail-1", "<MSG-1@uobgroup.com>", "body irrelevant — parser is stubbed")
+        service = _FakeGmailService([msg])
+        poller = self._make_configured_poller(storage, service)
+
+        results = poller.poll_once()
+
+        assert results == []  # duplicate not re-stored
+        assert len(service.modify_calls) == 1  # but mark-as-read still fired
+        assert service.modify_calls[0]["id"] == "gmail-1"

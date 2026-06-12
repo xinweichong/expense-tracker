@@ -115,16 +115,12 @@ class GmailPoller:
         result = parser.parse(body)
         if result:
             result.source_id = message_id
-            if self.storage.is_duplicate(result.source, message_id):
-                logger.debug("Skipping duplicate: %s", message_id)
-                return None
-        else:
-            if "dbs.com" in sender.lower():
-                logger.warning(
-                    "DBS parser returned None for message %s. Body:\n%s",
-                    message_id,
-                    body[:500],
-                )
+        elif "dbs.com" in sender.lower():
+            logger.warning(
+                "DBS parser returned None for message %s. Body:\n%s",
+                message_id,
+                body[:500],
+            )
         return result
 
     def _extract_body(self, msg: dict) -> str:
@@ -186,16 +182,19 @@ class GmailPoller:
             ).execute()
             result = self._process_message(msg)
             if result:
-                dup = self.storage.find_cross_source_duplicate(
-                    result.merchant, result.amount, result.source
-                )
-                if dup:
-                    logger.info(
-                        "Cross-source duplicate: %s matches existing %s (id=%s)",
-                        result.source, dup["source"], dup["id"],
-                    )
+                if self.storage.is_duplicate(result.source, result.source_id):
+                    logger.debug("Skipping duplicate: %s", result.source_id)
                 else:
-                    transactions.append(result)
+                    dup = self.storage.find_cross_source_duplicate(
+                        result.merchant, result.amount, result.source
+                    )
+                    if dup:
+                        logger.info(
+                            "Cross-source duplicate: %s matches existing %s (id=%s)",
+                            result.source, dup["source"], dup["id"],
+                        )
+                    else:
+                        transactions.append(result)
                 try:
                     self.service.users().messages().modify(
                         userId="me",
