@@ -8,11 +8,9 @@ from src.llm_service import LLMService, create_llm_service
 
 @pytest.fixture
 def mock_model():
-    """Patch GenerativeModel so no real API call is made."""
-    with patch("google.generativeai.GenerativeModel") as MockModel, \
-         patch("google.generativeai.configure"):
-        instance = MagicMock()
-        MockModel.return_value = instance
+    """Patch Client so no real API call is made."""
+    with patch("google.genai.Client") as MockClient:
+        instance = MockClient.return_value
         yield instance
 
 
@@ -24,7 +22,7 @@ def svc(mock_model):
 def _mock_response(model_mock, text: str):
     resp = MagicMock()
     resp.text = text
-    model_mock.generate_content.return_value = resp
+    model_mock.models.generate_content.return_value = resp
 
 
 class TestParseTelegramMessage:
@@ -45,7 +43,7 @@ class TestParseTelegramMessage:
         assert result["confidence"] == 0.0
 
     def test_api_error_returns_none(self, svc, mock_model):
-        mock_model.generate_content.side_effect = Exception("API error")
+        mock_model.models.generate_content.side_effect = Exception("API error")
         result = svc.parse_telegram_message("spent $10", ["Food"])
         assert result is None
 
@@ -72,7 +70,7 @@ class TestGeneratePeriodInsight:
         assert len(result["nudges"]) == 3
 
     def test_api_error_returns_empty(self, svc, mock_model):
-        mock_model.generate_content.side_effect = Exception("timeout")
+        mock_model.models.generate_content.side_effect = Exception("timeout")
         result = svc.generate_period_insight({})
         assert result["narrative"] == ""
         assert result["nudges"] == []
@@ -85,7 +83,7 @@ class TestExplainAnomaly:
         assert result == "This is 3x your usual Grab fare."
 
     def test_api_error_returns_empty_string(self, svc, mock_model):
-        mock_model.generate_content.side_effect = Exception("error")
+        mock_model.models.generate_content.side_effect = Exception("error")
         result = svc.explain_anomaly("Grab", 180.0, 56.0, "Transport")
         assert result == ""
 
@@ -100,8 +98,7 @@ class TestCreateLlmService:
         assert result is None
 
     def test_returns_service_when_key_present(self):
-        with patch("google.generativeai.GenerativeModel"), \
-             patch("google.generativeai.configure"):
+        with patch("google.genai.Client"):
             result = create_llm_service({"gemini_api_key": "abc123"})
         assert result is not None
         assert isinstance(result, LLMService)
@@ -114,7 +111,7 @@ class TestExplainSubscriptionChange:
         assert result == "Netflix raised its price by $2/month, costing $24 more per year."
 
     def test_api_error_returns_empty_string(self, svc, mock_model):
-        mock_model.generate_content.side_effect = Exception("error")
+        mock_model.models.generate_content.side_effect = Exception("error")
         result = svc.explain_subscription_change("Netflix", "Netflix", 15.98, 17.98)
         assert result == ""
 
@@ -126,6 +123,6 @@ class TestGenerateGoalCoaching:
         assert result == "Cut dining spending by 20% to reach your goal faster."
 
     def test_api_error_returns_empty_string(self, svc, mock_model):
-        mock_model.generate_content.side_effect = Exception("error")
+        mock_model.models.generate_content.side_effect = Exception("error")
         result = svc.generate_goal_coaching({}, {})
         assert result == ""

@@ -20,14 +20,21 @@ class LLMService:
     """
 
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(model)
+        from google import genai
+        from google.genai import types
+        self._client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=15000),
+        )
+        self._model = model
         logger.info("LLMService initialised with model %s", model)
 
     def _call(self, prompt: str) -> str:
         """Make a single Gemini call. Raises on API error."""
-        response = self._model.generate_content(prompt)
+        response = self._client.models.generate_content(
+            model=self._model,
+            contents=prompt,
+        )
         return response.text.strip()
 
     def parse_telegram_message(self, text: str, categories: list[str], timezone: str = "Asia/Singapore") -> Optional[dict]:
