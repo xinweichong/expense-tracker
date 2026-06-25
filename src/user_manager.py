@@ -34,6 +34,7 @@ class UserManager:
         scheduler,
         bot,
         admin_storage,
+        llm_service=None,
     ):
         self._data_dir = data_dir
         self._config = config
@@ -42,6 +43,7 @@ class UserManager:
         self._scheduler = scheduler
         self._bot = bot
         self._admin_storage = admin_storage
+        self._llm_service = llm_service
         self._registry: dict[str, UserContext] = {}
 
     # ------------------------------------------------------------------
@@ -267,6 +269,16 @@ class UserManager:
             id=f"subscription_matcher_{username}", replace_existing=True,
         )
 
+        def run_llm_insight():
+            ctx = self.get(username)
+            if ctx and self._llm_service:
+                _generate_llm_insight(ctx.storage, self._llm_service)
+
+        self._scheduler.add_job(
+            run_llm_insight, "cron", hour=8, minute=5, timezone=tz,
+            id=f"llm_insight_{username}", replace_existing=True,
+        )
+
 
 # ---------------------------------------------------------------------------
 # DB initialisation (extracted so it can be called without a full UserManager)
@@ -300,3 +312,58 @@ def _monthly_summary(storage) -> str:
     end = now.strftime("%Y-%m-%d")
     total = storage.get_total_spent(start, end)
     return f"Monthly spending so far: *S${total:.2f}*"
+
+
+def _generate_llm_insight(storage, llm_service) -> None:
+    """Generate LLM insight from current month summary and cache in app_settings.
+
+    Called per-user by the daily APScheduler job. LLM never touches raw transactions —
+    only a pre-computed summary dict is passed.
+    """
+    import json
+    from src.analytics import get_period_comparison, get_category_comparison, get_spending_velocity
+    from src.config import local_now
+
+    logger.info("Generating LLM insight...")
+    try:
+        now = local_now()
+        start = now.replace(day=1).strftime("%Y-%m-%d")
+        end = now.strftime("%Y-%m-%d")
+
+        comparison = get_period_comparison(storage._conn, period="month")
+        categories = get_category_comparison(storage._conn, period="month")
+        velocity = get_spending_velocity(storage._conn)
+
+        balance_row = storage._conn.execute(
+            """SELECT
+                 COALESCE(SUM(CASE WHEN type='income' THEN amount*exchange_rate END), 0) AS income,
+                 COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN amount*exchange_rate END), 0) AS expenses
+               FROM transactions
+               WHERE DATE(transaction_date) BETWEEN ? AND ?""",
+            (start, end),
+        ).fetchone()
+        income = balance_row["income"]
+        expenses = balance_row["expenses"]
+        savings_rate = ((income - expenses) / income * 100) if income > 0 else 0
+
+        top_cats = [
+            {"name": c["category"], "amount": c["current"], "change_pct": c["change_percent"]}
+            for c in categories[:5]
+        ]
+
+        summary_dict = {
+            "period_label": now.strftime("%B %Y"),
+            "total_expense": round(expenses, 2),
+            "total_income": round(income, 2),
+            "savings_rate": round(savings_rate, 1),
+            "change_vs_last_month_pct": comparison.get("change_percent"),
+            "top_categories": top_cats,
+            "velocity_status": velocity.get("status"),
+        }
+
+        result = llm_service.generate_period_insight(summary_dict)
+        storage.set_setting("llm_insight_content", json.dumps(result))
+        storage.set_setting("llm_insight_generated_at", now.isoformat())
+        logger.info("LLM insight cached successfully")
+    except Exception as e:
+        logger.warning("LLM insight generation failed: %s", e)

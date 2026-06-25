@@ -98,6 +98,7 @@ class TelegramBotService:
         poller=None,
         oauth_redirect_uri: str = "",
         admin_storage=None,
+        llm_service=None,
     ):
         self.storage = storage
         self.admin_storage = admin_storage
@@ -112,6 +113,7 @@ class TelegramBotService:
         self.app = None
         self.chat_id: Optional[int] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self.llm_service = llm_service
         # Lifecycle state — read by /api/status
         self.is_running: bool = False
         self.last_error: Optional[str] = None

@@ -237,6 +237,8 @@ def init_db(db_path: str) -> sqlite3.Connection:
         ("goals_enabled", "false"),
         ("trips_enabled", "false"),
         ("subscriptions_enabled", "false"),
+        ("llm_insight_content", ""),
+        ("llm_insight_generated_at", ""),
     ]
     for key, value in defaults:
         conn.execute(
@@ -367,6 +369,9 @@ def main():
 
     config = load_config(CONFIG_PATH)
 
+    from src.llm_service import create_llm_service
+    llm_service = create_llm_service(config)
+
     # Decode Gmail credentials from environment (for Docker/Railway deployments)
     gmail_config = config.get("gmail", {})
     if gmail_creds_b64 := os.environ.get("GMAIL_CREDENTIALS_JSON"):
@@ -402,6 +407,7 @@ def main():
         dashboard_url=dashboard_url,
         oauth_redirect_uri=f"{dashboard_url.rstrip('/')}/oauth/callback",
         timezone=config.get("timezone", "Asia/Singapore"),
+        llm_service=llm_service,
     )
 
     parsers = [DbsPaylahParser(), UobParser()]
@@ -417,6 +423,7 @@ def main():
         scheduler=scheduler,
         bot=bot,
         admin_storage=admin_storage,
+        llm_service=llm_service,
     )
     bot.user_manager = user_manager   # back-reference for per-user routing
 
