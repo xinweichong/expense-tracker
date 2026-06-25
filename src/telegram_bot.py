@@ -1752,6 +1752,22 @@ class TelegramBotService:
         if anomalies:
             lines.append(f"⚠ {len(anomalies)} unusual transaction(s)")
 
+        # LLM insight — append if cached and fresh
+        import json as _json
+        insight_str = _storage.get_setting("llm_insight_content", "")
+        if insight_str:
+            try:
+                insight = _json.loads(insight_str)
+                narrative = insight.get("narrative", "")
+                nudges = insight.get("nudges", [])
+                if narrative:
+                    lines.append("\n*AI Insight*")
+                    lines.append(narrative)
+                    if nudges:
+                        lines.append("\n" + "\n".join(f"• {n}" for n in nudges))
+            except Exception:
+                pass
+
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("📊 Insights", callback_data="cmd_insights"),

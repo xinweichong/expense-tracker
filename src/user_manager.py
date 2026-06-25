@@ -245,7 +245,10 @@ class UserManager:
                 bot.notify_text(_monthly_summary(ctx.storage), username)
 
         def daily():
-            if bot:
+            ctx = self.get(username)
+            if ctx:
+                if self._llm_service:
+                    _generate_llm_insight(ctx.storage, self._llm_service)
                 bot.notify_daily_digest(username)
 
         def run_subscriptions():
@@ -269,15 +272,6 @@ class UserManager:
             id=f"subscription_matcher_{username}", replace_existing=True,
         )
 
-        def run_llm_insight():
-            ctx = self.get(username)
-            if ctx and self._llm_service:
-                _generate_llm_insight(ctx.storage, self._llm_service)
-
-        self._scheduler.add_job(
-            run_llm_insight, "cron", hour=8, minute=5, timezone=tz,
-            id=f"llm_insight_{username}", replace_existing=True,
-        )
 
 
 # ---------------------------------------------------------------------------
