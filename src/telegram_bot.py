@@ -98,6 +98,7 @@ class TelegramBotService:
         poller=None,
         oauth_redirect_uri: str = "",
         admin_storage=None,
+        llm_service=None,
     ):
         self.storage = storage
         self.admin_storage = admin_storage
@@ -112,6 +113,7 @@ class TelegramBotService:
         self.app = None
         self.chat_id: Optional[int] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self.llm_service = llm_service
         # Lifecycle state — read by /api/status
         self.is_running: bool = False
         self.last_error: Optional[str] = None
@@ -622,9 +624,12 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("reauth", self._reauth))
         self.app.add_handler(CommandHandler("forcepoll", self._forcepoll))
 
-        # Catch-all must be last
+        # NL callback buttons (nl_confirm / nl_edit / nl_cancel)
+        self.app.add_handler(CallbackQueryHandler(self._handle_nl_callback, pattern="^nl_"))
+
+        # NL text handler — registered last (replaces _unknown_text)
         self.app.add_handler(MessageHandler(filters.COMMAND, self._unknown))
-        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._unknown_text))
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_nl_message))
 
     async def _start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
@@ -1232,11 +1237,113 @@ class TelegramBotService:
             "/help — full command reference"
         )
 
-    async def _unknown_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.reply_text(
-            "Commands start with /.\n"
-            "Type /help for a full list."
+    async def _handle_nl_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle free-text messages as natural language transaction entry.
+
+        When LLMService is absent: show /add hint (identical to old _unknown_text).
+        When LLMService is present: parse with LLM, show confirmation card.
+        """
+        if not self.llm_service:
+            await update.message.reply_text(
+                "Commands start with /.\n"
+                "Type /help for a full list.\n"
+                "Or use /add <amount> [currency] <merchant> [category] to log a transaction."
+            )
+            return
+
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+
+        text = update.message.text.strip()
+        categories = [c["name"] for c in ctx.storage.get_categories()]
+
+        parsed = self.llm_service.parse_telegram_message(text, categories, self.timezone)
+        if not parsed or parsed.get("confidence", 0) < 0.7:
+            await update.message.reply_text(
+                "Couldn't parse that as a transaction.\n"
+                "Try: *15.90 SGD Starbucks Food* or use /add for full control.",
+                parse_mode="Markdown",
+            )
+            return
+
+        amount = parsed.get("amount")
+        if amount is None:
+            await update.message.reply_text("Couldn't determine the amount. Try /add.")
+            return
+        currency = parsed.get("currency", "SGD")
+        merchant = parsed.get("merchant", "Unknown")
+        date = parsed.get("date", self._local_now().strftime("%Y-%m-%d"))
+        category = parsed.get("category_hint", "Other")
+
+        context.user_data["nl_pending"] = {
+            "amount": amount, "currency": currency,
+            "merchant": merchant, "date": date, "category": category,
+        }
+
+        summary = (
+            f"*{self._escape_md(merchant)}* — {self._escape_md(currency)} {amount:.2f}\n"
+            f"{self._escape_md(category)}  |  {self._escape_md(date)}"
         )
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Add", callback_data="nl_confirm"),
+            InlineKeyboardButton("Edit", callback_data="nl_edit"),
+            InlineKeyboardButton("Cancel", callback_data="nl_cancel"),
+        ]])
+        await update.message.reply_text(summary, parse_mode="Markdown", reply_markup=keyboard)
+
+    async def _handle_nl_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle inline button responses from the NL confirmation card."""
+        query = update.callback_query
+        await query.answer()
+        action = query.data  # nl_confirm / nl_edit / nl_cancel
+        pending = context.user_data.get("nl_pending")
+
+        if action == "nl_cancel" or not pending:
+            await query.edit_message_text("Cancelled.")
+            context.user_data.pop("nl_pending", None)
+            return
+
+        if action == "nl_edit":
+            await query.edit_message_text(
+                "Use /add to enter manually:\n"
+                f"`/add {pending['amount']} {pending['currency']} {pending['merchant']} "
+                f"{pending['category']} {pending['date']}`",
+                parse_mode="Markdown",
+            )
+            context.user_data.pop("nl_pending", None)
+            return
+
+        if action == "nl_confirm":
+            ctx = await self._require_ctx(update)
+            if ctx is None:
+                context.user_data.pop("nl_pending", None)
+                return
+
+            now = self._local_now()
+            exchange_rate = 1.0
+            if self.exchange_service and pending["currency"] != "SGD":
+                exchange_rate = self.exchange_service.get_rate(pending["currency"])
+
+            date_part = pending["date"].split("T")[0]
+            tx_id = ctx.storage.insert_transaction(
+                source="manual",
+                source_id=f"manual-{now.strftime('%Y%m%d%H%M%S%f')}-{pending['amount']}",
+                amount=float(pending["amount"]),
+                currency=pending["currency"],
+                exchange_rate=exchange_rate,
+                merchant=pending["merchant"],
+                category=pending["category"],
+                transaction_date=date_part + "T" + now.strftime("%H:%M:%S"),
+            )
+            ctx.storage.auto_assign_to_active_trip(tx_id)
+
+            sgd = float(pending["amount"]) * exchange_rate
+            msg = f"Added: *{self._escape_md(pending['merchant'])}* {self._escape_md(pending['currency'])} {pending['amount']:.2f}"
+            if pending["currency"] != "SGD":
+                msg += f"\n~ SGD `${sgd:.2f}`"
+            await query.edit_message_text(msg, parse_mode="Markdown")
+            context.user_data.pop("nl_pending", None)
 
     def notify_text(self, text: str, username: Optional[str] = None) -> None:
         """Send a plain text message. Called from background threads (e.g., APScheduler)."""

@@ -394,3 +394,56 @@ def load_summary(cache_dir: str, report_type: str = "monthly") -> dict | None:
     filepath = os.path.join(cache_dir, files[0])
     with open(filepath) as f:
         return json.load(f)
+
+
+def get_yoy_comparison(conn: sqlite3.Connection, months: int = 12) -> list[dict]:
+    """Return monthly income/expense for last N months vs same months last year.
+
+    Returns [{month_label, month, this_year_expenses, last_year_expenses,
+               this_year_income, last_year_income}]
+    ordered oldest → newest.
+    """
+    now = local_now()
+    result = []
+    for i in range(months - 1, -1, -1):
+        total_months = now.year * 12 + now.month - 1 - i
+        year = total_months // 12
+        month = total_months % 12 + 1
+
+        start_this = f"{year}-{month:02d}-01"
+        if month == 12:
+            end_this = f"{year}-12-31"
+        else:
+            end_this = (datetime(year, month + 1, 1) - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        start_prev = f"{year - 1}-{month:02d}-01"
+        if month == 12:
+            end_prev = f"{year - 1}-12-31"
+        else:
+            end_prev = (datetime(year - 1, month + 1, 1) - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        def _query(start, end):
+            row = conn.execute(
+                """SELECT
+                     COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense')
+                                  THEN amount*exchange_rate END), 0) AS expenses,
+                     COALESCE(SUM(CASE WHEN type='income'
+                                  THEN amount*exchange_rate END), 0) AS income
+                   FROM transactions
+                   WHERE DATE(transaction_date) BETWEEN ? AND ?""",
+                (start, end),
+            ).fetchone()
+            return row["expenses"], row["income"]
+
+        this_exp, this_inc = _query(start_this, end_this)
+        prev_exp, prev_inc = _query(start_prev, end_prev)
+
+        result.append({
+            "month_label": datetime(year, month, 1).strftime("%b %Y"),
+            "month": f"{year}-{month:02d}",
+            "this_year_expenses": round(this_exp, 2),
+            "last_year_expenses": round(prev_exp, 2),
+            "this_year_income": round(this_inc, 2),
+            "last_year_income": round(prev_inc, 2),
+        })
+    return result

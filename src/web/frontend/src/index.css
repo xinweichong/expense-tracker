@@ -111,11 +111,12 @@ body {
   }
 
   /* Grid area name assignments (apply on children of a named-areas grid) */
-  .area-header { grid-area: header; }
-  .area-title  { grid-area: title;  }
-  .area-left   { grid-area: left;   }
-  .area-right  { grid-area: right;  }
-  .area-top    { grid-area: top;    }
+  .area-header  { grid-area: header;  }
+  .area-title   { grid-area: title;   }
+  .area-left    { grid-area: left;    }
+  .area-right   { grid-area: right;   }
+  .area-top     { grid-area: top;     }
+  .area-insight { grid-area: insight; }
 
   /* Per-page grid templates -------------------------------------------------- */
 
@@ -134,17 +135,20 @@ body {
     }
   }
 
-  /* Analytics: h1 header | left=health+alerts | right=charts+merchants */
+  /* Analytics: header | insight (full-width) | left=health+alerts | right=charts */
   .page-grid-analytics {
-    grid-template-areas: "header" "left" "right";
+    grid-template-areas: "header" "insight" "left" "right";
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto auto auto;
   }
   @media (min-width: 768px) {
     .page-grid-analytics {
-      grid-template-areas: "header header" "left right";
+      grid-template-areas:
+        "header  header"
+        "insight insight"
+        "left    right";
       grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto auto 1fr;
     }
   }
 

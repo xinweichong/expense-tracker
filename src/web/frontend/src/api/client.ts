@@ -208,6 +208,12 @@ export interface HealthScore {
   };
 }
 
+export interface LLMInsight {
+  content: { narrative: string; nudges: string[] } | null;
+  generated_at: string | null;
+  is_stale: boolean;
+}
+
 export interface CurrentUser {
   username: string;
   gmail_connected: boolean;
@@ -386,6 +392,12 @@ export const api = {
 
   getAnalyticsSummaries: () =>
     request<any>('/api/analytics/summaries'),
+
+  getAnalyticsYoY: (months = 12) =>
+    request<any[]>(`/api/analytics/yoy?months=${months}`),
+
+  getAnalyticsInsight: () =>
+    request<LLMInsight>('/api/analytics/insight'),
 
   // Merchant Intelligence
   getMerchantIntelligenceList: (params?: {
