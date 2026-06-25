@@ -9,7 +9,7 @@ from functools import partial
 from typing import Optional
 
 import bcrypt
-from fastapi import FastAPI, Request, Response, HTTPException, Depends
+from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 import csv
@@ -20,6 +20,7 @@ from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
 from src.analytics import (
     load_summary,
+    get_yoy_comparison,
 )
 
 logger = logging.getLogger(__name__)
@@ -689,6 +690,37 @@ def create_dashboard_app(
         monthly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "monthly")
         weekly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "weekly")
         return {"monthly": monthly, "weekly": weekly}
+
+
+    @app.get("/api/analytics/yoy")
+    async def get_yoy_endpoint(months: int = Query(default=12, ge=1, le=60), storage=Depends(_get_storage)):
+        return await _db(get_yoy_comparison, storage._conn, months)
+
+
+    @app.get("/api/analytics/insight")
+    async def get_analytics_insight(storage=Depends(_get_storage)):
+        import json as _json
+        content_str = await _db(storage.get_setting, "llm_insight_content", "")
+        generated_at = await _db(storage.get_setting, "llm_insight_generated_at", "")
+        if not content_str:
+            return {"content": None, "generated_at": None, "is_stale": True}
+        try:
+            content = _json.loads(content_str)
+        except Exception:
+            content = None
+        is_stale = True
+        if generated_at:
+            from datetime import timedelta
+            try:
+                gen = datetime.fromisoformat(generated_at)
+                if gen.tzinfo is None:
+                    from zoneinfo import ZoneInfo
+                    from src.config import DEFAULT_TIMEZONE
+                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
+                is_stale = (local_now() - gen).total_seconds() > 25 * 3600
+            except Exception:
+                pass
+        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
 
 
     @app.get("/api/settings")

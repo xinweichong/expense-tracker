@@ -16,6 +16,7 @@ from src.analytics import (
     check_new_merchants,
     generate_summary,
     load_summary,
+    get_yoy_comparison,
 )
 
 
@@ -297,3 +298,29 @@ class TestTimezoneAwareDateRanges:
         result = get_spending_velocity(conn, now=now)
         assert result["current_mtd"] == 120.0
         conn.close()
+
+
+class TestYoYComparison:
+    def test_returns_correct_month_count(self, in_memory_db):
+        result = get_yoy_comparison(in_memory_db, months=6)
+        assert len(result) == 6
+
+    def test_month_labels_present(self, in_memory_db):
+        result = get_yoy_comparison(in_memory_db, months=3)
+        for row in result:
+            assert "month_label" in row
+            assert "month" in row
+            assert "this_year_expenses" in row
+            assert "last_year_expenses" in row
+            assert "this_year_income" in row
+            assert "last_year_income" in row
+
+    def test_empty_db_returns_zeros(self, in_memory_db):
+        result = get_yoy_comparison(in_memory_db, months=3)
+        assert all(r["this_year_expenses"] == 0.0 for r in result)
+        assert all(r["last_year_expenses"] == 0.0 for r in result)
+
+    def test_ordered_oldest_to_newest(self, in_memory_db):
+        result = get_yoy_comparison(in_memory_db, months=6)
+        months = [r["month"] for r in result]
+        assert months == sorted(months)
