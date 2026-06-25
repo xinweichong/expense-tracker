@@ -1,6 +1,7 @@
 import asyncio
 import calendar
 import functools
+import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -1753,11 +1754,10 @@ class TelegramBotService:
             lines.append(f"⚠ {len(anomalies)} unusual transaction(s)")
 
         # LLM insight — append if cached and fresh
-        import json as _json
         insight_str = _storage.get_setting("llm_insight_content", "")
         if insight_str:
             try:
-                insight = _json.loads(insight_str)
+                insight = json.loads(insight_str)
                 narrative = insight.get("narrative", "")
                 nudges = insight.get("nudges", [])
                 if narrative:

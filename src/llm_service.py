@@ -21,13 +21,16 @@ class LLMService:
 
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
         from google import genai
-        self._client = genai.Client(api_key=api_key)
+        from google.genai import types
+        self._client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=15000),
+        )
         self._model = model
         logger.info("LLMService initialised with model %s", model)
 
     def _call(self, prompt: str) -> str:
         """Make a single Gemini call. Raises on API error."""
-        from google import genai
         response = self._client.models.generate_content(
             model=self._model,
             contents=prompt,
