@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 
 interface AuthContextType {
@@ -13,6 +14,7 @@ const AuthContext = createContext<AuthContextType>(null!);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     api.ping()
@@ -30,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     try {
       await api.login(username, password);
+      await queryClient.invalidateQueries({ queryKey: ['currentUser'] });
       setIsAuthenticated(true);
       return true;
     } catch {
@@ -39,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     api.logout().catch(() => {});  // best-effort; ignore errors
+    queryClient.removeQueries({ queryKey: ['currentUser'] });
     setIsAuthenticated(false);
   };
 

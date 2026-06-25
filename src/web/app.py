@@ -110,7 +110,7 @@ def create_dashboard_app(
         return response
 
     # Endpoints that a force_password_change user may still access.
-    _FORCE_PW_ALLOWED = {"/api/logout", "/api/users/me", "/api/users/me/change-password"}
+    _FORCE_PW_ALLOWED = {"/api/logout", "/api/users/me", "/api/users/me/password"}
 
     async def require_auth(request: Request) -> str:
         session = request.cookies.get("session")
