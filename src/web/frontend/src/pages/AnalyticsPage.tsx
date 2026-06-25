@@ -24,6 +24,76 @@ const PILLAR_ORDER = [
   'anomaly_frequency',
 ] as const;
 
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  if (diff <= 0) return 'just now';
+  const hours = Math.floor(diff / 3_600_000);
+  if (hours < 1) return 'just now';
+  if (hours === 1) return '1 hour ago';
+  if (hours < 24) return `${hours} hours ago`;
+  return `${Math.floor(hours / 24)} days ago`;
+}
+
+function LLMInsightCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['analytics-insight'],
+    queryFn: () => api.getAnalyticsInsight(),
+    staleTime: 60 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <PageCard title="AI Insight">
+        <div className="h-16 animate-pulse bg-foreground/10 rounded-md" />
+      </PageCard>
+    );
+  }
+
+  if (!data?.content) {
+    return (
+      <PageCard title="AI Insight">
+        <p className="text-sm text-muted">
+          No insight yet — generated daily at 8am.
+          {!data?.generated_at && ' Configure gemini_api_key in config.yaml to enable.'}
+        </p>
+      </PageCard>
+    );
+  }
+
+  const generatedLabel = data.generated_at
+    ? `Generated ${formatRelativeTime(data.generated_at)}${data.is_stale ? ' · may be stale' : ''}`
+    : null;
+
+  return (
+    <PageCard
+      title="AI Insight"
+      action={
+        generatedLabel
+          ? <span className="text-xs text-muted">{generatedLabel}</span>
+          : undefined
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-foreground leading-relaxed">
+          {data.content.narrative}
+        </p>
+        {data.content.nudges?.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {data.content.nudges.map((nudge: string, i: number) => (
+              <span
+                key={i}
+                className="px-2.5 py-1 text-xs rounded-full border border-accent/40 text-accent bg-accent/5"
+              >
+                {nudge}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </PageCard>
+  );
+}
+
 function HealthScoreBreakdown() {
   const [months, setMonths] = useState(1);
   const { data, isLoading, isError, refetch } = useQuery({
@@ -202,6 +272,11 @@ export function AnalyticsPage() {
             Spending velocity, patterns, comparisons.
           </h1>
         </div>
+      </div>
+
+      {/* ── LLM Insight — full-width ── */}
+      <div className="area-insight">
+        <LLMInsightCard />
       </div>
 
       {/* ── Left panel: health score + alerts ── */}
