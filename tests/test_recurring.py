@@ -21,7 +21,7 @@ class TestRecurringDetection:
         assert result is None
 
     def test_detect_monthly_recurring(self, detector, in_memory_db):
-        base = datetime(2026, 4, 17)
+        base = datetime.now()
         for i in range(3):
             d = base - timedelta(days=30 * i)
             in_memory_db.execute(
@@ -35,7 +35,7 @@ class TestRecurringDetection:
         assert abs(result["avg_amount"] - 17.98) < 0.01
 
     def test_no_match_with_inconsistent_amounts(self, detector, in_memory_db):
-        base = datetime(2026, 4, 17)
+        base = datetime.now()
         amounts = [17.98, 50.00, 17.98]
         for i, amt in enumerate(amounts):
             d = base - timedelta(days=30 * i)
@@ -60,7 +60,7 @@ class TestRecurringDetection:
         assert result is None
 
     def test_detect_weekly_recurring(self, detector, in_memory_db):
-        base = datetime(2026, 4, 17)
+        base = datetime.now()
         for i in range(3):
             d = base - timedelta(days=7 * i)
             in_memory_db.execute(
