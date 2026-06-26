@@ -99,6 +99,60 @@ No markdown, no extra text."""
             logger.warning("generate_period_insight failed (%s): %s", type(e).__name__, str(e)[:120])
             return {"narrative": "", "nudges": []}
 
+    def generate_weekly_insight(self, summary: dict) -> dict:
+        """Narrative + 2–3 nudges for last 7 days. Focuses on daily patterns and velocity.
+
+        summary keys: period_label, total_expense, total_income, top_categories,
+                      velocity_status, change_vs_last_week_pct
+        Returns {narrative: str, nudges: list[str]}
+        """
+        prompt = f"""You are a concise personal finance advisor writing for a mobile app.
+Given this 7-day spending summary for {summary.get('period_label', 'this week')}, write:
+1. A 2–3 sentence narrative focusing on daily spending patterns and pace.
+2. Exactly 2–3 short, actionable nudge strings (max 12 words each).
+
+Summary data:
+{json.dumps(summary, indent=2)}
+
+Respond with valid JSON only:
+{{"narrative": "...", "nudges": ["...", "...", "..."]}}
+No markdown, no extra text."""
+        try:
+            raw = self._call(prompt)
+            raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            data = json.loads(raw)
+            return {"narrative": data.get("narrative", ""), "nudges": data.get("nudges", [])[:3]}
+        except Exception as e:
+            logger.warning("generate_weekly_insight failed (%s): %s", type(e).__name__, str(e)[:120])
+            return {"narrative": "", "nudges": []}
+
+    def generate_monthly_insight(self, summary: dict) -> dict:
+        """Narrative + 2–3 nudges for a calendar month. Focuses on category shifts and savings rate.
+
+        summary keys: period_label, total_expense, total_income, savings_rate,
+                      change_vs_last_month_pct, top_categories, velocity_status
+        Returns {narrative: str, nudges: list[str]}
+        """
+        prompt = f"""You are a concise personal finance advisor writing for a mobile app.
+Given this monthly spending summary for {summary.get('period_label', 'this month')}, write:
+1. A 2–3 sentence narrative focusing on category shifts vs last month and savings rate.
+2. Exactly 2–3 short, actionable nudge strings (max 12 words each).
+
+Summary data:
+{json.dumps(summary, indent=2)}
+
+Respond with valid JSON only:
+{{"narrative": "...", "nudges": ["...", "...", "..."]}}
+No markdown, no extra text."""
+        try:
+            raw = self._call(prompt)
+            raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            data = json.loads(raw)
+            return {"narrative": data.get("narrative", ""), "nudges": data.get("nudges", [])[:3]}
+        except Exception as e:
+            logger.warning("generate_monthly_insight failed (%s): %s", type(e).__name__, str(e)[:120])
+            return {"narrative": "", "nudges": []}
+
     def explain_anomaly(self, merchant: str, amount: float, avg: float, category: str) -> str:
         """Return one sentence explaining an unusual transaction."""
         prompt = f"""In one concise sentence (max 20 words), explain why a {category} charge of \

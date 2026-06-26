@@ -733,6 +733,54 @@ def create_dashboard_app(
         return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
 
 
+    @app.get("/api/analytics/insight/weekly")
+    async def get_weekly_insight(storage=Depends(_get_storage)):
+        import json as _json
+        content_str = await _db(storage.get_setting, "llm_weekly_insight_content", "")
+        generated_at = await _db(storage.get_setting, "llm_weekly_insight_generated_at", "")
+        if not content_str:
+            return {"content": None, "generated_at": None, "is_stale": True}
+        try:
+            content = _json.loads(content_str)
+        except Exception:
+            content = None
+        is_stale = True
+        if generated_at:
+            try:
+                gen = datetime.fromisoformat(generated_at)
+                if gen.tzinfo is None:
+                    from zoneinfo import ZoneInfo
+                    from src.config import DEFAULT_TIMEZONE
+                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
+                is_stale = (local_now() - gen).total_seconds() > 8 * 24 * 3600  # stale after 8 days
+            except Exception:
+                pass
+        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
+
+    @app.get("/api/analytics/insight/monthly")
+    async def get_monthly_insight(storage=Depends(_get_storage)):
+        import json as _json
+        content_str = await _db(storage.get_setting, "llm_monthly_insight_content", "")
+        generated_at = await _db(storage.get_setting, "llm_monthly_insight_generated_at", "")
+        if not content_str:
+            return {"content": None, "generated_at": None, "is_stale": True}
+        try:
+            content = _json.loads(content_str)
+        except Exception:
+            content = None
+        is_stale = True
+        if generated_at:
+            try:
+                gen = datetime.fromisoformat(generated_at)
+                if gen.tzinfo is None:
+                    from zoneinfo import ZoneInfo
+                    from src.config import DEFAULT_TIMEZONE
+                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
+                is_stale = (local_now() - gen).total_seconds() > 35 * 24 * 3600  # stale after 35 days
+            except Exception:
+                pass
+        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
+
     @app.get("/api/settings")
     async def get_settings(storage=Depends(_get_storage)):
         return {

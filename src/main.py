@@ -240,6 +240,10 @@ def init_db(db_path: str) -> sqlite3.Connection:
         ("recurring_enabled", "false"),
         ("llm_insight_content", ""),
         ("llm_insight_generated_at", ""),
+        ("llm_weekly_insight_content", ""),
+        ("llm_weekly_insight_generated_at", ""),
+        ("llm_monthly_insight_content", ""),
+        ("llm_monthly_insight_generated_at", ""),
     ]
     for key, value in defaults:
         conn.execute(
