@@ -45,7 +45,7 @@ _DB_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 async def _db(fn, *args, **kwargs):
     """Run a synchronous storage/DB call in the dedicated DB thread pool."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_DB_EXECUTOR, partial(fn, *args, **kwargs))
 
 
@@ -73,7 +73,7 @@ def create_dashboard_app(
             return Response(content="<h2>Unknown user.</h2>", media_type="text/html", status_code=404)
         try:
             redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(_DB_EXECUTOR, partial(ctx.poller.complete_reauth, code, username))
             user_manager.start_poller(username)
             await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=1))
@@ -90,7 +90,7 @@ def create_dashboard_app(
         body = await request.json()
         username = body.get("username", "")
         password = body.get("password", "")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -116,7 +116,7 @@ def create_dashboard_app(
 
     async def require_auth(request: Request) -> str:
         session = request.cookies.get("session")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         username = await loop.run_in_executor(_DB_EXECUTOR, verify_session, session) if session else None
         if not username:
             raise HTTPException(status_code=401, detail="Not authenticated")
@@ -171,7 +171,7 @@ def create_dashboard_app(
 
     @app.get("/api/users/me")
     async def get_current_user(username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
@@ -192,7 +192,7 @@ def create_dashboard_app(
         new_password = body.get("new_password", "")
         if not new_password or len(new_password) < 8:
             raise HTTPException(status_code=422, detail="new_password must be at least 8 characters")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         ok = await loop.run_in_executor(None, verify_password, current_password, user["password_hash"])
         if not ok:
@@ -205,19 +205,19 @@ def create_dashboard_app(
 
     @app.get("/api/sessions")
     async def list_sessions(request: Request, username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
 
     @app.delete("/api/sessions")
     async def logout_all_other_sessions(request: Request, username: str = Depends(require_auth)):
         current_token = request.cookies.get("session")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.destroy_all_sessions, username, except_token=current_token))
         return {"status": "ok"}
 
     @app.delete("/api/sessions/{token}")
     async def logout_session(token: str, username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         sessions = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
         if not any(s["token"] == token for s in sessions):
             raise HTTPException(status_code=404, detail="Session not found")
@@ -229,7 +229,7 @@ def create_dashboard_app(
     @app.put("/api/onboarding/preferences")
     async def set_onboarding_preferences(request: Request, username: str = Depends(require_auth)):
         body = await request.json()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, lambda: admin_storage.update_user(
             username,
             wants_gmail=1 if body.get("wants_gmail", True) else 0,
@@ -248,7 +248,7 @@ def create_dashboard_app(
 
     @app.post("/api/onboarding/telegram/link-token")
     async def create_telegram_link_token(username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         token = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.create_telegram_link_token, username)
         return {"token": token}
 
@@ -259,7 +259,7 @@ def create_dashboard_app(
 
     @app.put("/api/onboarding/complete")
     async def mark_onboarding_complete(username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, onboarding_complete=1))
         return {"status": "ok"}
 
@@ -267,7 +267,7 @@ def create_dashboard_app(
 
     @app.delete("/api/connections/telegram")
     async def disconnect_telegram(username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, telegram_chat_id=None))
         return {"status": "ok"}
 
@@ -296,7 +296,7 @@ def create_dashboard_app(
                 pass
         if ctx and ctx.poller:
             ctx.poller.stop()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=0))
         return {"status": "ok"}
 
@@ -696,7 +696,7 @@ def create_dashboard_app(
 
     @app.get("/api/analytics/summaries")
     async def analytics_summaries(storage=Depends(_get_storage)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         monthly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "monthly")
         weekly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "weekly")
         return {"monthly": monthly, "weekly": weekly}
