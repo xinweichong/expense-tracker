@@ -14,7 +14,8 @@ Single Python monolith, one process, eight subsystems:
 5. **Interaction Layer** — Telegram bot (commands + notifications + guided UX) + Web dashboard (dark fintech theme, Recharts)
 6. **Categorization** — keyword matching + learned merchant overrides, with match source tracking
 7. **Intelligence** — recurring transaction detection, spending insights, multi-currency exchange rates, analytics
-8. **Finance System** — budgets (monthly/weekly), savings goals with contributions, trip expense tracking
+8. **Finance System** — budgets (monthly/weekly), savings goals with contributions, trip expense tracking, subscriptions with upcoming-transaction tracking
+9. **LLM Intelligence** — optional Gemini Flash layer for anomaly explanations, natural-language Telegram parsing, and weekly/monthly AI insights; `None` when `gemini_api_key` is absent
 
 All data in SQLite with WAL mode. Multi-user system with per-user expense DBs and a shared admin DB. Supports income and expense tracking.
 
@@ -39,6 +40,7 @@ docker-compose.yml:
 - `EXPENSE_DB_PATH` — override per-user DB path (rarely used)
 - `EXPENSE_CONFIG_PATH` — override config file path (defaults to `config.yaml`)
 - `GMAIL_CREDENTIALS_JSON` — base64-encoded credentials.json (alternative to volume mount)
+- `GEMINI_API_KEY` — Google Gemini API key; enables LLM Intelligence when set (overrides `gemini_api_key` in config.yaml)
 
 **No Railway.** All previous AGENTS.md references to Railway, Railway volumes, and base64 env vars for credentials are obsolete. The `/data/` volume is a local bind mount.
 
@@ -250,6 +252,8 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 | `src/webhook.py` | FastAPI POST endpoint for Apple Wallet payloads with per-user routing |
 | `src/exchange.py` | Exchange rate service with API fetching, 24h caching, and fallback rates |
 | `src/recurring.py` | Recurring transaction detection from spending patterns |
+| `src/subscriptions.py` | `SubscriptionMatcher`: daily job — generates upcoming charges, auto-matches transactions, flags possibly-cancelled subscriptions |
+| `src/llm_service.py` | `LLMService`: thin Gemini Flash wrapper for anomaly explanations, Telegram NL parsing, and weekly/monthly insights; `create_llm_service(config)` returns `None` when `gemini_api_key` is absent |
 | `src/parsers/base.py` | Abstract `BankParser` — defines `can_parse()` / `parse()`, `ParseResult` dataclass |
 | `src/parsers/dbs_paylah.py` | DBS PayLah! email → Transaction (SGD prefix, To: merchant, Transaction Ref) |
 | `src/parsers/uob.py` | All UOB alert email formats → Transaction (card purchase, transit, reversal, PayNow, transfer) |
@@ -503,6 +507,8 @@ goals (id, name, target_amount, saved_amount, target_date, status, created_at, u
 goal_contributions (id, goal_id FK, amount, month, contributed_date, source, note, created_at)
 trips (id, name, destination, start_date, end_date, primary_currency, status, created_at, updated_at)
 trip_transactions (trip_id FK, transaction_id FK, added_by, PRIMARY KEY(trip_id, transaction_id))
+subscriptions (id, merchant, normalized_merchant, amount, frequency, category, status, source, first_seen, last_seen, next_expected, notes, created_at, updated_at)
+upcoming_transactions (id, subscription_id FK, expected_date, status, matched_transaction_id FK, created_at, updated_at)
 sessions (token PK, created_at)   -- legacy; superseded by app.db sessions
 
 -- Admin DB: /data/app.db
@@ -512,17 +518,17 @@ admin_sessions (token PK, created_at, last_used_at)
 telegram_link_tokens (token PK, username FK, expires_at)
 ```
 
-**app_settings keys:** `anomaly_multiplier`, `velocity_alert_threshold`, `budgets_enabled`, `goals_enabled`, `trips_enabled`.
+**app_settings keys:** `anomaly_multiplier`, `velocity_alert_threshold`, `budgets_enabled`, `goals_enabled`, `trips_enabled`, `subscriptions_enabled`, `llm_insight_content`, `llm_insight_generated_at`, `llm_weekly_insight_content`, `llm_weekly_insight_generated_at`, `llm_monthly_insight_content`, `llm_monthly_insight_generated_at`.
 
 ## Testing
 
 Run: `pytest tests/ -v`
 
 All tests use in-memory SQLite (`:memory:`) — no files on disk.
-528 tests across all modules.
+591 tests across all modules.
 Fixtures in `tests/conftest.py` provide pre-initialized DB connections and sample configs.
 
-Test files: `test_storage.py`, `test_categorizer.py`, `test_parsers.py`, `test_telegram_bot.py`, `test_web_api.py`, `test_web_auth.py`, `test_web_security.py`, `test_webhook.py`, `test_gmail_poller.py`, `test_exchange.py`, `test_recurring.py`, `test_ingestion.py`, `test_analytics.py`, `test_merchants.py`, `test_budgets.py`, `test_goals.py`, `test_trips.py`, `test_health_score.py`, `test_user_manager.py`, `test_admin_app.py`, `test_admin_storage.py`, `test_config.py`.
+Test files: `test_storage.py`, `test_categorizer.py`, `test_parsers.py`, `test_telegram_bot.py`, `test_web_api.py`, `test_web_auth.py`, `test_web_security.py`, `test_webhook.py`, `test_gmail_poller.py`, `test_exchange.py`, `test_recurring.py`, `test_ingestion.py`, `test_analytics.py`, `test_merchants.py`, `test_budgets.py`, `test_goals.py`, `test_trips.py`, `test_health_score.py`, `test_subscriptions.py`, `test_llm_service.py`, `test_user_manager.py`, `test_admin_app.py`, `test_admin_storage.py`, `test_config.py`.
 
 ## Security
 
