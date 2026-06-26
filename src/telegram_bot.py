@@ -310,7 +310,7 @@ class TelegramBotService:
         _storage = storage if storage is not None else self.storage
         summary = _storage.get_spending_summary(start_date=date, end_date=date)
         if summary["total"] == 0:
-            return f"No transactions on {date}"
+            return "Nothing logged yet."
 
         return self._build_summary_with_transactions(
             f"*Spending for {date}*", summary, date, date, storage=_storage
@@ -320,7 +320,7 @@ class TelegramBotService:
         _storage = storage if storage is not None else self.storage
         summary = _storage.get_spending_summary(start_date=start_date, end_date=end_date)
         if summary["total"] == 0:
-            return "No transactions in this period"
+            return "Nothing logged yet."
 
         return self._build_summary_with_transactions(
             f"*Weekly Summary ({start_date} to {end_date})*", summary, start_date, end_date, storage=_storage
@@ -330,7 +330,7 @@ class TelegramBotService:
         _storage = storage if storage is not None else self.storage
         summary = _storage.get_spending_summary(start_date=start_date, end_date=end_date)
         if summary["total"] == 0:
-            return "No transactions this month"
+            return "Nothing logged yet."
         label = datetime.strptime(start_date, "%Y-%m-%d").strftime("%B %Y")
         return self._build_summary_with_transactions(
             f"*Monthly Summary — {label}*", summary, start_date, end_date, storage=_storage
@@ -692,6 +692,24 @@ class TelegramBotService:
             return
         today = self._local_now().strftime("%Y-%m-%d")
         text = self.format_daily_summary(today, storage=ctx.storage)
+        # Append daily pace note if budget data is available
+        try:
+            summary = ctx.storage.get_spending_summary(start_date=today, end_date=today)
+            total_spent = summary["total"]
+            daily_budget = 0.0
+            progress = ctx.storage.get_budget_progress()
+            for b in progress:
+                if b["category"] is None and b["period"] == "monthly" and b["budget_amount"] > 0:
+                    days_in_month = self._local_now().replace(day=1)
+                    import calendar as _cal
+                    dim = _cal.monthrange(self._local_now().year, self._local_now().month)[1]
+                    daily_budget = b["budget_amount"] / dim
+                    break
+            note = self._build_pace_note_daily(total_spent, daily_budget)
+            if note:
+                text = text + "\n\n" + note
+        except Exception:
+            pass
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("📅 Yesterday", callback_data="cmd_yesterday"),
@@ -719,6 +737,22 @@ class TelegramBotService:
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = today.strftime("%Y-%m-%d")
         text = self.format_weekly_summary(start, end, storage=ctx.storage)
+        # Append weekly pace note if budget data is available
+        try:
+            summary = ctx.storage.get_spending_summary(start_date=start, end_date=end)
+            total_spent = summary["total"]
+            weekly_budget = 0.0
+            progress = ctx.storage.get_budget_progress()
+            for b in progress:
+                if b["category"] is None and b["period"] == "monthly" and b["budget_amount"] > 0:
+                    weekly_budget = b["budget_amount"] / 4.33
+                    break
+            days_elapsed = today.weekday() + 1  # Monday=0, so +1 for days elapsed
+            note = self._build_pace_note_weekly(total_spent, weekly_budget, days_elapsed)
+            if note:
+                text = text + "\n\n" + note
+        except Exception:
+            pass
         await self._send_long_message(update, text)
 
     async def _month(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -730,11 +764,28 @@ class TelegramBotService:
         end = today.strftime("%Y-%m-%d")
         summary = ctx.storage.get_spending_summary(start_date=start, end_date=end)
         if summary["total"] == 0:
-            await update.message.reply_text("No transactions this month")
+            await update.message.reply_text("Nothing logged yet.")
             return
         text = self._build_summary_with_transactions(
             f"*Monthly Summary ({start} to {end})*", summary, start, end, storage=ctx.storage
         )
+        # Append monthly pace note if budget data is available
+        try:
+            import calendar as _cal
+            total_spent = summary["total"]
+            progress = ctx.storage.get_budget_progress()
+            for b in progress:
+                if b["category"] is None and b["period"] == "monthly" and b["budget_amount"] > 0:
+                    monthly_budget = b["budget_amount"]
+                    days_elapsed = today.day
+                    dim = _cal.monthrange(today.year, today.month)[1]
+                    daily_budget = monthly_budget / dim
+                    note = self._build_pace_note_daily(total_spent / days_elapsed, daily_budget)
+                    if note:
+                        text = text + "\n\n" + note
+                    break
+        except Exception:
+            pass
         await self._send_long_message(update, text)
 
     async def _add(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -762,7 +813,7 @@ class TelegramBotService:
 
         parsed = self.parse_add_command(text)
         if not parsed:
-            await update.message.reply_text("Invalid format. Usage: /add <amount> [currency] <merchant> [category] [date]")
+            await update.message.reply_text("Amount missing. /add $12.50 Coffee Starbucks")
             return
 
         now = self._local_now()
@@ -854,7 +905,7 @@ class TelegramBotService:
 
         tx = ctx.storage.get_transaction(tx_id)
         if not tx:
-            await update.message.reply_text(f"Transaction #{tx_id} not found")
+            await update.message.reply_text("Transaction not found.")
             return
 
         # If a category was provided, apply it directly
@@ -863,7 +914,7 @@ class TelegramBotService:
             valid_categories = [c["name"] for c in ctx.storage.get_categories()]
             if new_category not in valid_categories:
                 await update.message.reply_text(
-                    f"Invalid category '{new_category}'. Valid: {', '.join(valid_categories)}"
+                    "Unknown category. /categories to see the list."
                 )
                 return
 
@@ -960,7 +1011,7 @@ class TelegramBotService:
         balance = ctx.storage.get_balance(start, end)
 
         if balance["income"] == 0 and balance["expenses"] == 0:
-            await update.message.reply_text("No transactions this month")
+            await update.message.reply_text("Nothing logged yet.")
             return
 
         month_str = today.strftime("%B %Y")
@@ -1592,6 +1643,32 @@ class TelegramBotService:
             pass
 
         return ""
+
+    def _build_pace_note_daily(self, spent: float, daily_budget: float) -> str:
+        if daily_budget <= 0:
+            return ""
+        pct = spent / daily_budget * 100
+        if pct <= 50:
+            return "On track."
+        elif pct <= 90:
+            return f"Pacing {pct:.0f}% of daily budget."
+        elif pct <= 100:
+            return "Nearly at daily limit."
+        else:
+            overage = spent - daily_budget
+            return f"Over daily by ${overage:.2f}."
+
+    def _build_pace_note_weekly(self, spent: float, weekly_budget: float, days_elapsed: int) -> str:
+        if weekly_budget <= 0 or days_elapsed <= 0:
+            return ""
+        expected = (weekly_budget / 7) * days_elapsed
+        pct = spent / expected * 100 if expected > 0 else 0
+        if pct <= 90:
+            return "On track for the week."
+        elif pct <= 110:
+            return "Tracking roughly on budget."
+        else:
+            return f"Running {pct:.0f}% of expected weekly pace."
 
     async def _check_and_alert_budgets(
         self, category: Optional[str], amount_sgd: float, storage=None, chat_id: Optional[int] = None

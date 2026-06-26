@@ -208,7 +208,7 @@ class TestBalanceCommand:
 
         await bot_service._balance(update, context)
 
-        update.message.reply_text.assert_called_once_with("No transactions this month")
+        update.message.reply_text.assert_called_once_with("Nothing logged yet.")
 
 
 class TestYesterdayCommand:
