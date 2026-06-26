@@ -1533,6 +1533,64 @@ class TelegramBotService:
             except Exception as _e:
                 logger.warning("Budget alert check failed: %s", _e)
 
+    def _build_context_line(self, category: str, merchant: str, amount: float) -> str:
+        """Returns a one-line contextual note for the post-add confirmation, or ''."""
+        # 1. Budget threshold ≥ 75%
+        try:
+            progress = self.storage.get_budget_progress()
+            for b in progress:
+                if b["category"] == category:
+                    pct = b["percent"]
+                    if pct >= 100:
+                        overage = b["spent"] - b["budget_amount"]
+                        return f"Over budget by {overage:.0f}."
+                    if pct >= 75:
+                        remaining = b["remaining"]
+                        return f"Budget {pct:.0f}% used — {remaining:.0f} left this month."
+        except Exception:
+            pass
+
+        # 2. Repeat merchant ≥ 3 times this week (including this transaction)
+        try:
+            week_start = (self._local_now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            today = self._local_now().strftime("%Y-%m-%d")
+            rows = self.storage.query_transactions(
+                start_date=week_start,
+                end_date=today,
+                merchant_search=merchant,
+                limit=1000,
+            )
+            # Exact merchant match (query_transactions uses LIKE; filter exactly)
+            exact = [r for r in rows if r.get("merchant") == merchant]
+            count = len(exact) + 1  # +1 for the current transaction
+            if count >= 3:
+                return f"{merchant} — {count}× this week."
+        except Exception:
+            pass
+
+        # 3. Anomaly ≥ 2× category median (last 30 days, minimum 3 prior)
+        try:
+            thirty_days_ago = (self._local_now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            today = self._local_now().strftime("%Y-%m-%d")
+            prior = self.storage.query_transactions(
+                start_date=thirty_days_ago,
+                end_date=today,
+                category=category,
+                limit=1000,
+            )
+            if len(prior) >= 3:
+                amounts = sorted(r["amount"] * (r.get("exchange_rate") or 1.0) for r in prior)
+                n = len(amounts)
+                mid = n // 2
+                median = amounts[mid] if n % 2 == 1 else (amounts[mid - 1] + amounts[mid]) / 2
+                if median > 0 and amount >= 2 * median:
+                    multiple = amount / median
+                    return f"Unusual — {multiple:.1f}× the usual {category} spend."
+        except Exception:
+            pass
+
+        return ""
+
     async def _check_and_alert_budgets(
         self, category: Optional[str], amount_sgd: float, storage=None, chat_id: Optional[int] = None
     ) -> None:
