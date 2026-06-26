@@ -1,4 +1,4 @@
-// src/web/frontend/src/lib/animations.ts
+// src/web/frontend/src/lib/animations.tsx
 import { useEffect } from 'react'
 import { animate, useMotionValue, useTransform, motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
