@@ -452,6 +452,7 @@ def main():
         admin_storage=admin_storage,
         exchange_service=exchange_service,
         host_base_url=dashboard_url,
+        llm_service=llm_service,
     )
 
     # Admin app (user management)

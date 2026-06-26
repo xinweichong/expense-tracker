@@ -57,6 +57,7 @@ def create_dashboard_app(
     admin_storage,
     exchange_service=None,
     host_base_url: str = "",
+    llm_service=None,
 ) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
     app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -678,8 +679,17 @@ def create_dashboard_app(
     @app.get("/api/analytics/alerts")
     async def analytics_alerts(storage=Depends(_get_storage)):
         multiplier = float(await _db(storage.get_setting, "anomaly_multiplier", "2.0"))
+        anomalies = await _db(storage.spending_anomalies, multiplier=multiplier)
+        if llm_service:
+            for a in anomalies:
+                try:
+                    a["explanation"] = llm_service.explain_anomaly(
+                        a["merchant"], a["amount"], a.get("avg_amount", a["amount"]), a["category"]
+                    )
+                except Exception:
+                    a["explanation"] = ""
         return {
-            "anomalies": await _db(storage.spending_anomalies, multiplier=multiplier),
+            "anomalies": anomalies,
             "new_merchants": await _db(storage.new_merchants),
         }
 
