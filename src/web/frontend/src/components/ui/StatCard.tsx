@@ -61,7 +61,7 @@ export function StatCard({
   return (
     <motion.div whileHover={{ y: -2 }} transition={springs.snappy} className={cn(className)}>
       <Card className={cn(glowClass, 'h-full')}>
-        {hero && <div className="hero-hairline" aria-hidden />}
+        {glowClass && <div className="hero-hairline" aria-hidden />}
         <CardHeader className="pb-1">
           <CardTitle className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">
             {label}
