@@ -3,10 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgress, type Category, type GoalProgress, type Trip, type RecurringTransaction } from '@/api/client';
-import { PageCard, HighlightCard } from '@/components/ui/cards';
+import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn, getBudgetTone, getGoalTone } from '@/lib/utils';
+import { cn, getBudgetTone, getGoalTone, getCategoryColor } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants, slideInRightVariants } from '@/lib/animations';
 import { Pencil, Trash2, X, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
@@ -26,7 +26,7 @@ function SavingsOverviewCard() {
   const monthLabel = new Date(overview.month + '-01').toLocaleString('en', { month: 'long', year: 'numeric' });
 
   return (
-    <HighlightCard title={`Savings — ${monthLabel}`}>
+    <HeroCard title={`Savings — ${monthLabel}`}>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 py-1">
         <div>
           <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Saved</p>
@@ -44,7 +44,7 @@ function SavingsOverviewCard() {
           <p className="text-xs text-muted font-mono">free to allocate</p>
         </div>
       </div>
-    </HighlightCard>
+    </HeroCard>
   );
 }
 
@@ -100,7 +100,7 @@ function BudgetRow({
                 onChange={(e) => setInputVal(e.target.value)}
                 className={cn('input-field', 'w-24 !py-1 !text-xs')}
               />
-              <button onClick={handleSave} className="text-xs text-teal hover:text-teal/80">Save</button>
+              <button onClick={handleSave} className="btn-action">Save</button>
               <button onClick={() => setEditing(false)} className="text-xs text-muted hover:text-foreground">Cancel</button>
             </>
           ) : (
@@ -467,21 +467,25 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                     placeholder="Note"
                     className="input-field flex-1 min-w-20 !py-1 !text-xs"
                   />
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-teal disabled:opacity-40"
                     onClick={handleSaveContrib}
                     disabled={updateContribMutation.isPending}
-                    className="text-teal hover:text-teal/80 disabled:opacity-40"
                     title="Save"
                   >
                     <Check className="w-3.5 h-3.5" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
                     onClick={() => setEditingContribId(null)}
-                    className="text-muted hover:text-foreground"
                     title="Cancel"
                   >
                     <X className="w-3.5 h-3.5" />
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between text-xs">
@@ -735,9 +739,14 @@ function RecurringSection() {
         </p>
       ) : (
         <div className="divide-y divide-border">
-          {recurring.map((r: RecurringTransaction) => (
+          {recurring.map((r: RecurringTransaction) => {
+            const catColor = getCategoryColor(r.category);
+            return (
             <div key={r.id} className="flex items-center gap-3 py-3">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-foreground/10 text-foreground shrink-0">
+              <span
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0"
+                style={{ background: `${catColor}33`, color: catColor }}
+              >
                 {r.category}
               </span>
               <span className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">
@@ -753,7 +762,8 @@ function RecurringSection() {
                 {r.last_seen}
               </span>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </PageCard>
