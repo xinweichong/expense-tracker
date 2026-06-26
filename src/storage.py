@@ -1322,7 +1322,7 @@ class Storage:
         count = len(rows)
 
         start_dt = datetime.strptime(trip["start_date"], "%Y-%m-%d")
-        end_str = trip.get("end_date") or datetime.now().strftime("%Y-%m-%d")
+        end_str = trip.get("end_date") or local_now().strftime("%Y-%m-%d")
         end_dt = datetime.strptime(end_str, "%Y-%m-%d")
         days = max(1, (end_dt - start_dt).days + 1)
 
