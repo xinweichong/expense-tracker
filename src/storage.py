@@ -1359,7 +1359,6 @@ class Storage:
     # ── Subscriptions ──────────────────────────────────────────────
 
     @_locked
-    @_locked
     def create_subscription(
         self, merchant: str, frequency: str,
         billing_day: int | None = None, label: str | None = None, notes: str | None = None
