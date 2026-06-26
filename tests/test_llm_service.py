@@ -76,6 +76,48 @@ class TestGeneratePeriodInsight:
         assert result["nudges"] == []
 
 
+class TestGenerateWeeklyInsight:
+    def test_returns_narrative_and_nudges(self, svc, mock_model):
+        payload = {"narrative": "Fast week.", "nudges": ["Cut coffee", "Walk more"]}
+        _mock_response(mock_model, json.dumps(payload))
+        result = svc.generate_weekly_insight({"period_label": "Week of Jun 2026"})
+        assert result["narrative"] == "Fast week."
+        assert len(result["nudges"]) == 2
+
+    def test_caps_nudges_at_three(self, svc, mock_model):
+        payload = {"narrative": "x", "nudges": ["a", "b", "c", "d"]}
+        _mock_response(mock_model, json.dumps(payload))
+        result = svc.generate_weekly_insight({})
+        assert len(result["nudges"]) == 3
+
+    def test_api_error_returns_empty(self, svc, mock_model):
+        mock_model.models.generate_content.side_effect = Exception("timeout")
+        result = svc.generate_weekly_insight({})
+        assert result["narrative"] == ""
+        assert result["nudges"] == []
+
+
+class TestGenerateMonthlyInsight:
+    def test_returns_narrative_and_nudges(self, svc, mock_model):
+        payload = {"narrative": "Good savings.", "nudges": ["Invest surplus", "Reduce dining"]}
+        _mock_response(mock_model, json.dumps(payload))
+        result = svc.generate_monthly_insight({"period_label": "Jun 2026"})
+        assert result["narrative"] == "Good savings."
+        assert len(result["nudges"]) == 2
+
+    def test_caps_nudges_at_three(self, svc, mock_model):
+        payload = {"narrative": "y", "nudges": ["a", "b", "c", "d", "e"]}
+        _mock_response(mock_model, json.dumps(payload))
+        result = svc.generate_monthly_insight({})
+        assert len(result["nudges"]) == 3
+
+    def test_api_error_returns_empty(self, svc, mock_model):
+        mock_model.models.generate_content.side_effect = Exception("timeout")
+        result = svc.generate_monthly_insight({})
+        assert result["narrative"] == ""
+        assert result["nudges"] == []
+
+
 class TestExplainAnomaly:
     def test_returns_string(self, svc, mock_model):
         _mock_response(mock_model, "This is 3x your usual Grab fare.")
