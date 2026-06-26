@@ -629,6 +629,11 @@ class TelegramBotService:
             conversation_timeout=300,
         )
         self.app.add_handler(edit_conv)
+        # NOTE (Task 16): "Budget exists for that category. /budgets to manage." was not
+        # implemented because there is no /budget add bot command. Budget creation is
+        # handled exclusively via the web API (/api/budgets POST), where a 409 HTTP response
+        # is returned on duplicate. If a Telegram /budget command is added in the future,
+        # catch ValueError from storage.create_budget and reply with that message.
         self.app.add_handler(CommandHandler("delete", self._delete_command))
         self.app.add_handler(CallbackQueryHandler(self._delete_callback, pattern=r"^(confirm_delete_\d+|cancel_delete)$"))
         self.app.add_handler(CommandHandler("trip", self._trip))
@@ -813,7 +818,15 @@ class TelegramBotService:
 
         parsed = self.parse_add_command(text)
         if not parsed:
-            await update.message.reply_text("Amount missing. /add $12.50 Coffee Starbucks")
+            # Distinguish "bad number" from "no number at all"
+            parts = text.strip().split()
+            first = parts[0] if parts else ""
+            first_stripped = first.lstrip("$")
+            looks_like_amount = bool(first_stripped and re.match(r'^[\d.,]+$', first_stripped))
+            if first.startswith("$") or looks_like_amount:
+                await update.message.reply_text("That's not a number. /add $12.50 Coffee Starbucks")
+            else:
+                await update.message.reply_text("Amount missing. /add $12.50 Coffee Starbucks")
             return
 
         now = self._local_now()
@@ -822,6 +835,10 @@ class TelegramBotService:
         if not category and ctx.categorizer:
             category, _ = ctx.categorizer.categorize(parsed["merchant"])
 
+        # NOTE (Task 16): "Already logged." error message was not implemented here because
+        # manual /add entries use a time-stamped source_id that never produces a duplicate.
+        # Duplicate detection ("Already logged.") only applies to ingestion (ingestion.py),
+        # not to user-initiated /add commands.
         tx_id = ctx.storage.insert_transaction(
             source="manual",
             source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
@@ -1285,20 +1302,8 @@ class TelegramBotService:
             await update.message.reply_text("Dashboard URL not configured.")
 
     async def _unknown(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        text = update.message.text or ""
-        cmd = text.split()[0]
         await update.message.reply_text(
-            f"{cmd} not recognised.\n\n"
-            "/today /week /month — view spending\n"
-            "/balance — income vs expenses\n"
-            "/dashboard — open web dashboard\n"
-            "/add — manual entry\n"
-            "/cash — quick cash entry\n"
-            "/income — record income\n"
-            "/recategorize — change category\n"
-            "/insights — spending patterns\n"
-            "/subscriptions — subscriptions and monthly total\n"
-            "/help — full command reference"
+            "Didn't catch that. Try /add $12.50 Coffee Starbucks or /help."
         )
 
     async def _handle_nl_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
