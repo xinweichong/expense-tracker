@@ -9,7 +9,7 @@
 A privacy-first personal finance app that **automatically captures every transaction** from your bank emails and Apple Wallet — no manual logging, no subscription fees, no data leaving your server.
 
 [![Version](https://img.shields.io/badge/version-1.0.0-00D4AA?style=flat-square)](CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-416%20passing-30D158?style=flat-square)](tests/)
+[![Tests](https://img.shields.io/badge/tests-591%20passing-30D158?style=flat-square)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3572A5?style=flat-square)](https://python.org)
 [![License](https://img.shields.io/badge/license-private-72727E?style=flat-square)](#license)
 
@@ -79,6 +79,7 @@ Most people don't track their spending — not because they don't care, but beca
 | **Spending Velocity** | Daily pace indicator and projected month-end total based on current trajectory |
 | **Merchant Intelligence** | Per-merchant profiles with spend trends, tags (subscription, online, foreign, essential, recurring), notes, and full transaction history |
 | **Anomaly Detection** | Unusual spending flagged in yellow with explanatory labels; new merchants highlighted separately |
+| **LLM Intelligence** | Optional Gemini Flash integration — AI anomaly explanations on Analytics, natural-language Telegram transaction entry, and AI-generated weekly/monthly spending insights; disabled when `gemini_api_key` is blank |
 | **Recurring Detection** | Automatically identifies subscriptions and regular payments — monthly, weekly, biweekly |
 | **Period Comparison** | Current vs previous period charts, category-level breakdown, and change percentages |
 
@@ -88,6 +89,7 @@ Most people don't track their spending — not because they don't care, but beca
 |---|---|
 | **Budgets** | Monthly per-category budgets with animated progress bars; Telegram alerts at 80% and 100% |
 | **Financial Goals** | Savings goals with target amounts and dates, manual contributions, progress rings, and Telegram completion notifications |
+| **Subscriptions** | Tracked recurring charges with upcoming-transaction predictions; daily matcher auto-links incoming transactions; match/dismiss flow; possibly-cancelled detection |
 | **Trips** | Group any set of transactions into a trip; all new transactions auto-assigned to the active trip across every ingestion path |
 | **Income Tracking** | Record income alongside expenses; see earned / spent / net via `/balance` |
 
@@ -269,6 +271,10 @@ categories:
   - name: Other
     keywords: []
     icon: "📌"
+
+# LLM Intelligence (optional — leave blank to disable)
+gemini_api_key: ""
+# gemini_model: "gemini-2.0-flash"   # default
 ```
 
 ### Environment variable overrides
@@ -285,6 +291,7 @@ All config values can be set via environment variables (for Railway or Docker). 
 | `GMAIL_CREDENTIALS_JSON` | Base64-encoded `credentials.json` |
 | `GMAIL_TOKEN_JSON` | Base64-encoded `token.json` |
 | `EXPENSE_DB_PATH` | Path to SQLite database |
+| `GEMINI_API_KEY` | Google Gemini API key (enables LLM Intelligence features) |
 
 ---
 
@@ -392,7 +399,7 @@ Access at `http://your-server:8080`. The dashboard is a React SPA with six pages
 
 - **Category CRUD** — create, edit, and delete categories with keyword editor, icon picker, unique color picker, and needs/wants/neutral type classification
 - **Merchant overrides** — view and delete learned merchant-to-category mappings
-- **Feature toggles** — enable/disable budgets, goals, trips
+- **Feature toggles** — enable/disable budgets, goals, trips, subscriptions
 - **Alert thresholds** — configure unusual-spend and budget alert sensitivity
 - **Live reload** — changes take effect immediately without restarting the server
 
@@ -472,7 +479,7 @@ pip install -r requirements-dev.txt
 python3 -m pytest tests/ -v
 ```
 
-All tests use in-memory SQLite — no database files created on disk. 416 tests across all modules.
+All tests use in-memory SQLite — no database files created on disk. 591 tests across all modules.
 
 ---
 
@@ -486,11 +493,15 @@ expense-tracker/
 │   ├── storage.py           # SQLite CRUD, queries, insights, income, overrides, budgets, goals, trips, merchants, health score
 │   ├── categorizer.py       # Keyword matching + merchant overrides
 │   ├── analytics.py         # Velocity, anomaly detection, comparison, merchant trends, reports
+│   ├── ingestion.py         # IngestionPipeline — single ingest path (dedup → exchange → categorize → store → trip → recurring)
+│   ├── user_manager.py      # UserManager — central registry of per-user UserContext objects
 │   ├── gmail_poller.py      # Gmail API polling + HTML extraction
 │   ├── telegram_bot.py      # All Telegram commands + inline keyboards + notifications
 │   ├── webhook.py           # Apple Wallet webhook + source-ID dedup
 │   ├── exchange.py          # Exchange rate fetching + 24h caching
 │   ├── recurring.py         # Recurring transaction detection
+│   ├── subscriptions.py     # SubscriptionMatcher — daily job for upcoming-transaction lifecycle
+│   ├── llm_service.py       # LLMService wrapping Gemini Flash; absent when gemini_api_key is blank
 │   ├── parsers/
 │   │   ├── base.py          # BankParser abstract class
 │   │   ├── dbs_paylah.py    # DBS PayLah! email parser (with time extraction)
@@ -498,7 +509,8 @@ expense-tracker/
 │   │   └── apple_wallet.py  # Apple Wallet webhook parser
 │   └── web/
 │       ├── app.py           # FastAPI routes — dashboard API + SPA serving
-│       ├── auth.py          # bcrypt auth + session cookies
+│       ├── admin_app.py     # FastAPI admin panel (mounted at /admin) — user CRUD + password reset
+│       ├── auth.py          # Thin shim delegating to AdminStorage for session create/verify/destroy
 │       ├── dist/            # Pre-built React SPA (committed, served by FastAPI)
 │       └── frontend/        # React source (Vite + Tailwind + shadcn/ui + framer-motion)
 │           ├── src/
@@ -514,16 +526,31 @@ expense-tracker/
 │           │   ├── api/         # API client layer
 │           │   └── hooks/       # Data-fetching hooks (React Query)
 │           └── vite.config.ts
-├── tests/                   # 416 tests, all in-memory SQLite
+├── tests/                   # 591 tests, all in-memory SQLite
 │   ├── test_storage.py
+│   ├── test_categorizer.py
 │   ├── test_parsers.py
 │   ├── test_analytics.py
 │   ├── test_health_score.py
+│   ├── test_ingestion.py
 │   ├── test_trips.py
 │   ├── test_budgets.py
 │   ├── test_goals.py
 │   ├── test_merchants.py
-│   └── …
+│   ├── test_subscriptions.py
+│   ├── test_recurring.py
+│   ├── test_exchange.py
+│   ├── test_gmail_poller.py
+│   ├── test_telegram_bot.py
+│   ├── test_webhook.py
+│   ├── test_web_api.py
+│   ├── test_web_auth.py
+│   ├── test_web_security.py
+│   ├── test_user_manager.py
+│   ├── test_admin_app.py
+│   ├── test_admin_storage.py
+│   ├── test_llm_service.py
+│   └── test_config.py
 ├── scripts/
 │   └── gmail_auth.py        # One-time Gmail OAuth flow
 ├── Dockerfile               # Multi-stage build — Node builds frontend, Python runs it

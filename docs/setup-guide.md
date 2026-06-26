@@ -222,7 +222,18 @@ python -c "import bcrypt; print(bcrypt.hashpw(b'your-actual-password', bcrypt.ge
 
 Copy the output (starts with `$2b$12$...`) and paste it as `web.password_hash`.
 
-### 5.2 Set the Webhook URL
+### 5.2 LLM Intelligence (optional)
+
+To enable Gemini-powered anomaly explanations, natural-language Telegram transaction entry, and weekly/monthly AI insights, add your Google Gemini API key:
+
+```yaml
+gemini_api_key: "AIza..."
+# gemini_model: "gemini-2.0-flash"   # default; omit to use the default
+```
+
+Leave the key blank (the default in `config.example.yaml`) to disable all LLM features. The app works fully without it — the key just unlocks the AI layer. Obtain a free key at [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+### 5.4 Set the Webhook URL
 
 This is the URL your iPhone will POST Apple Wallet transactions to:
 
