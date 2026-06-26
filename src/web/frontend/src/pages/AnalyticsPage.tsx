@@ -9,6 +9,7 @@ import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { MerchantTable } from '@/components/charts/MerchantTable';
 import { VelocityRing } from '@/components/charts/VelocityRing';
 import { api } from '@/api/client';
+import type { LLMInsight } from '@/api/client';
 import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/utils';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
@@ -34,29 +35,23 @@ function formatRelativeTime(isoString: string): string {
   return `${Math.floor(hours / 24)} days ago`;
 }
 
-function LLMInsightCard() {
+function InsightCard({ period, queryFn, emptyLabel }: { period: string; queryFn: () => Promise<LLMInsight>; emptyLabel: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['analytics-insight'],
-    queryFn: () => api.getAnalyticsInsight(),
+    queryKey: ['analytics-insight', period],
+    queryFn,
     staleTime: 60 * 60 * 1000,
   });
 
   if (isLoading) {
-    return (
-      <PageCard title="AI Insight">
-        <div className="h-16 animate-pulse bg-foreground/10 rounded-md" />
-      </PageCard>
-    );
+    return <div className="h-16 animate-pulse bg-foreground/10 rounded-md" />;
   }
 
   if (!data?.content) {
     return (
-      <PageCard title="AI Insight">
-        <p className="text-sm text-muted">
-          No insight yet — generated daily at 8am.
-          {!data?.generated_at && ' Configure gemini_api_key in config.yaml to enable.'}
-        </p>
-      </PageCard>
+      <p className="text-sm text-muted">
+        {emptyLabel}
+        {!data?.generated_at && ' Configure gemini_api_key in config.yaml to enable.'}
+      </p>
     );
   }
 
@@ -65,31 +60,61 @@ function LLMInsightCard() {
     : null;
 
   return (
-    <PageCard
-      title="AI Insight"
-      action={
-        generatedLabel
-          ? <span className="text-xs text-muted">{generatedLabel}</span>
-          : undefined
-      }
-    >
-      <div className="space-y-3">
-        <p className="text-sm text-foreground leading-relaxed">
-          {data.content.narrative}
-        </p>
-        {data.content.nudges?.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {data.content.nudges.map((nudge: string, i: number) => (
-              <span
-                key={i}
-                className="px-2.5 py-1 text-xs rounded-full border border-accent/40 text-accent bg-accent/5"
-              >
-                {nudge}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="space-y-3">
+      {generatedLabel && (
+        <p className="text-xs text-muted">{generatedLabel}</p>
+      )}
+      <p className="text-sm text-foreground leading-relaxed">
+        {data.content.narrative}
+      </p>
+      {data.content.nudges?.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {data.content.nudges.map((nudge: string, i: number) => (
+            <span
+              key={i}
+              className="px-2.5 py-1 text-xs rounded-full border border-teal/40 text-teal bg-teal/5"
+            >
+              {nudge}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AIInsightsCard() {
+  const [tab, setTab] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  const tabs = [
+    { key: 'daily' as const, label: 'Daily', queryFn: () => api.getAnalyticsInsight(), emptyLabel: 'No insight yet — generated daily at 8am.' },
+    { key: 'weekly' as const, label: 'Weekly', queryFn: () => api.getWeeklyInsight(), emptyLabel: 'No weekly insight yet — generated on Mondays.' },
+    { key: 'monthly' as const, label: 'Monthly', queryFn: () => api.getMonthlyInsight(), emptyLabel: 'No monthly insight yet — generated on the 1st.' },
+  ];
+
+  const activeTab = tabs.find(t => t.key === tab)!;
+
+  const tabSelector = (
+    <div className="flex gap-1">
+      {tabs.map(t => (
+        <button
+          key={t.key}
+          onClick={() => setTab(t.key)}
+          className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+            tab === t.key
+              ? 'border-foreground text-foreground bg-foreground/10'
+              : 'border-border text-muted hover:text-foreground'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <PageCard title="AI Insights" action={tabSelector}>
+      <InsightCard period={tab} queryFn={activeTab.queryFn} emptyLabel={activeTab.emptyLabel} />
     </PageCard>
   );
 }
@@ -274,9 +299,9 @@ export function AnalyticsPage() {
         </div>
       </div>
 
-      {/* ── LLM Insight — full-width ── */}
+      {/* ── AI Insights — full-width ── */}
       <div className="area-insight">
-        <LLMInsightCard />
+        <AIInsightsCard />
       </div>
 
       {/* ── Left panel: health score + alerts ── */}
