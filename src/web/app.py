@@ -45,7 +45,7 @@ _DB_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 async def _db(fn, *args, **kwargs):
     """Run a synchronous storage/DB call in the dedicated DB thread pool."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_DB_EXECUTOR, partial(fn, *args, **kwargs))
 
 
@@ -57,6 +57,7 @@ def create_dashboard_app(
     admin_storage,
     exchange_service=None,
     host_base_url: str = "",
+    llm_service=None,
 ) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
     app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -72,7 +73,7 @@ def create_dashboard_app(
             return Response(content="<h2>Unknown user.</h2>", media_type="text/html", status_code=404)
         try:
             redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(_DB_EXECUTOR, partial(ctx.poller.complete_reauth, code, username))
             user_manager.start_poller(username)
             await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=1))
@@ -89,7 +90,7 @@ def create_dashboard_app(
         body = await request.json()
         username = body.get("username", "")
         password = body.get("password", "")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -115,7 +116,7 @@ def create_dashboard_app(
 
     async def require_auth(request: Request) -> str:
         session = request.cookies.get("session")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         username = await loop.run_in_executor(_DB_EXECUTOR, verify_session, session) if session else None
         if not username:
             raise HTTPException(status_code=401, detail="Not authenticated")
@@ -170,7 +171,7 @@ def create_dashboard_app(
 
     @app.get("/api/users/me")
     async def get_current_user(username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
@@ -191,7 +192,7 @@ def create_dashboard_app(
         new_password = body.get("new_password", "")
         if not new_password or len(new_password) < 8:
             raise HTTPException(status_code=422, detail="new_password must be at least 8 characters")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         ok = await loop.run_in_executor(None, verify_password, current_password, user["password_hash"])
         if not ok:
@@ -204,19 +205,19 @@ def create_dashboard_app(
 
     @app.get("/api/sessions")
     async def list_sessions(request: Request, username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
 
     @app.delete("/api/sessions")
     async def logout_all_other_sessions(request: Request, username: str = Depends(require_auth)):
         current_token = request.cookies.get("session")
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.destroy_all_sessions, username, except_token=current_token))
         return {"status": "ok"}
 
     @app.delete("/api/sessions/{token}")
     async def logout_session(token: str, username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         sessions = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
         if not any(s["token"] == token for s in sessions):
             raise HTTPException(status_code=404, detail="Session not found")
@@ -228,7 +229,7 @@ def create_dashboard_app(
     @app.put("/api/onboarding/preferences")
     async def set_onboarding_preferences(request: Request, username: str = Depends(require_auth)):
         body = await request.json()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, lambda: admin_storage.update_user(
             username,
             wants_gmail=1 if body.get("wants_gmail", True) else 0,
@@ -247,7 +248,7 @@ def create_dashboard_app(
 
     @app.post("/api/onboarding/telegram/link-token")
     async def create_telegram_link_token(username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         token = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.create_telegram_link_token, username)
         return {"token": token}
 
@@ -258,7 +259,7 @@ def create_dashboard_app(
 
     @app.put("/api/onboarding/complete")
     async def mark_onboarding_complete(username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, onboarding_complete=1))
         return {"status": "ok"}
 
@@ -266,7 +267,7 @@ def create_dashboard_app(
 
     @app.delete("/api/connections/telegram")
     async def disconnect_telegram(username: str = Depends(require_auth)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, telegram_chat_id=None))
         return {"status": "ok"}
 
@@ -295,7 +296,7 @@ def create_dashboard_app(
                 pass
         if ctx and ctx.poller:
             ctx.poller.stop()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=0))
         return {"status": "ok"}
 
@@ -647,8 +648,8 @@ def create_dashboard_app(
         }
 
     @app.get("/api/recurring")
-    async def recurring(_storage=Depends(_get_storage)):
-        return []
+    async def recurring(storage=Depends(_get_storage)):
+        return await _db(storage.get_recurring_transactions)
 
     @app.get("/api/analytics/comparison")
     async def analytics_comparison(
@@ -678,15 +679,24 @@ def create_dashboard_app(
     @app.get("/api/analytics/alerts")
     async def analytics_alerts(storage=Depends(_get_storage)):
         multiplier = float(await _db(storage.get_setting, "anomaly_multiplier", "2.0"))
+        anomalies = await _db(storage.spending_anomalies, multiplier=multiplier)
+        if llm_service:
+            for a in anomalies:
+                try:
+                    a["explanation"] = llm_service.explain_anomaly(
+                        a["merchant"], a["amount"], a.get("avg_amount", a["amount"]), a["category"]
+                    )
+                except Exception:
+                    a["explanation"] = ""
         return {
-            "anomalies": await _db(storage.spending_anomalies, multiplier=multiplier),
+            "anomalies": anomalies,
             "new_merchants": await _db(storage.new_merchants),
         }
 
 
     @app.get("/api/analytics/summaries")
     async def analytics_summaries(storage=Depends(_get_storage)):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         monthly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "monthly")
         weekly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "weekly")
         return {"monthly": monthly, "weekly": weekly}
@@ -723,6 +733,54 @@ def create_dashboard_app(
         return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
 
 
+    @app.get("/api/analytics/insight/weekly")
+    async def get_weekly_insight(storage=Depends(_get_storage)):
+        import json as _json
+        content_str = await _db(storage.get_setting, "llm_weekly_insight_content", "")
+        generated_at = await _db(storage.get_setting, "llm_weekly_insight_generated_at", "")
+        if not content_str:
+            return {"content": None, "generated_at": None, "is_stale": True}
+        try:
+            content = _json.loads(content_str)
+        except Exception:
+            content = None
+        is_stale = True
+        if generated_at:
+            try:
+                gen = datetime.fromisoformat(generated_at)
+                if gen.tzinfo is None:
+                    from zoneinfo import ZoneInfo
+                    from src.config import DEFAULT_TIMEZONE
+                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
+                is_stale = (local_now() - gen).total_seconds() > 8 * 24 * 3600  # stale after 8 days
+            except Exception:
+                pass
+        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
+
+    @app.get("/api/analytics/insight/monthly")
+    async def get_monthly_insight(storage=Depends(_get_storage)):
+        import json as _json
+        content_str = await _db(storage.get_setting, "llm_monthly_insight_content", "")
+        generated_at = await _db(storage.get_setting, "llm_monthly_insight_generated_at", "")
+        if not content_str:
+            return {"content": None, "generated_at": None, "is_stale": True}
+        try:
+            content = _json.loads(content_str)
+        except Exception:
+            content = None
+        is_stale = True
+        if generated_at:
+            try:
+                gen = datetime.fromisoformat(generated_at)
+                if gen.tzinfo is None:
+                    from zoneinfo import ZoneInfo
+                    from src.config import DEFAULT_TIMEZONE
+                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
+                is_stale = (local_now() - gen).total_seconds() > 35 * 24 * 3600  # stale after 35 days
+            except Exception:
+                pass
+        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
+
     @app.get("/api/settings")
     async def get_settings(storage=Depends(_get_storage)):
         return {
@@ -732,6 +790,7 @@ def create_dashboard_app(
             "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
             "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
+            "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
             "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 
@@ -793,6 +852,13 @@ def create_dashboard_app(
             else:
                 validated["subscriptions_enabled"] = "true" if val else "false"
 
+        if "recurring_enabled" in body:
+            val = body["recurring_enabled"]
+            if not isinstance(val, bool):
+                errors["recurring_enabled"] = "must be a boolean"
+            else:
+                validated["recurring_enabled"] = "true" if val else "false"
+
         if "category_colors_snapped_v2" in body:
             validated["category_colors_snapped_v2"] = str(body["category_colors_snapped_v2"])
 
@@ -813,6 +879,7 @@ def create_dashboard_app(
             "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
             "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
+            "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
             "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 

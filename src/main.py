@@ -237,8 +237,13 @@ def init_db(db_path: str) -> sqlite3.Connection:
         ("goals_enabled", "false"),
         ("trips_enabled", "false"),
         ("subscriptions_enabled", "false"),
+        ("recurring_enabled", "false"),
         ("llm_insight_content", ""),
         ("llm_insight_generated_at", ""),
+        ("llm_weekly_insight_content", ""),
+        ("llm_weekly_insight_generated_at", ""),
+        ("llm_monthly_insight_content", ""),
+        ("llm_monthly_insight_generated_at", ""),
     ]
     for key, value in defaults:
         conn.execute(
@@ -451,6 +456,7 @@ def main():
         admin_storage=admin_storage,
         exchange_service=exchange_service,
         host_base_url=dashboard_url,
+        llm_service=llm_service,
     )
 
     # Admin app (user management)

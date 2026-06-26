@@ -326,6 +326,16 @@ class TelegramBotService:
             f"*Weekly Summary ({start_date} to {end_date})*", summary, start_date, end_date, storage=_storage
         )
 
+    def format_monthly_summary(self, start_date: str, end_date: str, storage=None) -> str:
+        _storage = storage if storage is not None else self.storage
+        summary = _storage.get_spending_summary(start_date=start_date, end_date=end_date)
+        if summary["total"] == 0:
+            return "No transactions this month"
+        label = datetime.strptime(start_date, "%Y-%m-%d").strftime("%B %Y")
+        return self._build_summary_with_transactions(
+            f"*Monthly Summary — {label}*", summary, start_date, end_date, storage=_storage
+        )
+
     async def _delete_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
         if ctx is None:

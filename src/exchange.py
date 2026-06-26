@@ -5,6 +5,8 @@ from typing import Optional
 
 import httpx
 
+from src.config import local_now
+
 logger = logging.getLogger(__name__)
 
 CURRENCY_CODES = {
@@ -35,7 +37,7 @@ class ExchangeRateService:
     def _is_cache_stale(self) -> bool:
         if not self._rates_fetched_at:
             return True
-        return datetime.now() - self._rates_fetched_at > timedelta(hours=self.cache_hours)
+        return local_now() - self._rates_fetched_at > timedelta(hours=self.cache_hours)
 
     def _fetch_rates(self) -> dict[str, float]:
         try:
@@ -47,7 +49,7 @@ class ExchangeRateService:
             # 1 SGD buys 0.58 GBP). We need "SGD per 1 unit of foreign currency"
             # (i.e. the inverse) so that amount * exchange_rate gives SGD value.
             self._rates = {k: (1.0 / v if v else 1.0) for k, v in rates.items()}
-            self._rates_fetched_at = datetime.now()
+            self._rates_fetched_at = local_now()
             self.using_fallback = False
             self.last_fetch_error = None
             logger.info("Fetched exchange rates: %d currencies", len(rates))
@@ -55,7 +57,7 @@ class ExchangeRateService:
         except Exception as e:
             # Always update the timestamp on failure so _is_cache_stale() respects
             # the cache window and we don't retry on every single get_rate() call.
-            self._rates_fetched_at = datetime.now()
+            self._rates_fetched_at = local_now()
             self.using_fallback = True
             self.last_fetch_error = str(e)
             logger.warning("Failed to fetch exchange rates: %s. Using fallback.", e)

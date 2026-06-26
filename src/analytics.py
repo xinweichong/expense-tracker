@@ -49,8 +49,8 @@ def _query_total(conn: sqlite3.Connection, start: str, end: str, category: str |
     query = """
         SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
         FROM transactions
-        WHERE type = 'expense'
-          AND transaction_date >= ? AND transaction_date <= ?
+        WHERE (type IS NULL OR type = 'expense')
+          AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
     """
     params: list[Any] = [start, end]
     if category:
@@ -102,9 +102,9 @@ def get_category_comparison(
 
     # Get all categories with spending in either period
     categories = conn.execute(
-        """SELECT DISTINCT category FROM transactions 
+        """SELECT DISTINCT category FROM transactions
            WHERE type='expense' AND category IS NOT NULL
-             AND transaction_date >= ? AND transaction_date <= ?""",
+             AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?""",
         [prev_start, end],
     ).fetchall()
 
@@ -144,7 +144,7 @@ def get_top_merchants(
         FROM transactions
         WHERE (type IS NULL OR type = 'expense')
           AND merchant IS NOT NULL
-          AND transaction_date >= ? AND transaction_date <= ?
+          AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
         GROUP BY merchant
         ORDER BY total DESC
         LIMIT ?
@@ -308,7 +308,7 @@ def generate_summary(
     total_spent = _query_total(conn, start, end)
 
     count_row = conn.execute(
-        "SELECT COUNT(*) as cnt FROM transactions WHERE type='expense' AND transaction_date >= ? AND transaction_date <= ?",
+        "SELECT COUNT(*) as cnt FROM transactions WHERE type='expense' AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?",
         [start, end],
     ).fetchone()
 
@@ -317,7 +317,7 @@ def generate_summary(
         SELECT category, ROUND(SUM(amount * exchange_rate), 2) as total
         FROM transactions
         WHERE type='expense' AND category IS NOT NULL
-          AND transaction_date >= ? AND transaction_date <= ?
+          AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
         GROUP BY category
         ORDER BY total DESC LIMIT 1
         """,
@@ -328,7 +328,7 @@ def generate_summary(
         """
         SELECT merchant, amount, currency, category, transaction_date
         FROM transactions
-        WHERE type='expense' AND transaction_date >= ? AND transaction_date <= ?
+        WHERE type='expense' AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
         ORDER BY amount * exchange_rate DESC LIMIT 1
         """,
         [start, end],
@@ -349,7 +349,7 @@ def generate_summary(
         )
         SELECT COUNT(DISTINCT f.merchant) as cnt
         FROM first_seen f
-        WHERE f.first_date >= ? AND f.first_date <= ?
+        WHERE DATE(f.first_date) >= ? AND DATE(f.first_date) <= ?
         """,
         [start, end],
     ).fetchone()

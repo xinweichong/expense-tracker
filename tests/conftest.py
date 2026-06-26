@@ -163,6 +163,11 @@ def in_memory_db():
     );
 
     INSERT OR IGNORE INTO app_settings (key, value) VALUES ('subscriptions_enabled', 'false');
+    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('recurring_enabled', 'false');
+    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('llm_weekly_insight_content', '');
+    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('llm_weekly_insight_generated_at', '');
+    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('llm_monthly_insight_content', '');
+    INSERT OR IGNORE INTO app_settings (key, value) VALUES ('llm_monthly_insight_generated_at', '');
     """
     conn.executescript(schema)
     yield conn

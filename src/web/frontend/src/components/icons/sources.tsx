@@ -10,6 +10,18 @@ export const SOURCE_LABELS: Record<string, string> = {
   cash: '$',
 };
 
+export const SOURCE_DISPLAY_LABELS: Record<string, string> = {
+  dbs_paylah:      'DBS PayLah!',
+  uob_paynow:      'UOB PayNow',
+  uob_paynow_sent: 'UOB PayNow Sent',
+  uob_card:        'UOB Card',
+  uob_transfer:    'UOB Transfer',
+  uob_nets:        'UOB NETS QR',
+  apple_wallet:    'Apple Wallet',
+  manual:          'Manual',
+  cash:            'Cash',
+};
+
 export function SourceGlyph({ source }: { source: string }) {
   const label = SOURCE_LABELS[source] ?? '·';
   return (

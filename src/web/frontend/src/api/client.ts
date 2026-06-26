@@ -214,6 +214,17 @@ export interface LLMInsight {
   is_stale: boolean;
 }
 
+export interface RecurringTransaction {
+  id: number;
+  merchant: string;
+  avg_amount: number;
+  frequency: string;
+  category: string;
+  first_seen: string;
+  last_seen: string;
+  occurrences: number;
+}
+
 export interface CurrentUser {
   username: string;
   gmail_connected: boolean;
@@ -399,6 +410,10 @@ export const api = {
   getAnalyticsInsight: () =>
     request<LLMInsight>('/api/analytics/insight'),
 
+  getWeeklyInsight: () => request<LLMInsight>('/api/analytics/insight/weekly'),
+  getMonthlyInsight: () => request<LLMInsight>('/api/analytics/insight/monthly'),
+  getRecurring: () => request<RecurringTransaction[]>('/api/recurring'),
+
   // Merchant Intelligence
   getMerchantIntelligenceList: (params?: {
     sort_by?: 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name';
@@ -468,6 +483,7 @@ export const api = {
       goals_enabled: boolean;
       trips_enabled: boolean;
       subscriptions_enabled: boolean;
+      recurring_enabled: boolean;
     }>('/api/settings'),
 
   updateSettings: (data: {
@@ -477,6 +493,7 @@ export const api = {
     goals_enabled?: boolean;
     trips_enabled?: boolean;
     subscriptions_enabled?: boolean;
+    recurring_enabled?: boolean;
   }) =>
     request<{
       anomaly_multiplier: number;
@@ -485,6 +502,7 @@ export const api = {
       goals_enabled: boolean;
       trips_enabled: boolean;
       subscriptions_enabled: boolean;
+      recurring_enabled: boolean;
     }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),

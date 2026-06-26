@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api, type BudgetProgress, type Category, type GoalProgress, type Trip } from '@/api/client';
+import { api, type BudgetProgress, type Category, type GoalProgress, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -35,7 +35,7 @@ function SavingsOverviewCard() {
         </div>
         <div>
           <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Toward Goals</p>
-          <p className="text-lg font-semibold text-accent">${overview.allocated_to_goals.toFixed(0)}</p>
+          <p className="text-lg font-semibold text-teal">${overview.allocated_to_goals.toFixed(0)}</p>
           <p className="text-xs text-muted font-mono">manually added</p>
         </div>
         <div>
@@ -100,7 +100,7 @@ function BudgetRow({
                 onChange={(e) => setInputVal(e.target.value)}
                 className={cn('input-field', 'w-24 !py-1 !text-xs')}
               />
-              <button onClick={handleSave} className="text-xs text-accent hover:text-accent/80">Save</button>
+              <button onClick={handleSave} className="text-xs text-teal hover:text-teal/80">Save</button>
               <button onClick={() => setEditing(false)} className="text-xs text-muted hover:text-foreground">Cancel</button>
             </>
           ) : (
@@ -313,6 +313,17 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
   const { color: goalColor } = getGoalTone(g.percent);
   const isComplete = g.status === 'completed' || g.percent >= 100;
 
+  // Compute once and reuse in both sparkline bar and label rows
+  const sparklineData = (() => {
+    const byMonth = new Map<string, number>();
+    for (const c of g.contributions) {
+      byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount);
+    }
+    return [...byMonth.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6);
+  })();
+
   if (editing) {
     return (
       <div className="py-4 border-b border-border last:border-b-0 space-y-2">
@@ -400,15 +411,8 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
         <div className="space-y-1">
           <div className="flex items-end gap-1 h-8">
             {(() => {
-              const byMonth = new Map<string, number>();
-              for (const c of g.contributions) {
-                byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount);
-              }
-              const last6 = [...byMonth.entries()]
-                .sort(([a], [b]) => a.localeCompare(b))
-                .slice(-6);
-              const maxAmt = Math.max(...last6.map(([, v]) => v), 1);
-              return last6.map(([month, total]) => {
+              const maxAmt = Math.max(...sparklineData.map(([, v]) => v), 1);
+              return sparklineData.map(([month, total]) => {
                 const h = Math.max(4, (total / maxAmt) * 32);
                 const label = new Date(month + '-01').toLocaleString('en', { month: 'short' });
                 return (
@@ -424,23 +428,14 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
             })()}
           </div>
           <div className="flex gap-1">
-            {(() => {
-              const byMonth = new Map<string, number>();
-              for (const c of g.contributions) {
-                byMonth.set(c.month, (byMonth.get(c.month) ?? 0) + c.amount);
-              }
-              const last6 = [...byMonth.entries()]
-                .sort(([a], [b]) => a.localeCompare(b))
-                .slice(-6);
-              return last6.map(([month]) => {
-                const label = new Date(month + '-01').toLocaleString('en', { month: 'short' });
-                return (
-                  <div key={month} className="flex-1 text-center text-[10px] text-muted leading-none">
-                    {label}
-                  </div>
-                );
-              });
-            })()}
+            {sparklineData.map(([month]) => {
+              const label = new Date(month + '-01').toLocaleString('en', { month: 'short' });
+              return (
+                <div key={month} className="flex-1 text-center text-[10px] text-muted leading-none">
+                  {label}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -475,7 +470,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                   <button
                     onClick={handleSaveContrib}
                     disabled={updateContribMutation.isPending}
-                    className="text-accent hover:text-accent/80 disabled:opacity-40"
+                    className="text-teal hover:text-teal/80 disabled:opacity-40"
                     title="Save"
                   >
                     <Check className="w-3.5 h-3.5" />
@@ -709,6 +704,56 @@ function GoalsSection() {
           >
             {createMutation.isPending ? 'Creating…' : 'Create Goal'}
           </button>
+        </div>
+      )}
+    </PageCard>
+  );
+}
+
+// ── Recurring ─────────────────────────────────────────────────────────────────
+
+function RecurringSection() {
+  const { data: recurring = [], isLoading } = useQuery({
+    queryKey: ['recurring'],
+    queryFn: () => api.getRecurring(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const frequencyBadgeClass = (frequency: string) => {
+    if (frequency === 'monthly') return 'bg-teal/10 text-teal';
+    if (frequency === 'weekly') return 'bg-info/10 text-info';
+    return 'bg-foreground/10 text-muted';
+  };
+
+  return (
+    <PageCard title="Recurring Transactions">
+      {isLoading ? (
+        <Skeleton className="h-24" />
+      ) : recurring.length === 0 ? (
+        <p className="text-muted text-sm py-4 text-center">
+          No recurring patterns detected yet — patterns appear after 2+ consistent transactions
+        </p>
+      ) : (
+        <div className="divide-y divide-border">
+          {recurring.map((r: RecurringTransaction) => (
+            <div key={r.id} className="flex items-center gap-3 py-3">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-foreground/10 text-foreground shrink-0">
+                {r.category}
+              </span>
+              <span className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">
+                {r.merchant}
+              </span>
+              <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0', frequencyBadgeClass(r.frequency))}>
+                {r.frequency}
+              </span>
+              <span className="text-sm font-mono text-foreground shrink-0">
+                ~${r.avg_amount.toFixed(0)}/{r.frequency === 'weekly' ? 'wk' : r.frequency === 'biweekly' ? '2wk' : 'mo'}
+              </span>
+              <span className="text-xs text-muted font-mono shrink-0 hidden sm:block">
+                {r.last_seen}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </PageCard>
@@ -1036,11 +1081,11 @@ export function FinancePage() {
 
   if (!settings) return null;
 
-  if (!settings.budgets_enabled && !settings.goals_enabled && !settings.trips_enabled && !settings.subscriptions_enabled) {
+  if (!settings.budgets_enabled && !settings.goals_enabled && !settings.trips_enabled && !settings.subscriptions_enabled && !settings.recurring_enabled) {
     return (
       <div className="p-6 flex flex-col items-center justify-center min-h-48 text-center gap-3">
         <p className="text-muted text-sm">
-          Enable Budgets, Goals, Trips, or Subscriptions in Settings to get started.
+          Enable Budgets, Goals, Trips, Subscriptions, or Recurring in Settings to get started.
         </p>
         <button
           onClick={() => navigate('/settings')}
@@ -1070,7 +1115,7 @@ export function FinancePage() {
       </div>
 
       {/* ── Left panel: expense-side (budgets + subscriptions + trips) ── */}
-      {(settings.budgets_enabled || settings.subscriptions_enabled || settings.trips_enabled) ? (
+      {(settings.budgets_enabled || settings.subscriptions_enabled || settings.trips_enabled || settings.recurring_enabled) ? (
         <div
           className="area-left grid-scroll-panel space-y-4"
           style={!settings.goals_enabled ? { gridColumn: '1 / -1' } : undefined}
@@ -1126,6 +1171,7 @@ export function FinancePage() {
               onSelectSub={setSelectedSubId}
             />
           )}
+          {settings.recurring_enabled && <RecurringSection />}
           {settings.trips_enabled && <TripsSection />}
         </div>
       ) : (

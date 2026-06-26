@@ -1322,7 +1322,7 @@ class Storage:
         count = len(rows)
 
         start_dt = datetime.strptime(trip["start_date"], "%Y-%m-%d")
-        end_str = trip.get("end_date") or datetime.now().strftime("%Y-%m-%d")
+        end_str = trip.get("end_date") or local_now().strftime("%Y-%m-%d")
         end_dt = datetime.strptime(end_str, "%Y-%m-%d")
         days = max(1, (end_dt - start_dt).days + 1)
 
@@ -1358,7 +1358,6 @@ class Storage:
 
     # ── Subscriptions ──────────────────────────────────────────────
 
-    @_locked
     @_locked
     def create_subscription(
         self, merchant: str, frequency: str,
@@ -1619,6 +1618,13 @@ class Storage:
                AND (type IS NULL OR type = 'expense')
                ORDER BY transaction_date DESC""",
             (merchant, f"-{days}"),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @_locked
+    def get_recurring_transactions(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM recurring_transactions ORDER BY last_seen DESC"
         ).fetchall()
         return [dict(r) for r in rows]
 
