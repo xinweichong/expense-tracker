@@ -354,7 +354,7 @@ export function OverviewPage() {
 
         {/* Hero spend card */}
         <motion.div variants={staggerItemVariants}>
-          <HeroCard title={`This Month · Day ${dayOfMonth} of ${daysInMonth}`}>
+          <HeroCard title={`This Month · Day ${dayOfMonth} of ${daysInMonth}`} glowColor="warm">
             {/* Big spend figure */}
             <div
               className="text-4xl md:text-5xl font-bold tracking-tight mb-1"
