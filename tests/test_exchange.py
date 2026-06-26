@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime
 
+from src.config import local_now
 from src.exchange import ExchangeRateService, FALLBACK_RATES
 
 
@@ -30,7 +31,7 @@ class TestExchangeRateService:
     def test_fallback_rate_used_when_no_fetch(self):
         svc = ExchangeRateService()
         svc._rates = {}  # Empty cache, no fetch
-        svc._rates_fetched_at = datetime.now()  # Not stale
+        svc._rates_fetched_at = local_now()  # Not stale
         rate = svc.get_rate("THB")
         assert rate == FALLBACK_RATES["THB"]
 
@@ -61,7 +62,7 @@ class TestExchangeRateService:
     def test_get_rate_unknown_currency_uses_fallback(self):
         svc = ExchangeRateService()
         svc._rates = {}
-        svc._rates_fetched_at = datetime.now()
+        svc._rates_fetched_at = local_now()
         rate = svc.get_rate("USD")
         assert rate == FALLBACK_RATES["USD"]
 
@@ -71,7 +72,7 @@ class TestExchangeRateService:
 
     def test_cache_not_stale_after_set(self):
         svc = ExchangeRateService()
-        svc._rates_fetched_at = datetime.now()
+        svc._rates_fetched_at = local_now()
         assert svc._is_cache_stale() is False
 
     def test_get_rate_triggers_fetch_when_stale(self):
@@ -81,7 +82,7 @@ class TestExchangeRateService:
         def mock_fetch():
             fetched.append(True)
             svc._rates = FALLBACK_RATES
-            svc._rates_fetched_at = datetime.now()
+            svc._rates_fetched_at = local_now()
             return FALLBACK_RATES
 
         svc._fetch_rates = mock_fetch
