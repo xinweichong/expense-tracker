@@ -266,3 +266,180 @@ async def test_export_transactions_respects_category_filter(client, in_memory_db
     resp = await client.get("/api/transactions/export?category=Dining")
     lines = resp.text.strip().split("\n")
     assert len(lines) == 3  # 1 header + 2 Dining rows
+
+
+class TestBudgetAPI:
+    @pytest.mark.asyncio
+    async def test_create_budget_returns_progress(self, client):
+        resp = await client.post("/api/budgets", json={
+            "amount": 500.0,
+            "period": "monthly",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "id" in data
+        assert data["period"] == "monthly"
+        assert data["amount"] == 500.0
+
+    @pytest.mark.asyncio
+    async def test_list_budget_progress(self, client):
+        await client.post("/api/budgets", json={"amount": 300.0, "period": "monthly"})
+        resp = await client.get("/api/budgets/progress")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        # The progress endpoint returns budget_amount, label, period, id
+        item = data[0]
+        assert "id" in item
+        assert "label" in item
+        assert "period" in item
+        assert "budget_amount" in item
+
+    @pytest.mark.asyncio
+    async def test_update_budget(self, client):
+        create_resp = await client.post("/api/budgets", json={
+            "amount": 400.0,
+            "period": "monthly",
+        })
+        assert create_resp.status_code == 200
+        budget_id = create_resp.json()["id"]
+
+        update_resp = await client.put(f"/api/budgets/{budget_id}", json={"amount": 600.0})
+        assert update_resp.status_code == 200
+        data = update_resp.json()
+        assert data["amount"] == 600.0
+
+    @pytest.mark.asyncio
+    async def test_delete_budget(self, client):
+        create_resp = await client.post("/api/budgets", json={
+            "amount": 200.0,
+            "period": "weekly",
+        })
+        assert create_resp.status_code == 200
+        budget_id = create_resp.json()["id"]
+
+        delete_resp = await client.delete(f"/api/budgets/{budget_id}")
+        assert delete_resp.status_code == 200
+
+        # Confirm removed from progress list
+        progress_resp = await client.get("/api/budgets/progress")
+        assert progress_resp.status_code == 200
+        ids = [b["id"] for b in progress_resp.json()]
+        assert budget_id not in ids
+
+    @pytest.mark.asyncio
+    async def test_create_budget_missing_amount_returns_400(self, client):
+        resp = await client.post("/api/budgets", json={"period": "monthly"})
+        assert resp.status_code == 400
+
+
+class TestGoalAPI:
+    @pytest.mark.asyncio
+    async def test_create_goal(self, client):
+        resp = await client.post("/api/goals", json={
+            "name": "Emergency Fund",
+            "target_amount": 10000.0,
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "Emergency Fund"
+        assert data["target_amount"] == 10000.0
+
+    @pytest.mark.asyncio
+    async def test_contribute_to_goal(self, client):
+        create_resp = await client.post("/api/goals", json={
+            "name": "Vacation Fund",
+            "target_amount": 5000.0,
+        })
+        assert create_resp.status_code == 200
+        goal_id = create_resp.json()["id"]
+
+        contrib_resp = await client.post(f"/api/goals/{goal_id}/contribute", json={"amount": 500.0})
+        assert contrib_resp.status_code == 200
+        data = contrib_resp.json()
+        assert data["saved_amount"] == 500.0
+
+    @pytest.mark.asyncio
+    async def test_delete_goal(self, client):
+        create_resp = await client.post("/api/goals", json={
+            "name": "Car Fund",
+            "target_amount": 20000.0,
+        })
+        assert create_resp.status_code == 200
+        goal_id = create_resp.json()["id"]
+
+        delete_resp = await client.delete(f"/api/goals/{goal_id}")
+        assert delete_resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_create_goal_missing_name_returns_400(self, client):
+        resp = await client.post("/api/goals", json={"target_amount": 1000.0})
+        assert resp.status_code == 400
+
+
+class TestTripAPI:
+    @pytest.mark.asyncio
+    async def test_create_trip(self, client):
+        resp = await client.post("/api/trips", json={
+            "name": "Bangkok Trip",
+            "start_date": "2026-07-01",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "Bangkok Trip"
+        assert data["status"] == "inactive"
+
+    @pytest.mark.asyncio
+    async def test_activate_trip(self, client):
+        create_resp = await client.post("/api/trips", json={
+            "name": "Japan Trip",
+            "start_date": "2026-08-01",
+        })
+        assert create_resp.status_code == 200
+        trip_id = create_resp.json()["id"]
+
+        activate_resp = await client.post(f"/api/trips/{trip_id}/activate")
+        assert activate_resp.status_code == 200
+        data = activate_resp.json()
+        assert data["status"] == "active"
+
+    @pytest.mark.asyncio
+    async def test_delete_trip(self, client):
+        create_resp = await client.post("/api/trips", json={
+            "name": "Europe Trip",
+            "start_date": "2026-09-01",
+        })
+        assert create_resp.status_code == 200
+        trip_id = create_resp.json()["id"]
+
+        delete_resp = await client.delete(f"/api/trips/{trip_id}")
+        assert delete_resp.status_code == 200
+
+
+class TestRecurringAPI:
+    @pytest.mark.asyncio
+    async def test_recurring_returns_list(self, client):
+        resp = await client.get("/api/recurring")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+
+
+class TestSettingsFeatureFlags:
+    @pytest.mark.asyncio
+    async def test_recurring_enabled_in_settings(self, client):
+        resp = await client.get("/api/settings")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "recurring_enabled" in data
+        assert data["recurring_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_set_recurring_enabled(self, client):
+        put_resp = await client.put("/api/settings", json={"recurring_enabled": True})
+        assert put_resp.status_code == 200
+
+        get_resp = await client.get("/api/settings")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["recurring_enabled"] is True
