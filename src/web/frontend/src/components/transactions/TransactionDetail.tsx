@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { X, Pencil, Trash2, Check, ExternalLink } from 'lucide-react';
-import { SOURCE_LABELS } from '@/components/icons/sources';
+import { SOURCE_DISPLAY_LABELS } from '@/components/icons/sources';
 
 export function TransactionDetail({
   transaction: tx,
@@ -100,7 +100,7 @@ export function TransactionDetail({
 
   const sourceLabel = isAppleWallet && tx.description
     ? tx.description
-    : (SOURCE_LABELS[tx.source ?? ''] ?? tx.source ?? '');
+    : (SOURCE_DISPLAY_LABELS[tx.source ?? ''] ?? tx.source ?? '');
 
   return (
     <div className="flex flex-col h-full">
