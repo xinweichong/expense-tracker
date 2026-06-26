@@ -47,37 +47,26 @@ export function ChartCard({ title, action, children, className }: ChartCardProps
 }
 
 // ── HeroCard ─────────────────────────────────────────────────────────────────
+type GlowColor = 'warm' | 'teal' | 'coral';
+
+const GLOW_CLASS: Record<GlowColor, string> = {
+  warm:  'hero-glow-warm',
+  teal:  'hero-glow-teal',
+  coral: 'hero-glow-coral',
+};
+
 interface HeroCardProps {
   title: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  glowColor?: GlowColor;
 }
 
-const HERO_CARD_STYLE: CSSProperties = {
-  borderRadius: '24px',
-  boxShadow: '0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34)',
-  background:
-    'radial-gradient(120% 100% at 100% 0%, rgba(251,146,60,.08) 0%, rgba(11,11,20,0) 50%), #161624',
-  position: 'relative',
-  overflow: 'hidden',
-  padding: '32px',
-};
-
-const HERO_CARD_HAIRLINE_STYLE: CSSProperties = {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  height: '1px',
-  background:
-    'linear-gradient(90deg, transparent, rgba(251,146,60,.32) 30%, rgba(255,107,107,.32) 70%, transparent)',
-};
-
-export function HeroCard({ title, action, children, className }: HeroCardProps) {
+export function HeroCard({ title, action, children, className, glowColor = 'warm' }: HeroCardProps) {
   return (
-    <div style={HERO_CARD_STYLE} className={cn(className)}>
-      <div style={HERO_CARD_HAIRLINE_STYLE} aria-hidden />
+    <div className={cn('rounded-[24px] p-8', GLOW_CLASS[glowColor], className)}>
+      <div className="hero-hairline" aria-hidden />
       <div className="flex flex-row items-center justify-between gap-2 mb-3">
         <span className="text-xs uppercase tracking-[0.22em] text-muted font-semibold font-mono">
           {title}
