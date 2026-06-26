@@ -277,7 +277,7 @@ export function OverviewPage() {
         className={cn(
           'flex-1 px-2.5 py-1 text-xs transition-colors',
           trendMode === 'total'
-            ? 'bg-primary text-primary-foreground'
+            ? 'bg-foreground/10 text-foreground font-medium'
             : 'text-muted hover:text-foreground',
         )}
       >
@@ -288,7 +288,7 @@ export function OverviewPage() {
         className={cn(
           'flex-1 px-2.5 py-1 text-xs transition-colors border-l border-border',
           trendMode === 'category'
-            ? 'bg-primary text-primary-foreground'
+            ? 'bg-foreground/10 text-foreground font-medium'
             : 'text-muted hover:text-foreground',
         )}
       >
@@ -324,16 +324,17 @@ export function OverviewPage() {
             </Button>
             <span className="text-sm text-muted min-w-[120px] text-center">{getRangeLabel(date, period)}</span>
           </div>
-          <div className="flex rounded-lg border border-border overflow-hidden flex-shrink-0">
-            {PERIOD_OPTIONS.map((p) => (
+          <div className="flex rounded-md border border-border overflow-hidden flex-shrink-0">
+            {PERIOD_OPTIONS.map((p, i) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
                 className={cn(
-                  'px-3 py-1.5 text-sm capitalize transition-colors whitespace-nowrap flex-shrink-0',
+                  'px-2.5 py-1 text-xs capitalize transition-colors whitespace-nowrap flex-shrink-0',
+                  i > 0 && 'border-l border-border',
                   period === p
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted hover:text-foreground hover:bg-accent',
+                    ? 'bg-foreground/10 text-foreground font-medium'
+                    : 'text-muted hover:text-foreground',
                 )}
               >
                 {p}

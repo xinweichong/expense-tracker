@@ -634,12 +634,9 @@ function GoalsSection() {
     <PageCard
       title="Goals"
       action={
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="text-xs px-2.5 py-1 border border-border rounded-md text-muted hover:text-foreground transition-colors"
-        >
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowAddForm(!showAddForm)}>
           {showAddForm ? 'Cancel' : '+ Add Goal'}
-        </button>
+        </Button>
       }
     >
       {isLoading ? (
@@ -1134,12 +1131,9 @@ export function FinancePage() {
             <PageCard
               title="Budgets"
               action={
-                <button
-                  onClick={() => setShowAddForm(!showAddForm)}
-                  className="text-xs px-2.5 py-1 border border-border rounded-md text-muted hover:text-foreground transition-colors"
-                >
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowAddForm(!showAddForm)}>
                   {showAddForm ? 'Cancel' : '+ Add Budget'}
-                </button>
+                </Button>
               }
             >
               {isLoading ? (
