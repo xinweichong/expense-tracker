@@ -95,15 +95,17 @@ function AIInsightsCard() {
   const activeTab = tabs.find(t => t.key === tab)!;
 
   const tabSelector = (
-    <div className="flex gap-1">
-      {tabs.map(t => (
+    <div className="flex rounded-md border border-border overflow-hidden">
+      {tabs.map((t, i) => (
         <button
           key={t.key}
           onClick={() => setTab(t.key)}
-          className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${
+          className={`px-2.5 py-1 text-xs transition-colors ${
+            i > 0 ? 'border-l border-border' : ''
+          } ${
             tab === t.key
-              ? 'border-foreground text-foreground bg-foreground/10'
-              : 'border-border text-muted hover:text-foreground'
+              ? 'bg-foreground/10 text-foreground font-medium'
+              : 'text-muted hover:text-foreground'
           }`}
         >
           {t.label}
