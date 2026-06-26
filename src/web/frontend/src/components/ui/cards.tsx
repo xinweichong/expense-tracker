@@ -1,8 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { motion } from 'framer-motion';
-import { springs } from '@/lib/animations';
+import { Card, CardContent } from '@/components/ui/card';
 
 // ── PageCard ──────────────────────────────────────────────────────────────────
 interface PageCardProps {
@@ -47,7 +45,7 @@ export function ChartCard({ title, action, children, className }: ChartCardProps
 }
 
 // ── HeroCard ─────────────────────────────────────────────────────────────────
-type GlowColor = 'warm' | 'teal' | 'coral';
+export type GlowColor = 'warm' | 'teal' | 'coral';
 
 const GLOW_CLASS: Record<GlowColor, string> = {
   warm:  'hero-glow-warm',
