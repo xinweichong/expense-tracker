@@ -783,13 +783,14 @@ class TelegramBotService:
         )
         ctx.storage.auto_assign_to_active_trip(tx_id)
 
-        sgd_equivalent = parsed["amount"] * exchange_rate
-        icon = ctx.storage.get_category_icon_map().get(category, "")
-        cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
-        msg = f"Captured. *{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} {currency}` _{tx_id}_"
+        context_line = self._build_context_line(category, parsed["merchant"], parsed["amount"])
+        msg = f"cash, caught. [${parsed['amount']:.2f} · {parsed['merchant']}]"
         if currency != "SGD":
-            msg += f"\n~ SGD `${sgd_equivalent:.2f}`"
-        await update.message.reply_text(msg, parse_mode="Markdown")
+            sgd_equivalent = parsed["amount"] * exchange_rate
+            msg += f"\n~ SGD ${sgd_equivalent:.2f}"
+        if context_line:
+            msg += f"\n{context_line}"
+        await update.message.reply_text(msg)
 
     async def _cash(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
@@ -832,10 +833,11 @@ class TelegramBotService:
             transaction_date=tx_date,
         )
         ctx.storage.auto_assign_to_active_trip(tx_id)
-        icon = ctx.storage.get_category_icon_map().get(category, "")
-        cat_display = f"{icon} {self._escape_md(category)}" if icon else self._escape_md(category)
-        msg = f"Captured. *{self._escape_md(parsed['merchant'])}* · {cat_display} · `${parsed['amount']:.2f} SGD` _{tx_id}_"
-        await update.message.reply_text(msg, parse_mode="Markdown")
+        context_line = self._build_context_line(category, parsed["merchant"], parsed["amount"])
+        msg = f"cash, caught. [${parsed['amount']:.2f} · {parsed['merchant']}]"
+        if context_line:
+            msg += f"\n{context_line}"
+        await update.message.reply_text(msg)
 
     async def _recategorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)

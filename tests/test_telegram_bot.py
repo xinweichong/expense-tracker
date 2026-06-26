@@ -1002,3 +1002,107 @@ class TestStartCommand:
         call_text = update.message.reply_text.call_args[0][0]
         assert "/start" in call_text
 
+
+class TestAddCommandConfirmation:
+    @pytest.mark.asyncio
+    async def test_add_uses_brand_hook_format(self, bot_service, in_memory_db):
+        """_add confirmation should use 'cash, caught. [$amount · merchant]' format."""
+        bot_service.storage.get_category_icon_map = MagicMock(return_value={})
+        bot_service.storage.auto_assign_to_active_trip = MagicMock()
+        bot_service._build_context_line = MagicMock(return_value="")
+
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+        context.args = ["12.50", "Starbucks"]
+
+        await bot_service._add(update, context)
+
+        update.message.reply_text.assert_called_once()
+        text = update.message.reply_text.call_args[0][0]
+        assert text.startswith("cash, caught.")
+        assert "$12.50" in text
+        assert "Starbucks" in text
+        # No parse_mode="Markdown" on the new format
+        call_kwargs = update.message.reply_text.call_args.kwargs
+        assert call_kwargs.get("parse_mode") is None
+
+    @pytest.mark.asyncio
+    async def test_add_appends_context_line_when_present(self, bot_service, in_memory_db):
+        """If _build_context_line returns a note it should appear after a newline."""
+        bot_service.storage.get_category_icon_map = MagicMock(return_value={})
+        bot_service.storage.auto_assign_to_active_trip = MagicMock()
+        bot_service._build_context_line = MagicMock(return_value="Budget 82% used — $45 left this month.")
+
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+        context.args = ["12.50", "Starbucks"]
+
+        await bot_service._add(update, context)
+
+        text = update.message.reply_text.call_args[0][0]
+        assert "cash, caught." in text
+        assert "Budget 82% used" in text
+        assert text.index("cash, caught.") < text.index("Budget 82% used")
+
+    @pytest.mark.asyncio
+    async def test_add_no_context_line_no_trailing_newline(self, bot_service, in_memory_db):
+        """When _build_context_line returns '' there should be no trailing newline."""
+        bot_service.storage.get_category_icon_map = MagicMock(return_value={})
+        bot_service.storage.auto_assign_to_active_trip = MagicMock()
+        bot_service._build_context_line = MagicMock(return_value="")
+
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+        context.args = ["5.00", "Toast", "Box"]
+
+        await bot_service._add(update, context)
+
+        text = update.message.reply_text.call_args[0][0]
+        assert not text.endswith("\n")
+        assert "\n" not in text
+
+
+class TestCashCommandConfirmation:
+    @pytest.mark.asyncio
+    async def test_cash_uses_brand_hook_format(self, bot_service, in_memory_db):
+        """_cash confirmation should use 'cash, caught. [$amount · merchant]' format."""
+        bot_service.storage.get_category_icon_map = MagicMock(return_value={})
+        bot_service.storage.auto_assign_to_active_trip = MagicMock()
+        bot_service._build_context_line = MagicMock(return_value="")
+
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+        context.args = ["8.00", "Hawker"]
+
+        await bot_service._cash(update, context)
+
+        update.message.reply_text.assert_called_once()
+        text = update.message.reply_text.call_args[0][0]
+        assert text.startswith("cash, caught.")
+        assert "$8.00" in text
+        assert "Hawker" in text
+        call_kwargs = update.message.reply_text.call_args.kwargs
+        assert call_kwargs.get("parse_mode") is None
+
+    @pytest.mark.asyncio
+    async def test_cash_appends_context_line_when_present(self, bot_service, in_memory_db):
+        """If _build_context_line returns a note it should be appended."""
+        bot_service.storage.get_category_icon_map = MagicMock(return_value={})
+        bot_service.storage.auto_assign_to_active_trip = MagicMock()
+        bot_service._build_context_line = MagicMock(return_value="Hawker — 3× this week.")
+
+        update = MagicMock()
+        update.message.reply_text = AsyncMock()
+        context = MagicMock()
+        context.args = ["4.50", "Hawker"]
+
+        await bot_service._cash(update, context)
+
+        text = update.message.reply_text.call_args[0][0]
+        assert "cash, caught." in text
+        assert "Hawker — 3× this week." in text
+
