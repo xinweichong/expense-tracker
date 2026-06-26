@@ -123,7 +123,7 @@ export function TransactionFilters({
                 key={cat.name}
                 type="button"
                 onClick={() => onCategoryChange(isActive ? 'all' : cat.name)}
-                className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
+                className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap max-w-[20ch] truncate"
                 style={{
                   color: catColor,
                   background: isActive ? `${catColor}33` : `${catColor}12`,
