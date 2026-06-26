@@ -318,10 +318,15 @@ export function AnalyticsPage() {
                   New merchant = first appearance this month.
                 </p>
                 {alerts.anomalies?.map((a: any) => (
-                  <p key={a.id} className="text-sm">
-                    Unusual: <span className="font-medium">{a.merchant}</span>{' '}
-                    {formatCurrency(a.amount)} in {a.category}
-                  </p>
+                  <div key={a.id} className="space-y-0.5">
+                    <p className="text-sm">
+                      Unusual: <span className="font-medium">{a.merchant}</span>{' '}
+                      {formatCurrency(a.amount)} in {a.category}
+                    </p>
+                    {a.explanation && (
+                      <p className="text-xs text-muted italic">{a.explanation}</p>
+                    )}
+                  </div>
                 ))}
                 {alerts.new_merchants?.slice(0, 3).map((m: any) => (
                   <p key={m.merchant} className="text-sm flex items-center gap-2">
