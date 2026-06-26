@@ -458,7 +458,7 @@ Pagination control (only rendered when `totalPages > 1`):
 
 - **Quick-select chips:** `px-2.5 py-1 text-xs rounded-full border transition-colors`. Active: `border-foreground text-foreground bg-foreground/10`. Inactive: `border-border text-muted hover:text-foreground`. "All time" chip is never highlighted active.
 - **Segmented / inline toggle:** Container `flex rounded-md border border-border overflow-hidden`. Active button: `bg-primary text-primary-foreground`. Inactive: `text-muted hover:text-foreground`. Subsequent buttons add `border-l border-border`.
-- **Source labels:** Use the `SOURCE_LABELS` map in `TransactionRow.tsx` for human-readable source display names. Never hardcode source strings in UI text.
+- **Source labels:** Use `SOURCE_DISPLAY_LABELS` from `@/components/icons/sources` for human-readable source display names (e.g. `'DBS PayLah!'`, used in `TransactionDetail.tsx`). `SOURCE_LABELS` contains single-character glyphs for the `SourceGlyph` component and must not be used for readable text. Never hardcode source strings in UI text.
 - **Error feedback:** Always `text-sm text-destructive`, inline below the relevant field or immediately below the submit button.
 - **Loading state:** Replace button label text (e.g. "Saving…"). Never leave the button without visual feedback during async operations.
 
