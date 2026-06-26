@@ -250,6 +250,8 @@ class UserManager:
                 if self._llm_service:
                     _generate_llm_insight(ctx.storage, self._llm_service)
                 bot.notify_daily_digest(username)
+                if bot and ctx:
+                    _check_budget_alerts(ctx.storage, bot, username)
 
         def run_subscriptions():
             if ctx:
@@ -306,6 +308,42 @@ def _monthly_summary(storage, bot) -> str:
     start = now.replace(day=1).strftime("%Y-%m-%d")
     end = now.strftime("%Y-%m-%d")
     return bot.format_monthly_summary(start, end, storage=storage)
+
+
+def _check_budget_alerts(storage, bot, username) -> None:
+    """Send Telegram alert for any budget at warning or over-budget status.
+    Uses app_settings key budget_alert_sent_{id}_{date} to avoid repeat alerts per day.
+    """
+    from src.config import local_now
+    today = local_now().strftime("%Y-%m-%d")
+    try:
+        budgets = storage.get_budget_progress()
+    except Exception:
+        return
+    for b in budgets:
+        if b["status"] not in ("warning", "over_budget"):
+            continue
+        dedup_key = f"budget_alert_sent_{b['id']}_{today}"
+        if storage.get_setting(dedup_key, "") == "1":
+            continue
+        label = b.get("label", b.get("category") or "Overall")
+        if b["status"] == "over_budget":
+            msg = (
+                f"⚠️ *Budget exceeded:* {label}\n"
+                f"Spent *${b['spent']:.2f}* of *${b['budget_amount']:.2f}* "
+                f"({b['percent']:.0f}%)"
+            )
+        else:
+            msg = (
+                f"⚡ *Budget warning:* {label}\n"
+                f"Spent *${b['spent']:.2f}* of *${b['budget_amount']:.2f}* "
+                f"({b['percent']:.0f}%) — approaching limit"
+            )
+        try:
+            bot.notify_text(msg, username)
+            storage.set_setting(dedup_key, "1")
+        except Exception:
+            pass
 
 
 def _generate_llm_insight(storage, llm_service) -> None:
