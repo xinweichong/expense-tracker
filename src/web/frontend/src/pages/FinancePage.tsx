@@ -49,11 +49,27 @@ function SavingsOverviewCard() {
 }
 
 function ProgressBar({ percent, color }: { percent: number; color: string }) {
+  // Determine gradient based on color (budget tone)
+  let gradient = color;
+  if (color === '#FBBF24') {
+    // Honey/warm gradient for active budget
+    gradient = 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)';
+  } else if (color === '#FF6B6B') {
+    // Coral gradient for over budget
+    gradient = 'linear-gradient(90deg, #FF6B6B 0%, #EF4444 100%)';
+  } else if (color === '#FB923C') {
+    // Tangerine gradient for notable
+    gradient = 'linear-gradient(90deg, #FB923C 0%, #EA580C 100%)';
+  } else if (color === '#34D399') {
+    // Mint gradient for calm
+    gradient = 'linear-gradient(90deg, #34D399 0%, #10B981 100%)';
+  }
+
   return (
     <div className="w-full h-2 bg-foreground/10 rounded-full overflow-hidden">
       <motion.div
         className="h-full rounded-full"
-        style={{ background: color }}
+        style={{ background: gradient }}
         initial={{ width: 0 }}
         animate={{ width: `${Math.min(percent, 100)}%` }}
         transition={springs.gentle}
@@ -85,7 +101,7 @@ function BudgetRow({
   const { color } = getBudgetTone(b.percent);
 
   return (
-    <div className="py-3 space-y-1.5 border-b border-border last:border-b-0">
+    <div className={cn('py-3 space-y-1.5 border-b border-border last:border-b-0', 'card-hover')}>
       <div className="flex items-center justify-between">
         <div>
           <span className="text-sm font-medium text-foreground">{b.label}</span>
@@ -379,7 +395,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
   }
 
   const goalCardContent = (
-    <div className={cn('space-y-3', !isComplete && 'py-4 border-b border-border last:border-b-0')}>
+    <div className={cn('space-y-3', !isComplete && 'py-4 border-b border-border last:border-b-0', 'card-hover')}>
       <div className="flex items-start gap-4">
         <ProgressRing percent={g.percent} color={goalColor} />
         <div className="flex-1 min-w-0">
@@ -419,8 +435,11 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                   <div key={month} className="flex-1 flex flex-col items-center gap-0.5">
                     <div
                       title={`${label}: $${total.toFixed(0)}`}
-                      className="w-full rounded-sm bg-primary/60 hover:bg-primary/80 transition-colors"
-                      style={{ height: `${h}px` }}
+                      className="w-full rounded-sm transition-colors"
+                      style={{
+                        height: `${h}px`,
+                        background: 'linear-gradient(180deg, #00D4AA 0%, #00B896 100%)',
+                      }}
                     />
                   </div>
                 );
