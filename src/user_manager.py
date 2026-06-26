@@ -238,11 +238,11 @@ class UserManager:
 
         def weekly():
             if bot and ctx:
-                bot.notify_text(_weekly_summary(ctx.storage), username)
+                bot.notify_text(_weekly_summary(ctx.storage, bot), username)
 
         def monthly():
             if bot and ctx:
-                bot.notify_text(_monthly_summary(ctx.storage), username)
+                bot.notify_text(_monthly_summary(ctx.storage, bot), username)
 
         def daily():
             ctx = self.get(username)
@@ -290,22 +290,22 @@ def _init_user_db(db_path: str) -> sqlite3.Connection:
 # Summary helpers (used by scheduler jobs)
 # ---------------------------------------------------------------------------
 
-def _weekly_summary(storage) -> str:
+def _weekly_summary(storage, bot) -> str:
     from src.config import local_now
     from datetime import timedelta
     end = local_now()
     start = end - timedelta(days=7)
-    total = storage.get_total_spent(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
-    return f"Weekly spending (last 7 days): *S${total:.2f}*"
+    return bot.format_weekly_summary(
+        start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"), storage=storage
+    )
 
 
-def _monthly_summary(storage) -> str:
+def _monthly_summary(storage, bot) -> str:
     from src.config import local_now
     now = local_now()
     start = now.replace(day=1).strftime("%Y-%m-%d")
     end = now.strftime("%Y-%m-%d")
-    total = storage.get_total_spent(start, end)
-    return f"Monthly spending so far: *S${total:.2f}*"
+    return bot.format_monthly_summary(start, end, storage=storage)
 
 
 def _generate_llm_insight(storage, llm_service) -> None:
