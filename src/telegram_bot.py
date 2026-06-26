@@ -331,8 +331,7 @@ class TelegramBotService:
         summary = _storage.get_spending_summary(start_date=start_date, end_date=end_date)
         if summary["total"] == 0:
             return "No transactions this month"
-        from datetime import datetime as _dt
-        label = _dt.strptime(start_date, "%Y-%m-%d").strftime("%B %Y")
+        label = datetime.strptime(start_date, "%Y-%m-%d").strftime("%B %Y")
         return self._build_summary_with_transactions(
             f"*Monthly Summary — {label}*", summary, start_date, end_date, storage=_storage
         )
