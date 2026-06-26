@@ -46,41 +46,6 @@ export function ChartCard({ title, action, children, className }: ChartCardProps
   );
 }
 
-// ── StatCard ──────────────────────────────────────────────────────────────────
-type StatVariant = 'expense' | 'income' | 'neutral';
-
-const VARIANT_CLASS: Record<StatVariant, string> = {
-  expense: 'text-destructive',
-  income: 'text-success',
-  neutral: 'text-foreground',
-};
-
-interface StatCardProps {
-  label: string;
-  value: ReactNode;
-  variant?: StatVariant;
-}
-
-export function StatCard({ label, value, variant = 'neutral' }: StatCardProps) {
-  const fontSizeClass =
-    typeof value === 'string' && value.length >= 10 ? 'text-lg' :
-    typeof value === 'string' && value.length >= 8  ? 'text-xl' :
-    'text-2xl';
-
-  return (
-    <motion.div whileHover={{ y: -2 }} transition={springs.snappy}>
-      <Card>
-        <CardHeader className="pb-1">
-          <CardTitle className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">{label}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className={cn(fontSizeClass, 'font-bold truncate', VARIANT_CLASS[variant])}>{value}</p>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-
 // ── HeroCard ─────────────────────────────────────────────────────────────────
 interface HeroCardProps {
   title: string;
