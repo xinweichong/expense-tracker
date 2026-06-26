@@ -1,8 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock } from 'lucide-react';
+import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock, Command } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { CasheWordmark, CasheIcon } from '@/components/ui/Brand';
+import { springs } from '@/lib/animations';
 
 export function Sidebar() {
   const { data: settings } = useQuery({
@@ -29,6 +31,7 @@ export function Sidebar() {
         <CasheIcon size={32} className="lg:hidden" />
         <CasheWordmark size={22} className="hidden lg:inline-flex" />
       </div>
+
       <nav className="flex-1 px-2 lg:px-3 space-y-1">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
@@ -36,51 +39,89 @@ export function Sidebar() {
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
+              `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
                 isActive
-                  ? 'bg-foreground/10 text-foreground font-medium'
+                  ? 'bg-teal/10 text-foreground font-medium'
                   : 'text-muted hover:text-foreground hover:bg-foreground/5'
               }`
             }
           >
-            <Icon className="w-5 h-5 shrink-0" />
-            <span className="hidden lg:inline font-display">{label}</span>
+            {({ isActive }) => (
+              <>
+                <Icon className="w-5 h-5 shrink-0" />
+                <span className="hidden lg:inline font-display">{label}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="sidebar-active-dot"
+                    className="absolute right-2 w-1.5 h-1.5 rounded-full bg-teal"
+                    transition={springs.snappy}
+                  />
+                )}
+              </>
+            )}
           </NavLink>
         ))}
 
-        {/* Finance — always visible; dimmed when neither toggle is on */}
         <NavLink
           to="/finance"
           className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
+            `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
               isActive
-                ? 'bg-foreground/10 text-foreground font-medium'
+                ? 'bg-teal/10 text-foreground font-medium'
                 : 'text-muted hover:text-foreground hover:bg-foreground/5'
             } ${!financeEnabled ? 'opacity-40' : ''}`
           }
         >
-          <Wallet className="w-5 h-5 shrink-0" />
-          <span className="hidden lg:flex items-center gap-1 font-display">
-            Finance
-            {!financeEnabled && <Lock className="w-3 h-3 ml-1" />}
-          </span>
+          {({ isActive }) => (
+            <>
+              <Wallet className="w-5 h-5 shrink-0" />
+              <span className="hidden lg:flex items-center gap-1 font-display">
+                Finance
+                {!financeEnabled && <Lock className="w-3 h-3 ml-1" />}
+              </span>
+              {isActive && (
+                <motion.div
+                  layoutId="sidebar-active-dot"
+                  className="absolute right-2 w-1.5 h-1.5 rounded-full bg-teal"
+                  transition={springs.snappy}
+                />
+              )}
+            </>
+          )}
         </NavLink>
 
-        {/* Settings — always last */}
         <NavLink
           to="/settings"
           className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
+            `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
               isActive
-                ? 'bg-foreground/10 text-foreground font-medium'
+                ? 'bg-teal/10 text-foreground font-medium'
                 : 'text-muted hover:text-foreground hover:bg-foreground/5'
             }`
           }
         >
-          <Settings className="w-5 h-5 shrink-0" />
-          <span className="hidden lg:inline font-display">Settings</span>
+          {({ isActive }) => (
+            <>
+              <Settings className="w-5 h-5 shrink-0" />
+              <span className="hidden lg:inline font-display">Settings</span>
+              {isActive && (
+                <motion.div
+                  layoutId="sidebar-active-dot"
+                  className="absolute right-2 w-1.5 h-1.5 rounded-full bg-teal"
+                  transition={springs.snappy}
+                />
+              )}
+            </>
+          )}
         </NavLink>
       </nav>
+
+      {/* ⌘K hint — desktop only */}
+      <div className="hidden lg:flex items-center gap-2 px-4 py-4 border-t border-border/30 text-[11px] text-muted/60 font-mono">
+        <Command className="w-3 h-3" />
+        <span>K</span>
+        <span className="ml-auto">search</span>
+      </div>
     </aside>
   );
 }
