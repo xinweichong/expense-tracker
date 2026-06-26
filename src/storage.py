@@ -1621,6 +1621,13 @@ class Storage:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    @_locked
+    def get_recurring_transactions(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM recurring_transactions ORDER BY last_seen DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     # ── Telegram chat ID ──────────────────────────────────────────────────────
 
     @_locked

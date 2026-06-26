@@ -647,8 +647,8 @@ def create_dashboard_app(
         }
 
     @app.get("/api/recurring")
-    async def recurring(_storage=Depends(_get_storage)):
-        return []
+    async def recurring(storage=Depends(_get_storage)):
+        return await _db(storage.get_recurring_transactions)
 
     @app.get("/api/analytics/comparison")
     async def analytics_comparison(
@@ -732,6 +732,7 @@ def create_dashboard_app(
             "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
             "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
+            "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
             "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 
@@ -793,6 +794,13 @@ def create_dashboard_app(
             else:
                 validated["subscriptions_enabled"] = "true" if val else "false"
 
+        if "recurring_enabled" in body:
+            val = body["recurring_enabled"]
+            if not isinstance(val, bool):
+                errors["recurring_enabled"] = "must be a boolean"
+            else:
+                validated["recurring_enabled"] = "true" if val else "false"
+
         if "category_colors_snapped_v2" in body:
             validated["category_colors_snapped_v2"] = str(body["category_colors_snapped_v2"])
 
@@ -813,6 +821,7 @@ def create_dashboard_app(
             "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
             "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
+            "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
             "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 

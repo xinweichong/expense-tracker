@@ -237,6 +237,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
         ("goals_enabled", "false"),
         ("trips_enabled", "false"),
         ("subscriptions_enabled", "false"),
+        ("recurring_enabled", "false"),
         ("llm_insight_content", ""),
         ("llm_insight_generated_at", ""),
     ]
