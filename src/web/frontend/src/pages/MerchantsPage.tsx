@@ -6,12 +6,14 @@ import { api, type MerchantSummary } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatCard } from '@/components/ui/StatCard';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/animations';
 import { Search } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
+import { getCategoryColor } from '@/lib/utils';
 
 function merchantInitialColor(name: string): string {
   const idx = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % SPECTRUM_PALETTE.length;
@@ -81,6 +83,29 @@ export function MerchantsPage() {
             {merchants.length} tracked.
           </h1>
         </div>
+
+        {/* Summary cards */}
+        {!isLoading && merchants.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <StatCard
+              label="Merchants"
+              value={merchants.length}
+              color="default"
+            />
+            <StatCard
+              label="Total Spend"
+              value={`$${merchants.reduce((sum, m) => sum + m.total_sgd, 0).toFixed(0)}`}
+              color="warm"
+            />
+            {merchants.length > 0 && (
+              <StatCard
+                label="Top Merchant"
+                value={merchants[0].merchant}
+                subtext={formatSGD(merchants[0].total_sgd)}
+              />
+            )}
+          </div>
+        )}
 
         {/* Filters */}
         <div className="space-y-2">
@@ -183,8 +208,25 @@ export function MerchantsPage() {
                           {m.transaction_count} txns · {m.last_seen ?? '—'}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-muted hidden sm:table-cell">
-                        {m.category ?? '—'}
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        {m.category ? (
+                          <span
+                            style={{
+                              color: getCategoryColor(m.category),
+                              background: `${getCategoryColor(m.category)}1F`,
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              fontFamily: 'monospace',
+                              display: 'inline-block',
+                            }}
+                          >
+                            {m.category}
+                          </span>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1">
