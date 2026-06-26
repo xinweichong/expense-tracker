@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, X } from 'lucide-react';
+import { getCategoryColor } from '@/lib/utils';
 
 interface TransactionFiltersProps {
   search: string;
@@ -83,16 +84,7 @@ export function TransactionFilters({
             className="pl-9 bg-background border-border"
           />
         </div>
-        <select
-          value={category}
-          onChange={(e) => onCategoryChange(e.target.value)}
-          className="select-field w-full sm:w-40"
-        >
-          <option value="all">All categories</option>
-          {categories.map((cat) => (
-            <option key={cat.name} value={cat.name}>{cat.name}</option>
-          ))}
-        </select>
+        {/* Category filter pills moved below */}
         {hasFilters && (
           <Button
             variant="ghost"
@@ -107,6 +99,42 @@ export function TransactionFilters({
             <X className="w-4 h-4" />
           </Button>
         )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onCategoryChange('all')}
+            className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
+            style={
+              category === 'all'
+                ? { color: '#EEEAF5', background: 'rgba(238,234,245,0.15)', border: '1px solid rgba(238,234,245,0.35)' }
+                : { color: '#7A7488', background: 'rgba(238,234,245,0.04)', border: '1px solid rgba(238,234,245,0.08)' }
+            }
+          >
+            All
+          </button>
+          {categories.map((cat) => {
+            const catColor = getCategoryColor(cat.name);
+            const isActive = category === cat.name;
+            return (
+              <button
+                key={cat.name}
+                type="button"
+                onClick={() => onCategoryChange(isActive ? 'all' : cat.name)}
+                className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap max-w-[20ch] truncate"
+                style={{
+                  color: catColor,
+                  background: isActive ? `${catColor}33` : `${catColor}12`,
+                  border: `1px solid ${catColor}${isActive ? '60' : '25'}`,
+                }}
+              >
+                {cat.name}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

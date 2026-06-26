@@ -1,6 +1,6 @@
 import { type Transaction } from '@/api/client';
 import { cn, formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
-import { SourceGlyph } from '@/components/icons/sources';
+import { SOURCE_DISPLAY_LABELS } from '@/components/icons/sources';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 
@@ -28,13 +28,20 @@ export function TransactionRow({
     <div
       onClick={isClickable ? onClick : undefined}
       className={cn(
-        'grid gap-3 items-center px-3.5 py-2.5 border-b border-border/30 last:border-b-0 transition-colors',
+        'grid gap-3 items-center px-3.5 py-2.5 border-b border-border/30 last:border-b-0',
+        'transition-[background,transform] duration-[150ms]',
         onRemove ? 'grid-cols-[36px_1fr_auto_auto]' : 'grid-cols-[36px_1fr_auto]',
         isClickable && 'cursor-pointer',
       )}
       style={{ background: `${categoryColor}${selected ? '1A' : '0D'}` }}
-      onMouseEnter={isClickable ? (e) => (e.currentTarget.style.background = `${categoryColor}1A`) : undefined}
-      onMouseLeave={isClickable ? (e) => (e.currentTarget.style.background = `${categoryColor}${selected ? '1A' : '0D'}`) : undefined}
+      onMouseEnter={isClickable ? (e) => {
+        e.currentTarget.style.background = `${categoryColor}1A`;
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      } : undefined}
+      onMouseLeave={isClickable ? (e) => {
+        e.currentTarget.style.background = `${categoryColor}${selected ? '1A' : '0D'}`;
+        e.currentTarget.style.transform = '';
+      } : undefined}
     >
       <div
         className="w-8 h-8 rounded-md flex items-center justify-center text-sm font-bold shrink-0"
@@ -42,22 +49,38 @@ export function TransactionRow({
       >
         {isIncome ? '+' : tx.category?.charAt(0) ?? '·'}
       </div>
+
       <div className="min-w-0">
         <div className="text-sm font-medium tracking-[-0.005em] truncate">
           {tx.merchant || tx.description || 'Transaction'}
         </div>
-        <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 flex items-center gap-1.5">
+        <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 flex items-center gap-1.5 flex-wrap">
           <span>{formatDateTime(tx.transaction_date)}</span>
-          {tx.category && <span>· {tx.category}</span>}
-          <SourceGlyph source={tx.source} />
+          {tx.category && (
+            <span
+              className="px-1 py-0.5 rounded text-[9px] font-semibold font-mono uppercase tracking-[0.08em]"
+              style={{ color: categoryColor, background: `${categoryColor}1F` }}
+            >
+              {tx.category}
+            </span>
+          )}
         </div>
       </div>
-      <div
-        data-testid="tx-amount"
-        className={cn('font-bold tracking-tight text-sm text-right font-display', isIncome && 'text-teal')}
-      >
-        {sign}{formatCurrency(tx.amount, tx.currency)}
+
+      <div className="text-right shrink-0">
+        <div
+          data-testid="tx-amount"
+          className={cn('font-bold tracking-tight text-sm font-display', isIncome && 'text-teal')}
+        >
+          {sign}{formatCurrency(tx.amount, tx.currency)}
+        </div>
+        {tx.source && (
+          <div className="text-[10px] text-muted font-mono mt-0.5 truncate max-w-[80px]">
+            {SOURCE_DISPLAY_LABELS[tx.source as keyof typeof SOURCE_DISPLAY_LABELS] ?? tx.source}
+          </div>
+        )}
       </div>
+
       {onRemove && (
         <Button
           variant="ghost"
