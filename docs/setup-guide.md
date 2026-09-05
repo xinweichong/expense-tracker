@@ -35,8 +35,8 @@ This guide walks you through every step to get Cashe fully operational: Telegram
 
 ```bash
 # Clone the repo
-git clone https://github.com/xinweichong/expense-tracker.git
-cd expense-tracker
+git clone https://github.com/xinweichong/cashe.git
+cd cashe
 git checkout develop
 
 # Create virtual environment
@@ -457,7 +457,7 @@ class TestMyBankParser:
 
 ### macOS — launchd
 
-Create `~/Library/LaunchAgents/com.expense-tracker.plist`:
+Create `~/Library/LaunchAgents/com.cashe.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -465,44 +465,44 @@ Create `~/Library/LaunchAgents/com.expense-tracker.plist`:
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.expense-tracker</string>
+    <string>com.cashe</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/xinweichong/personal/expense-tracker/venv/bin/python</string>
-        <string>/Users/xinweichong/personal/expense-tracker/src/main.py</string>
+        <string>/Users/xinweichong/personal/cashe/venv/bin/python</string>
+        <string>/Users/xinweichong/personal/cashe/src/main.py</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/xinweichong/personal/expense-tracker</string>
+    <string>/Users/xinweichong/personal/cashe</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/xinweichong/personal/expense-tracker/logs/launchd-stdout.log</string>
+    <string>/Users/xinweichong/personal/cashe/logs/launchd-stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/xinweichong/personal/expense-tracker/logs/launchd-stderr.log</string>
+    <string>/Users/xinweichong/personal/cashe/logs/launchd-stderr.log</string>
 </dict>
 </plist>
 ```
 
 Load it:
 ```bash
-launchctl load ~/Library/LaunchAgents/com.expense-tracker.plist
+launchctl load ~/Library/LaunchAgents/com.cashe.plist
 ```
 
 Check status:
 ```bash
-launchctl list | grep expense-tracker
+launchctl list | grep cashe
 ```
 
 Stop:
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.expense-tracker.plist
+launchctl unload ~/Library/LaunchAgents/com.cashe.plist
 ```
 
 ### Linux — systemd
 
-Create `/etc/systemd/system/expense-tracker.service`:
+Create `/etc/systemd/system/cashe.service`:
 
 ```ini
 [Unit]
@@ -512,8 +512,8 @@ After=network.target
 [Service]
 Type=simple
 User=xinweichong
-WorkingDirectory=/home/xinweichong/expense-tracker
-ExecStart=/home/xinweichong/expense-tracker/venv/bin/python src/main.py
+WorkingDirectory=/home/xinweichong/cashe
+ExecStart=/home/xinweichong/cashe/venv/bin/python src/main.py
 Restart=always
 RestartSec=10
 
@@ -523,14 +523,14 @@ WantedBy=multi-user.target
 
 Enable and start:
 ```bash
-sudo systemctl enable expense-tracker
-sudo systemctl start expense-tracker
-sudo systemctl status expense-tracker
+sudo systemctl enable cashe
+sudo systemctl start cashe
+sudo systemctl status cashe
 ```
 
 View logs:
 ```bash
-sudo journalctl -u expense-tracker -f
+sudo journalctl -u cashe -f
 ```
 
 ---
@@ -653,8 +653,8 @@ docker run hello-world   # verify
 
 ```bash
 ssh cashe-ssh
-git clone https://github.com/xinweichong/expense-tracker.git
-cd expense-tracker
+git clone https://github.com/xinweichong/cashe.git
+cd cashe
 git checkout develop
 cp .env.example .env
 nano .env   # paste in TUNNEL_TOKEN=<your token from step 12.3>
@@ -666,9 +666,9 @@ mkdir -p data
 Run these on your **local machine**:
 
 ```bash
-scp config.yaml cashe-ssh:~/expense-tracker/
-scp credentials.json cashe-ssh:~/expense-tracker/
-scp token.json cashe-ssh:~/expense-tracker/data/
+scp config.yaml cashe-ssh:~/cashe/
+scp credentials.json cashe-ssh:~/cashe/
+scp token.json cashe-ssh:~/cashe/data/
 ```
 
 Ensure `config.yaml` has the correct `webhook_base_url`:
@@ -683,7 +683,7 @@ server:
 On the VM:
 
 ```bash
-cd ~/expense-tracker
+cd ~/cashe
 docker compose up -d --build
 ```
 
@@ -713,7 +713,7 @@ Starting web server on 0.0.0.0:8080
 After merging changes to `develop` on GitHub, deploy by running on the VM:
 
 ```bash
-cd ~/expense-tracker
+cd ~/cashe
 ./deploy.sh
 ```
 

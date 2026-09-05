@@ -147,8 +147,8 @@ Single Python process. SQLite with WAL mode. FastAPI for webhooks and the dashbo
 
 ```bash
 # Clone and set up
-git clone https://github.com/xinweichong/expense-tracker.git
-cd expense-tracker
+git clone https://github.com/xinweichong/cashe.git
+cd cashe
 git checkout develop
 python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
@@ -204,22 +204,22 @@ sudo usermod -aG docker $USER && newgrp docker
 #    Copy the tunnel token shown in the dashboard
 
 # 4. Clone and configure on the VM
-git clone https://github.com/xinweichong/expense-tracker.git
-cd expense-tracker && git checkout develop
+git clone https://github.com/xinweichong/cashe.git
+cd cashe && git checkout develop
 cp .env.example .env
 # Edit .env — paste in TUNNEL_TOKEN from step 3
 mkdir -p data
 
 # 5. Copy credentials from your local machine
-scp config.yaml ubuntu@YOUR-VM-IP:~/expense-tracker/
-scp credentials.json ubuntu@YOUR-VM-IP:~/expense-tracker/
-scp token.json ubuntu@YOUR-VM-IP:~/expense-tracker/data/
+scp config.yaml ubuntu@YOUR-VM-IP:~/cashe/
+scp credentials.json ubuntu@YOUR-VM-IP:~/cashe/
+scp token.json ubuntu@YOUR-VM-IP:~/cashe/data/
 
 # 6. First deploy
 docker compose up -d --build
 ```
 
-**Subsequent deploys** — run on the VM from `~/expense-tracker/`:
+**Subsequent deploys** — run on the VM from `~/cashe/`:
 
 ```bash
 ./deploy.sh   # git pull + docker compose up -d --build
@@ -479,14 +479,14 @@ pip install -r requirements-dev.txt
 python3 -m pytest tests/ -v
 ```
 
-All tests use in-memory SQLite — no database files created on disk. 591 tests across all modules.
+All tests use in-memory SQLite — no database files created on disk. 623 tests across all modules.
 
 ---
 
 ## Project structure
 
 ```
-expense-tracker/
+cashe/
 ├── src/
 │   ├── main.py              # Entry point — starts all services, runs DB migrations
 │   ├── config.py            # Config loader + env-var fallback
@@ -526,7 +526,7 @@ expense-tracker/
 │           │   ├── api/         # API client layer
 │           │   └── hooks/       # Data-fetching hooks (React Query)
 │           └── vite.config.ts
-├── tests/                   # 591 tests, all in-memory SQLite
+├── tests/                   # 623 tests, all in-memory SQLite
 │   ├── test_storage.py
 │   ├── test_categorizer.py
 │   ├── test_parsers.py
