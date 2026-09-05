@@ -8,8 +8,8 @@
 
 A privacy-first personal finance app that **automatically captures every transaction** from your bank emails and Apple Wallet — no manual logging, no subscription fees, no data leaving your server.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-00D4AA?style=flat-square)](CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-591%20passing-30D158?style=flat-square)](tests/)
+[![Version](https://img.shields.io/badge/version-2.1.0-00D4AA?style=flat-square)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-623%20passing-30D158?style=flat-square)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-3572A5?style=flat-square)](https://python.org)
 [![License](https://img.shields.io/badge/license-private-72727E?style=flat-square)](#license)
 
