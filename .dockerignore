@@ -1,0 +1,16 @@
+node_modules
+src/web/frontend/node_modules
+src/web/frontend/dist
+src/web/dist
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+**/.pytest_cache
+.git
+*.log
+config.yaml
+credentials.json
+token.json
+token.pickle
+.env

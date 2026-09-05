@@ -1,0 +1,50 @@
+gmail:
+  credentials_file: credentials.json
+  poll_interval_seconds: 120
+  sender_filters:
+    - notification@dbs.com
+    - notification@uob.com
+
+server:
+  host: "0.0.0.0"
+  port: 8080
+  webhook_base_url: "https://your-server.example.com"
+
+# Timezone for date-range queries (today, week, month).
+# Must be a valid IANA tz name. Defaults to Asia/Singapore if omitted.
+timezone: "Asia/Singapore"
+
+web:
+  password_hash: "<generate with: python -c 'import bcrypt; print(bcrypt.hashpw(b\"your-password\", bcrypt.gensalt()).decode())'>"
+
+telegram:
+  bot_token: "<from @BotFather>"
+
+categories:
+  - name: Food
+    keywords: ["restaurant", "cafe", "food", "kopitiam", "toast box", "ya kun"]
+    icon: "🍜"
+  - name: Transport
+    keywords: ["grab", "gojek", "comfortdelgro", "mrt", "bus", "taxi", "cdg"]
+    icon: "🚗"
+  - name: Shopping
+    keywords: ["shopee", "lazada", "fairprice", "cold storage", "ntuc"]
+    icon: "🛒"
+  - name: Bills
+    keywords: ["sp services", "singtel", "starhub", "m1"]
+    icon: "📄"
+  - name: Entertainment
+    keywords: ["netflix", "spotify"]
+    icon: "🎬"
+  - name: Other
+    keywords: []
+    icon: "📌"
+
+# Exchange rate settings (optional — defaults used if omitted)
+exchange_rates:
+  api_url: "https://open.er-api.com/v6/latest/SGD"
+  cache_hours: 24
+
+# LLM Intelligence (optional — leave blank to disable)
+gemini_api_key: ""
+# gemini_model: "gemini-2.0-flash"   # default

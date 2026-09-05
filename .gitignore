@@ -1,0 +1,58 @@
+# Sensitive configuration — contains tokens, passwords, API keys
+config.yaml
+credentials.json
+token.json
+.env
+.env.*
+!.env.example
+
+# Gmail OAuth tokens
+*.pickle
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+.venv/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+#Superpowers
+.superpowers/
+docs/superpowers/
+
+# Git worktrees
+.worktrees/
+
+# mattpocock
+docs/agents/
