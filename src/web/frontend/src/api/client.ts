@@ -283,6 +283,11 @@ export const api = {
 
   getWebhookUrl: () => request<{ url: string }>('/api/onboarding/webhook-url'),
 
+  getWalletConnection: () => request<{ configured: boolean; required: boolean }>('/api/connections/apple-wallet'),
+  createWalletCredential: () => request<{ token: string }>('/api/connections/apple-wallet/credential', { method: 'POST' }),
+  revokeWalletCredential: () => request<{ status: string }>('/api/connections/apple-wallet/credential', { method: 'DELETE' }),
+
+
   completeOnboarding: () =>
     request<{ status: string }>('/api/onboarding/complete', { method: 'PUT' }),
 

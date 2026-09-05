@@ -1,6 +1,7 @@
 import logging
+import hashlib
 from typing import Optional, Callable
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, field_validator
 
@@ -34,12 +35,21 @@ def create_webhook_app(user_manager, bot=None) -> FastAPI:
     parser = AppleWalletParser()
 
     @app.post("/webhook/apple-wallet/{username}")
-    async def receive_apple_wallet(username: str, payload: AppleWalletPayload):
+    async def receive_apple_wallet(username: str, payload: AppleWalletPayload, request: Request):
         ctx = user_manager.get(username)
         if ctx is None:
             raise HTTPException(status_code=404, detail="User not found")
 
         storage = ctx.storage
+        authorization = request.headers.get("Authorization")
+        digest = None
+        if authorization is not None:
+            scheme, _, token = authorization.partition(" ")
+            if scheme.lower() != "bearer" or not token:
+                raise HTTPException(status_code=401, detail="Invalid Wallet credential")
+            digest = hashlib.sha256(token.encode()).hexdigest()
+        if not await run_in_threadpool(storage.authorize_wallet, digest):
+            raise HTTPException(status_code=401, detail="Wallet credential required")
         # Resolve per-user pipeline from the poller if available
         pipeline = getattr(ctx.poller, "pipeline", None) if ctx.poller else None
         # Resolve categorizer and exchange service from context attributes

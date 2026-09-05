@@ -227,3 +227,24 @@ class TestWebhookDedup:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "duplicate"
+
+
+@pytest.mark.asyncio
+async def test_wallet_upgrade_rotation_and_revocation(client, in_memory_db):
+    import hashlib
+    storage = Storage(in_memory_db)
+    payload = {"amount": "12.50", "merchant": "Test", "date": "2026-09-05T12:00:00"}
+    storage.set_setting("wallet_credential_hash", hashlib.sha256(b"credential-one").hexdigest())
+    # Keep the old Shortcut working until it has successfully sent its credential.
+    assert (await client.post(_url(), json=payload)).status_code == 200
+    assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer forged"})).status_code == 401
+    response = await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-one"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "duplicate"
+    assert (await client.post(_url(), json=payload)).status_code == 401
+    storage.set_setting("wallet_credential_hash", hashlib.sha256(b"credential-two").hexdigest())
+    assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-one"})).status_code == 401
+    assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-two"})).status_code == 200
+    storage.revoke_wallet_credential()
+    assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-two"})).status_code == 401
+    assert (await client.post(_url(), json=payload)).status_code == 401

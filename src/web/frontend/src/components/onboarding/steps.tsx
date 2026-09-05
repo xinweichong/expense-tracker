@@ -1,3 +1,4 @@
+import { WalletCredential } from './WalletCredential';
 import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -313,6 +314,8 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
         </div>
 
         <div className="border-t border-border" />
+
+        <WalletCredential />
 
         {/* Step 2 */}
         <div className="space-y-2">

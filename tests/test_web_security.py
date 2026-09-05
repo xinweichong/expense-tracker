@@ -292,6 +292,83 @@ class TestCrossUserDataIsolation:
             bob_txs = r.json()
             assert not any(t["merchant"] == "Secret Shop" for t in bob_txs)
 
+
+
+class TestLoginThrottling:
+    @pytest.mark.asyncio
+    async def test_failed_attempts_are_limited(self, client):
+        for _ in range(5):
+            response = await client.post("/api/login", json={"username": TEST_USERNAME, "password": "wrong"})
+            assert response.status_code == 401
+        response = await client.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        assert response.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_unknown_users_are_limited_too(self, client):
+        for _ in range(5):
+            assert (await client.post("/api/login", json={"username": "unknown", "password": "wrong"})).status_code == 401
+        assert (await client.post("/api/login", json={"username": "unknown", "password": "wrong"})).status_code == 429
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", ["session", "expired", "revoked", "forged", "replay"])
+async def test_oauth_state_is_bound_expiring_and_single_use(in_memory_db, monkeypatch, invalid):
+    from unittest.mock import MagicMock
+    import time
+    admin = AdminStorage(make_admin_db_with_user(TEST_PASSWORD))
+    _auth.init_auth(admin)
+    manager = FakeUserManager(Storage(in_memory_db))
+    manager._ctx.poller = MagicMock()
+    manager._ctx.poller.get_auth_url.side_effect = lambda **kwargs: kwargs["state"]
+    app = create_dashboard_app(manager, admin)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        response = await client.get("/api/connections/gmail/connect-url")
+        state = response.json()["url"]
+        assert state != TEST_USERNAME and len(state) >= 32
+        if invalid == "session":
+            client.cookies.clear()
+        elif invalid == "expired":
+            now = time.monotonic()
+            monkeypatch.setattr("src.web.app.time.monotonic", lambda: now + 601)
+        elif invalid == "revoked":
+            admin.destroy_session(client.cookies["session"])
+        elif invalid == "forged":
+            state = TEST_USERNAME
+        else:
+            assert (await client.get("/oauth/callback", params={"state": state, "code": "code"})).status_code == 200
+        response = await client.get("/oauth/callback", params={"state": state, "code": "code"})
+        assert response.status_code == 400
+        assert manager._ctx.poller.complete_reauth.call_count == (1 if invalid == "replay" else 0)
+
+
+@pytest.mark.asyncio
+async def test_wallet_credentials_are_private_and_revocable(authed_client, in_memory_db):
+    import hashlib
+    response = await authed_client.post("/api/connections/apple-wallet/credential")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    token = response.json()["token"]
+    storage = Storage(in_memory_db)
+    assert storage.get_setting("wallet_credential_hash") == hashlib.sha256(token.encode()).hexdigest()
+    status = await authed_client.get("/api/connections/apple-wallet")
+    assert status.json() == {"configured": True, "required": False}
+    assert token not in status.text
+    assert (await authed_client.delete("/api/connections/apple-wallet/credential")).status_code == 200
+    assert not storage.authorize_wallet(None)
+    assert not storage.authorize_wallet(hashlib.sha256(token.encode()).hexdigest())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method,path", [
+    ("get", "/api/connections/apple-wallet"),
+    ("post", "/api/connections/apple-wallet/credential"),
+    ("delete", "/api/connections/apple-wallet/credential"),
+])
+async def test_wallet_credential_routes_require_login(client, method, path):
+    assert (await getattr(client, method)(path)).status_code == 401
+
+
 @pytest.mark.asyncio
 async def test_capture_issue_api_omits_payload_and_requeues(authed_client, in_memory_db):
     storage = Storage(in_memory_db)

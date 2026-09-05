@@ -2,6 +2,9 @@ import asyncio
 import logging
 import os
 import re
+import secrets
+import hashlib
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -63,19 +66,26 @@ def create_dashboard_app(
     app = FastAPI(title="Expense Tracker Dashboard")
     app.add_middleware(GZipMiddleware, minimum_size=500)
 
+    oauth_states: dict[str, tuple[str, str, float]] = {}
+    login_attempts: dict[str, list[float]] = {}
+
     @app.get("/oauth/callback")
     async def oauth_callback(request: Request):
         code = request.query_params.get("code")
-        username = request.query_params.get("state")
-        if not code or not username:
-            return Response(content="<h2>Missing code or state.</h2>", media_type="text/html", status_code=400)
+        state = request.query_params.get("state", "")
+        pending = oauth_states.pop(state, None)
+        session = request.cookies.get("session", "")
+        if not code or not pending or pending[2] <= time.monotonic() or pending[1] != session:
+            raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+        username = await _db(verify_session, session)
+        if username != pending[0]:
+            raise HTTPException(status_code=400, detail="Invalid OAuth session")
         ctx = user_manager.get(username)
         if not ctx:
             return Response(content="<h2>Unknown user.</h2>", media_type="text/html", status_code=404)
         try:
-            redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(_DB_EXECUTOR, partial(ctx.poller.complete_reauth, code, username))
+            await loop.run_in_executor(_DB_EXECUTOR, partial(ctx.poller.complete_reauth, code, state))
             user_manager.start_poller(username)
             await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=1))
             return Response(
@@ -83,14 +93,27 @@ def create_dashboard_app(
                 media_type="text/html",
             )
         except Exception as e:
-            logger.error(f"OAuth callback failed for {username}: {e}")
-            return Response(content=f"<h2>Connection failed: {e}</h2>", media_type="text/html", status_code=400)
+            logger.warning("OAuth callback failed: %s", type(e).__name__)
+            return Response(content="<h2>Connection failed. Please reconnect from Settings.</h2>", media_type="text/html", status_code=400)
 
     @app.post("/api/login")
     async def login(request: Request):
         body = await request.json()
         username = body.get("username", "")
         password = body.get("password", "")
+        if not isinstance(username, str) or not isinstance(password, str):
+            raise HTTPException(status_code=422, detail="Username and password must be strings")
+        now = time.monotonic()
+        # Reserve an attempt before awaiting bcrypt, including concurrent requests.
+        for key in list(login_attempts):
+            login_attempts[key] = [stamp for stamp in login_attempts[key] if stamp > now - 900]
+            if not login_attempts[key]:
+                del login_attempts[key]
+        keys = ["user:" + username.casefold(), "ip:" + (request.client.host if request.client else "unknown")]
+        if any(len(login_attempts.get(key, [])) >= 5 for key in keys):
+            raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes.")
+        for key in keys:
+            login_attempts.setdefault(key, []).append(now)
         loop = asyncio.get_running_loop()
         user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
         if not user:
@@ -98,6 +121,9 @@ def create_dashboard_app(
         ok = await loop.run_in_executor(None, verify_password, password, user["password_hash"])
         if not ok:
             raise HTTPException(status_code=401, detail="Invalid username or password")
+        login_attempts.pop(keys[0], None)
+        if keys[1] in login_attempts:
+            login_attempts[keys[1]] = [stamp for stamp in login_attempts[keys[1]] if stamp != now]
         user_agent = request.headers.get("User-Agent", "")
         token = await loop.run_in_executor(_DB_EXECUTOR, create_session, username, user_agent)
         secure_cookies = os.environ.get("SECURE_COOKIES", "true") == "true"
@@ -256,7 +282,12 @@ def create_dashboard_app(
         if not ctx:
             raise HTTPException(status_code=503, detail="User context not ready — please try again")
         redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=username)
+        for token, pending in list(oauth_states.items()):
+            if pending[0] == username or pending[2] <= time.monotonic():
+                del oauth_states[token]
+        state = secrets.token_urlsafe(32)
+        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=state)
+        oauth_states[state] = (username, request.cookies["session"], time.monotonic() + 600)
         return {"url": url}
 
     @app.post("/api/onboarding/telegram/link-token")
@@ -274,6 +305,24 @@ def create_dashboard_app(
     async def mark_onboarding_complete(username: str = Depends(require_auth)):
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, onboarding_complete=1))
+        return {"status": "ok"}
+
+    @app.get("/api/connections/apple-wallet")
+    async def wallet_connection(storage=Depends(_get_storage)):
+        return {
+            "configured": bool(await _db(storage.get_setting, "wallet_credential_hash", "")),
+            "required": await _db(storage.get_setting, "wallet_auth_required", "false") == "true",
+        }
+
+    @app.post("/api/connections/apple-wallet/credential")
+    async def create_wallet_credential(storage=Depends(_get_storage)):
+        token = secrets.token_urlsafe(32)
+        await _db(storage.set_setting, "wallet_credential_hash", hashlib.sha256(token.encode()).hexdigest())
+        return JSONResponse({"token": token}, headers={"Cache-Control": "no-store"})
+
+    @app.delete("/api/connections/apple-wallet/credential")
+    async def revoke_wallet_credential(storage=Depends(_get_storage)):
+        await _db(storage.revoke_wallet_credential)
         return {"status": "ok"}
 
     # ── Connection management ─────────────────────────────────────────────────
@@ -319,7 +368,12 @@ def create_dashboard_app(
         if not ctx:
             raise HTTPException(status_code=503, detail="User context not ready — please try again")
         redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=username)
+        for token, pending in list(oauth_states.items()):
+            if pending[0] == username or pending[2] <= time.monotonic():
+                del oauth_states[token]
+        state = secrets.token_urlsafe(32)
+        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=state)
+        oauth_states[state] = (username, request.cookies["session"], time.monotonic() + 600)
         return {"url": url}
 
     @app.get("/api/summary")
