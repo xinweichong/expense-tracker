@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, Callable
 from fastapi import FastAPI, HTTPException
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, field_validator
 
 from src.parsers.apple_wallet import AppleWalletParser
@@ -56,65 +57,20 @@ def create_webhook_app(user_manager, bot=None) -> FastAPI:
             logger.error(f"Webhook parse error: {e}")
             raise HTTPException(status_code=400, detail=str(e))
 
-        if pipeline is not None:
-            tx_dict = pipeline.ingest(result)
-            if tx_dict is None:
-                dup = storage.find_cross_source_duplicate(
-                    result.merchant, result.amount, "apple_wallet"
-                )
-                dup_id = dup["id"] if dup else None
-                return {"status": "duplicate", "transaction_id": dup_id}
-            _maybe_notify_first_apple_wallet(storage, bot, username)
-            return {"status": "ok", "transaction_id": tx_dict["id"]}
+        if pipeline is None:
+            from src.ingestion import IngestionPipeline
+            pipeline = IngestionPipeline(storage, categorizer, exchange_service)
+        tx_dict = await run_in_threadpool(pipeline.ingest, result)
+        if tx_dict is None:
+            event = storage.get_source_event(result.source, result.source_id)
+            return {"status": "duplicate", "transaction_id": event["transaction_id"] if event else None}
 
-        # --- Direct ingestion path (no pipeline) ---
-        if storage.source_id_exists(result.source_id):
-            return {"status": "duplicate", "transaction_id": None}
-
-        dup = storage.find_cross_source_duplicate(
-            result.merchant, result.amount, "apple_wallet"
-        )
-        if dup:
-            logger.info(
-                f"Cross-source duplicate: apple_wallet matches existing {dup['source']} "
-                f"(id={dup['id']})"
-            )
-            return {"status": "duplicate", "transaction_id": dup["id"]}
-
-        exchange_rate = 1.0
-        if exchange_service and result.currency != "SGD":
-            exchange_rate = exchange_service.get_rate(result.currency)
-
-        category, match_source = None, "default"
-        if categorizer:
-            categorizer.reload_overrides(storage.get_merchant_overrides())
-            category, match_source = categorizer.categorize(result.merchant)
-
-        tx_id = storage.insert_transaction(
-            source=result.source,
-            source_id=result.source_id,
-            amount=result.amount,
-            merchant=result.merchant,
-            description=result.description,
-            transaction_date=result.transaction_date,
-            raw_data=result.raw_data,
-            currency=result.currency,
-            exchange_rate=exchange_rate,
-            category=category,
-        )
-
-        try:
-            storage.auto_assign_to_active_trip(tx_id)
-        except Exception as e:
-            logger.warning("auto_assign_to_active_trip failed (best-effort): %s", e)
-
-        # Legacy on_transaction support (used by old tests via ctx attribute)
         on_transaction = getattr(ctx, "on_transaction", None)
         if on_transaction:
-            on_transaction(tx_id, result.amount, result.merchant, category, match_source, result.source)
-
+            on_transaction(tx_dict["id"], result.amount, result.merchant,
+                           tx_dict["category"], tx_dict["_match_source"], result.source)
         _maybe_notify_first_apple_wallet(storage, bot, username)
-        return {"status": "ok", "transaction_id": tx_id}
+        return {"status": "ok", "transaction_id": tx_dict["id"]}
 
     return app
 

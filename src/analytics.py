@@ -165,7 +165,7 @@ def get_merchant_trend(
                ROUND(SUM(amount * exchange_rate), 2) as total,
                COUNT(*) as count
         FROM transactions
-        WHERE type = 'expense' AND merchant = ?
+        WHERE (type IS NULL OR type = 'expense') AND merchant = ?
         GROUP BY strftime('%Y-%m', transaction_date)
         ORDER BY month ASC
         LIMIT 6
@@ -247,7 +247,7 @@ def get_anomalies(conn: sqlite3.Connection, multiplier: float = 2.0) -> list[dic
         WITH cat_avg AS (
             SELECT category, AVG(amount * exchange_rate) as avg_amount
             FROM transactions
-            WHERE type = 'expense' AND category IS NOT NULL
+            WHERE (type IS NULL OR type = 'expense') AND category IS NOT NULL
             GROUP BY category
             HAVING COUNT(*) >= 3
         )
@@ -255,7 +255,7 @@ def get_anomalies(conn: sqlite3.Connection, multiplier: float = 2.0) -> list[dic
                t.transaction_date, ca.avg_amount
         FROM transactions t
         JOIN cat_avg ca ON t.category = ca.category
-        WHERE t.type = 'expense'
+        WHERE (t.type IS NULL OR t.type = 'expense')
           AND t.amount * t.exchange_rate > ca.avg_amount * ?
           AND t.transaction_date >= date('now', '-30 days')
         ORDER BY t.amount DESC
@@ -273,7 +273,7 @@ def check_new_merchants(conn: sqlite3.Connection) -> list[dict]:
         WITH first_seen AS (
             SELECT merchant, MIN(transaction_date) as first_date
             FROM transactions
-            WHERE type = 'expense' AND merchant IS NOT NULL
+            WHERE (type IS NULL OR type = 'expense') AND merchant IS NOT NULL
             GROUP BY merchant
         ),
         first_tx AS (
@@ -281,7 +281,7 @@ def check_new_merchants(conn: sqlite3.Connection) -> list[dict]:
                    ROW_NUMBER() OVER (PARTITION BY t.merchant ORDER BY t.id) as rn
             FROM transactions t
             INNER JOIN first_seen fs ON t.merchant = fs.merchant AND t.transaction_date = fs.first_date
-            WHERE t.type = 'expense'
+            WHERE (t.type IS NULL OR t.type = 'expense')
         )
         SELECT merchant, first_date, category, amount
         FROM first_tx
@@ -344,7 +344,7 @@ def generate_summary(
         WITH first_seen AS (
             SELECT merchant, MIN(transaction_date) as first_date
             FROM transactions
-            WHERE type = 'expense' AND merchant IS NOT NULL
+            WHERE (type IS NULL OR type = 'expense') AND merchant IS NOT NULL
             GROUP BY merchant
         )
         SELECT COUNT(DISTINCT f.merchant) as cnt

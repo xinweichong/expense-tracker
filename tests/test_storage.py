@@ -256,7 +256,7 @@ class TestCrossSourceDedup:
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
         )
         assert result is not None
         assert result["source"] == "apple_wallet"
@@ -268,7 +268,7 @@ class TestCrossSourceDedup:
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
         result = storage.find_cross_source_duplicate(
-            "BAN MIAN", 8.20, "dbs_paylah"
+            "BAN MIAN", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
         )
         assert result is not None
 
@@ -278,7 +278,7 @@ class TestCrossSourceDedup:
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
         )
         assert result is None
 
@@ -288,11 +288,11 @@ class TestCrossSourceDedup:
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 99.99, "dbs_paylah"
+            "Ban Mian", 99.99, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
         )
         assert result is None
 
-    def test_find_cross_source_no_match_old_transaction(self, storage):
+    def test_find_cross_source_matches_delayed_observation(self, storage):
         tx_id = storage.insert_transaction(
             source="apple_wallet", source_id="aw-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
@@ -304,9 +304,9 @@ class TestCrossSourceDedup:
         )
         storage._conn.commit()
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
         )
-        assert result is None
+        assert result is not None
 
 
 class TestCategoryCRUD:

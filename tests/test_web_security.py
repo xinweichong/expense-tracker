@@ -292,3 +292,21 @@ class TestCrossUserDataIsolation:
             bob_txs = r.json()
             assert not any(t["merchant"] == "Secret Shop" for t in bob_txs)
 
+@pytest.mark.asyncio
+async def test_capture_issue_api_omits_payload_and_requeues(authed_client, in_memory_db):
+    storage = Storage(in_memory_db)
+    event = storage.record_source_event('gmail', 'private-source-id', 'private-raw-email')
+    storage.finish_source_event(event['id'], 'failed', error_code='ValueError')
+    response = await authed_client.get('/api/v2/capture/issues')
+    assert response.status_code == 200
+    assert response.json()[0]['status'] == 'failed'
+    assert 'private' not in response.text
+    assert (await authed_client.post(f"/api/v2/capture/issues/{event['id']}/retry")).json() == {'status': 'queued'}
+    assert storage.get_source_event('gmail', 'private-source-id')['status'] == 'pending'
+    assert (await authed_client.post('/api/v2/capture/issues/999/retry')).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_capture_issue_api_requires_auth(client):
+    assert (await client.get('/api/v2/capture/issues')).status_code == 401
+    assert (await client.post('/api/v2/capture/issues/1/retry')).status_code == 401

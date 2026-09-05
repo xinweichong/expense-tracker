@@ -123,6 +123,7 @@ class UserManager:
             f"monthly_{username}",
             f"daily_{username}",
             f"subscription_matcher_{username}",
+            f"capture_retry_{username}",
         ]:
             if self._scheduler is not None:
                 try:
@@ -273,6 +274,11 @@ class UserManager:
             run_subscriptions, "cron", hour=6, minute=0, timezone=tz,
             id=f"subscription_matcher_{username}", replace_existing=True,
         )
+        if ctx and ctx.poller and ctx.poller.pipeline:
+            self._scheduler.add_job(
+                ctx.poller.pipeline.retry_pending, "interval", seconds=120,
+                id=f"capture_retry_{username}", replace_existing=True, max_instances=1,
+            )
 
 
 

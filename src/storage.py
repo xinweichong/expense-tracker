@@ -2,6 +2,8 @@ import calendar
 import functools
 import sqlite3
 import threading
+import secrets
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
@@ -21,7 +23,7 @@ def _locked(method):
 
 def _get_budget_period(period: str) -> tuple[str, str]:
     """Return (start_date, end_date) for the current budget period as ISO strings."""
-    today = date.today()
+    today = local_now().date()
     if period == "monthly":
         return today.replace(day=1).isoformat(), today.isoformat()
     elif period == "weekly":
@@ -35,6 +37,99 @@ class Storage:
         self._conn = connection
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
+
+    @contextmanager
+    def reconciliation_lock(self):
+        """Serialize check-and-insert across the user's Wallet and Gmail inputs."""
+        with self._lock:
+            yield
+
+    @_locked
+    def record_source_event(self, source: str, source_id: str, payload: str,
+                            parser_version: str = "1") -> dict:
+        self._conn.execute(
+            """INSERT OR IGNORE INTO source_events
+               (source, source_id, payload, parser_version) VALUES (?, ?, ?, ?)""",
+            (source, source_id, payload, parser_version),
+        )
+        self._conn.commit()
+        return self.get_source_event(source, source_id)
+
+    @_locked
+    def get_source_event(self, source: str, source_id: str) -> Optional[dict]:
+        row = self._conn.execute(
+            "SELECT * FROM source_events WHERE source = ? AND source_id = ?",
+            (source, source_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+    @_locked
+    def finish_source_event(self, event_id: int, status: str,
+                            transaction_id: Optional[int] = None,
+                            error_code: Optional[str] = None) -> None:
+        self._conn.execute(
+            """UPDATE source_events SET status = ?, transaction_id = ?, error_code = ?,
+               attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+            (status, transaction_id, error_code, event_id),
+        )
+        self._conn.commit()
+
+    @_locked
+    def pending_source_events(self, source: Optional[str], limit: int = 100) -> list[dict]:
+        return [dict(row) for row in self._conn.execute(
+            """SELECT * FROM source_events WHERE (source = ? OR (? IS NULL AND source != 'gmail'))
+               AND status IN ('pending', 'failed') AND attempts < 5
+               ORDER BY attempts, id LIMIT ?""", (source, source, limit),
+        ).fetchall()]
+
+    @_locked
+    def get_transaction_by_source_id(self, source_id: str) -> Optional[dict]:
+        row = self._conn.execute(
+            "SELECT * FROM transactions WHERE source_id = ?", (source_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    @_locked
+    def authorize_wallet(self, token_digest: Optional[str]) -> bool:
+        expected = self.get_setting("wallet_credential_hash", "")
+        if token_digest is not None:
+            if not expected or not secrets.compare_digest(expected, token_digest):
+                return False
+            # First successful authenticated request completes the guided upgrade.
+            self.set_setting("wallet_auth_required", "true")
+            return True
+        return self.get_setting("wallet_auth_required", "false") != "true"
+
+    @_locked
+    def revoke_wallet_credential(self) -> None:
+        with self._conn:
+            for key, value in (("wallet_credential_hash", ""), ("wallet_auth_required", "true")):
+                self._conn.execute(
+                    """INSERT INTO app_settings(key, value) VALUES (?, ?)
+                       ON CONFLICT(key) DO UPDATE SET value = excluded.value""", (key, value),
+                )
+
+    @_locked
+    def list_capture_issues(self, limit: int = 50) -> list[dict]:
+        return [dict(row) for row in self._conn.execute(
+            """SELECT id, source, parser_version, status, transaction_id, attempts,
+                      error_code, created_at, updated_at
+               FROM source_events WHERE status != 'processed'
+               ORDER BY id DESC LIMIT ?""", (limit,),
+        ).fetchall()]
+
+    @_locked
+    def retry_source_event(self, event_id: int) -> None:
+        row = self._conn.execute("SELECT status FROM source_events WHERE id = ?", (event_id,)).fetchone()
+        if row is None:
+            raise ValueError("Source event not found")
+        if row["status"] == "processed":
+            raise ValueError("Source event already processed")
+        self._conn.execute(
+            """UPDATE source_events SET status = 'pending', attempts = 0, error_code = NULL,
+               updated_at = CURRENT_TIMESTAMP WHERE id = ?""", (event_id,),
+        )
+        self._conn.commit()
 
     @_locked
     def insert_transaction(
@@ -406,20 +501,28 @@ class Storage:
 
     @_locked
     def find_cross_source_duplicate(
-        self, merchant: str, amount: float, source: str, within_minutes: int = 10
+        self, merchant: str, amount: float, source: str, within_minutes: int = 10,
+        *, currency: str = "SGD", transaction_date: Optional[str] = None,
+        tx_type: str = "expense",
     ) -> Optional[dict]:
-        """Find a transaction from a different source with matching merchant and amount."""
-        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=within_minutes)).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-        row = self._conn.execute(
+        """Match timed observations; ambiguous or date-only purchases stay separate."""
+        if not transaction_date or len(transaction_date) <= 10 or not merchant:
+            return None
+        rows = self._conn.execute(
             """SELECT * FROM transactions
-               WHERE amount = ? AND source != ? AND ingested_at >= ?
-               AND LOWER(merchant) = LOWER(?)
-               LIMIT 1""",
-            (amount, source, cutoff, merchant),
-        ).fetchone()
-        return dict(row) if row else None
+               WHERE amount = ? AND source != ? AND currency = ?
+               AND COALESCE(type, 'expense') = ?
+               AND LOWER(TRIM(merchant)) = LOWER(TRIM(?))
+               AND LENGTH(transaction_date) > 10
+               AND NOT EXISTS (SELECT 1 FROM source_events e
+                   WHERE e.transaction_id = transactions.id AND e.source = ?
+                   AND e.status = 'processed')
+               AND ABS(julianday(transaction_date) - julianday(?)) * 86400 <= ?
+               LIMIT 2""",
+            (amount, source, currency, tx_type, merchant, source, transaction_date,
+             within_minutes * 60 + 0.001),
+        ).fetchall()
+        return dict(rows[0]) if len(rows) == 1 else None
 
     @_locked
     def get_setting(self, key: str, default: str | None = None) -> str | None:
@@ -677,7 +780,7 @@ class Storage:
         """Return all budgets with current-period spending stats."""
         budgets = self._conn.execute("SELECT * FROM budgets ORDER BY id").fetchall()
         results = []
-        today = date.today()
+        today = local_now().date()
 
         for b in budgets:
             start, end = _get_budget_period(b["period"])
@@ -1025,7 +1128,7 @@ class Storage:
             """SELECT COALESCE(SUM(t.amount * t.exchange_rate), 0.0)
                FROM transactions t
                LEFT JOIN categories c ON t.category = c.name
-               WHERE t.type = 'expense'
+               WHERE (t.type IS NULL OR t.type = 'expense')
                AND COALESCE(c.type, 'neutral') = 'needs'
                AND DATE(t.transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -1036,7 +1139,7 @@ class Storage:
             """SELECT COALESCE(SUM(t.amount * t.exchange_rate), 0.0)
                FROM transactions t
                LEFT JOIN categories c ON t.category = c.name
-               WHERE t.type = 'expense'
+               WHERE (t.type IS NULL OR t.type = 'expense')
                AND COALESCE(c.type, 'neutral') = 'wants'
                AND DATE(t.transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -1070,7 +1173,7 @@ class Storage:
             row["merchant"]: row["avg_amt"]
             for row in self._conn.execute(
                 """SELECT merchant, AVG(amount * exchange_rate) as avg_amt
-                   FROM transactions WHERE type = 'expense' AND merchant IS NOT NULL
+                   FROM transactions WHERE (type IS NULL OR type = 'expense') AND merchant IS NOT NULL
                    AND DATE(transaction_date) < ?
                    GROUP BY merchant""",
                 (start,),
@@ -1080,7 +1183,7 @@ class Storage:
         # Period transactions
         period_txs = self._conn.execute(
             """SELECT merchant, amount * exchange_rate as amt_sgd
-               FROM transactions WHERE type = 'expense' AND merchant IS NOT NULL
+               FROM transactions WHERE (type IS NULL OR type = 'expense') AND merchant IS NOT NULL
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchall()

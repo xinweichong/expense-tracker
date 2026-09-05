@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
+from src.web.contracts import CaptureIssue, QueuedResponse
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -166,6 +167,18 @@ def create_dashboard_app(
                 "last_fetch_error": exchange_service.last_fetch_error if exchange_service else None,
             },
         }
+
+    @app.get("/api/v2/capture/issues", response_model=list[CaptureIssue])
+    async def capture_issues(limit: int = Query(50, ge=1, le=100), storage=Depends(_get_storage)):
+        return await _db(storage.list_capture_issues, limit)
+
+    @app.post("/api/v2/capture/issues/{event_id}/retry", response_model=QueuedResponse)
+    async def retry_capture_issue(event_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.retry_source_event, event_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc))
+        return QueuedResponse()
 
     # ── Current user ──────────────────────────────────────────────────────────
 

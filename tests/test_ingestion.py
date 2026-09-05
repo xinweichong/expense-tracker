@@ -86,3 +86,99 @@ class TestIngestionPipelineIngest:
         pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
         pipeline.ingest(_result(merchant="Spotify"))
         callback.assert_not_called()
+
+
+@pytest.mark.parametrize("changes", [
+    {"currency": "USD"},
+    {"transaction_date": "2026-04-14T09:00:00"},
+    {"transaction_date": "2026-04-15"},
+    {"transaction_date": None},
+    {"tx_type": "income"},
+])
+def test_distinct_purchases_are_not_collapsed(storage, changes):
+    pipeline = IngestionPipeline(storage)
+    pipeline.ingest(_result())
+    assert pipeline.ingest(_result(source="uob_card", source_id="email-1", **changes)) is not None
+
+
+def test_cross_source_replay_retains_both_observations(storage):
+    pipeline = IngestionPipeline(storage)
+    first = pipeline.ingest(_result())
+    email = _result(source="uob_card", source_id="email-1")
+    assert pipeline.ingest(email) is None
+    assert pipeline.ingest(email) is None
+    assert storage.get_source_event("uob_card", "email-1")["transaction_id"] == first["id"]
+    assert storage._conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 1
+
+
+def test_ambiguous_match_preserves_purchase(storage):
+    pipeline = IngestionPipeline(storage)
+    pipeline.ingest(_result(source_id="wallet-1"))
+    pipeline.ingest(_result(source_id="wallet-2"))
+    assert pipeline.ingest(_result(source="uob_card", source_id="email-1")) is not None
+
+
+def test_crash_after_transaction_commit_recovers_without_duplicate(storage, monkeypatch):
+    pipeline = IngestionPipeline(storage)
+    original = storage.finish_source_event
+    def crash(*args, **kwargs):
+        raise RuntimeError("crash after commit")
+    monkeypatch.setattr(storage, "finish_source_event", crash)
+    with pytest.raises(RuntimeError):
+        pipeline.ingest(_result())
+    monkeypatch.setattr(storage, "finish_source_event", original)
+    assert pipeline.ingest(_result()) is None
+    assert storage.get_source_event("apple_wallet", "aw-test-001")["status"] == "processed"
+    assert storage._conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 1
+
+
+def test_concurrent_sources_create_one_transaction(storage):
+    from concurrent.futures import ThreadPoolExecutor
+    pipeline = IngestionPipeline(storage)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(pipeline.ingest, [
+            _result(), _result(source="uob_card", source_id="email-1"),
+        ]))
+    assert sum(result is not None for result in results) == 1
+
+
+def test_second_email_purchase_does_not_reuse_first_match(storage):
+    pipeline = IngestionPipeline(storage)
+    pipeline.ingest(_result())
+    assert pipeline.ingest(_result(source="uob_card", source_id="email-1")) is None
+    assert pipeline.ingest(_result(source="uob_card", source_id="email-2")) is not None
+
+
+def test_backfill_does_not_join_active_trip_or_notify_suggestions(storage, monkeypatch):
+    assign = MagicMock()
+    monkeypatch.setattr(storage, "auto_assign_to_active_trip", assign)
+    callback = MagicMock()
+    detector = MagicMock()
+    detector.detect_and_suggest.return_value = {"frequency": "monthly", "avg_amount": 12.5}
+    pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
+    assert pipeline.ingest(_result(), historical=True) is not None
+    assign.assert_not_called()
+    callback.assert_not_called()
+
+
+def test_wallet_failure_retries_without_gmail(storage, monkeypatch):
+    pipeline = IngestionPipeline(storage)
+    original = storage.insert_transaction
+    monkeypatch.setattr(storage, 'insert_transaction', MagicMock(side_effect=RuntimeError('temporary')))
+    with pytest.raises(RuntimeError):
+        pipeline.ingest(_result())
+    assert storage.get_source_event('apple_wallet', 'aw-test-001')['status'] == 'failed'
+    monkeypatch.setattr(storage, 'insert_transaction', original)
+    pipeline.retry_pending()
+    assert storage.get_source_event('apple_wallet', 'aw-test-001')['status'] == 'processed'
+    assert storage._conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 1
+
+
+def test_poison_events_stop_after_five_attempts(storage):
+    storage.record_source_event('apple_wallet', 'bad-event', '{}')
+    pipeline = IngestionPipeline(storage)
+    for _ in range(10):
+        pipeline.retry_pending()
+    event = storage.get_source_event('apple_wallet', 'bad-event')
+    assert event['status'] == 'failed'
+    assert event['attempts'] == 5

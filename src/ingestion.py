@@ -1,4 +1,6 @@
 import logging
+import json
+from dataclasses import asdict
 from typing import Optional, Callable
 
 from src.parsers.base import ParseResult
@@ -29,22 +31,50 @@ class IngestionPipeline:
             from src.recurring import RecurringDetector
             self._detector = RecurringDetector(storage)
 
-    def ingest(self, result: ParseResult) -> Optional[dict]:
+    def ingest(self, result: ParseResult, *, historical: bool = False) -> Optional[dict]:
         """Persist a ParseResult and return the stored transaction dict, or None on dedup."""
+        with self.storage.reconciliation_lock():
+            event = self.storage.record_source_event(
+                result.source, result.source_id, json.dumps({**asdict(result), "_historical": historical}),
+            )
+            if event["status"] == "processed":
+                return None
+            try:
+                return self._ingest(result, event["id"], historical=historical)
+            except Exception as exc:
+                self.storage.finish_source_event(event["id"], "failed", error_code=type(exc).__name__)
+                raise
+
+    def retry_pending(self) -> None:
+        """Bounded retries for parsed observations, including Wallet-only users."""
+        for event in self.storage.pending_source_events(None, limit=100):
+            try:
+                payload = json.loads(event["payload"])
+                historical = payload.pop("_historical", False)
+                self.ingest(ParseResult(**payload), historical=historical)
+            except Exception as exc:
+                # ingest records processing failures. Invalid persisted payloads
+                # also need an attempt count so they cannot retry indefinitely.
+                current = self.storage.get_source_event(event["source"], event["source_id"])
+                if current["attempts"] == event["attempts"]:
+                    self.storage.finish_source_event(event["id"], "failed", error_code=type(exc).__name__)
+                logger.warning("Source event retry failed: %s", type(exc).__name__)
+
+    def _ingest(self, result: ParseResult, event_id: int, *, historical: bool) -> Optional[dict]:
         # Same-source dedup (content-hash source_id)
-        if self.storage.source_id_exists(result.source_id):
-            logger.debug("Same-source duplicate skipped: %s", result.source_id)
+        existing = self.storage.get_transaction_by_source_id(result.source_id)
+        if existing:
+            self.storage.finish_source_event(event_id, "processed", existing["id"])
             return None
 
         # Cross-source dedup (10-minute window)
         dup = self.storage.find_cross_source_duplicate(
-            result.merchant, result.amount, result.source
+            result.merchant, result.amount, result.source,
+            currency=result.currency, transaction_date=result.transaction_date,
+            tx_type=result.tx_type,
         )
         if dup:
-            logger.info(
-                "Cross-source duplicate skipped: %s %.2f matches existing %s (id=%s)",
-                result.merchant, result.amount, dup["source"], dup["id"],
-            )
+            self.storage.finish_source_event(event_id, "processed", dup["id"])
             return None
 
         # Exchange rate
@@ -74,19 +104,24 @@ class IngestionPipeline:
                 tx_type=result.tx_type,
             )
         except ValueError:
-            logger.debug("Duplicate source_id on insert (race): %s", result.source_id)
+            existing = self.storage.get_transaction_by_source_id(result.source_id)
+            if existing is None:
+                raise
+            self.storage.finish_source_event(event_id, "processed", existing["id"])
             return None
 
-        logger.info("Stored transaction: %s $%.2f", result.merchant, result.amount)
+        self.storage.finish_source_event(event_id, "processed", tx_id)
+        logger.info("Stored transaction id=%s", tx_id)
 
         try:
-            self.storage.auto_assign_to_active_trip(tx_id)
+            if not historical:
+                self.storage.auto_assign_to_active_trip(tx_id)
         except Exception as e:
             logger.warning("auto_assign_to_active_trip failed (best-effort): %s", e)
 
         try:
             rec = self._detector.detect_and_suggest(result.merchant, result.amount, tx_id)
-            if rec and self._on_recurring_pattern:
+            if rec and self._on_recurring_pattern and not historical:
                 # Only suggest if no subscription already exists for this merchant
                 if not self.storage.find_subscription_by_merchant(result.merchant):
                     self._on_recurring_pattern(
