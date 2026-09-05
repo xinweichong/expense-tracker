@@ -113,7 +113,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ## Key Design Decisions
 
 - `source_id` UNIQUE constraint prevents duplicate transactions
-- Cross-source dedup: same merchant + amount from different sources within 10 minutes → single record
+- Cross-source dedup: a unique candidate with matching merchant, amount, currency, type, and transaction time within 10 minutes links both source events to one record. Date-only/missing times and ambiguous candidates remain separate. Never compare ingestion time.
 - `raw_data` column stores original payloads for re-parsing
 - Categories auto-assigned via keyword matching, overridable via `/recategorize` (learns merchant overrides)
 - `type` column distinguishes `expense` (default) from `income` transactions
@@ -193,6 +193,18 @@ Steps in order:
 
 The `IngestionPipeline` is instantiated per-user inside `UserManager._build_context()`.
 
+### Capture trust foundation
+
+- `source_events` retains the original observation, parser version, status, attempts, and linked transaction. Raw payloads stay server-side.
+- Gmail persists source events before advancing checkpoints. It captures configured senders independent of read status and never changes inbox labels.
+- Initial/resync history is bounded to 90 days, paginated with persisted progress. Expired history restarts bounded synchronization. Automatic processing retries stop after five failures; unrecognized events remain recorded.
+- Historical Gmail capture does not notify or join the currently active trip.
+- `GmailPoller.poll_once()` now returns stored transaction dictionaries. `force_poll()` and the background loop use this same path; concurrent cycles and repeated starts are serialized.
+- Wallet always uses `IngestionPipeline`, including contexts without a configured poller pipeline.
+- Wallet credential hashes live in per-user settings. First valid Bearer request makes credentials mandatory. Revocation keeps intake closed. Never put credentials in URL query parameters or ordinary status responses.
+- OAuth state is opaque, single-use, expires after ten minutes, and is bound to the initiating web session. Telegram `/reauth` links to authenticated Settings.
+- Recovery CLI: `python -m scripts.backup --help`; see `docs/operations/backups.md`. Never copy live SQLite files for backup.
+
 ### Parser System
 
 - Email parsers return `None` on non-match. `AppleWalletParser.parse()` raises `ValueError` on missing required fields (caught by the webhook route and converted to HTTP 400). The Gmail poller does not expect parser exceptions.
@@ -227,13 +239,13 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - `transaction_date` is stored as ISO 8601 string `"YYYY-MM-DDTHH:MM:SS"`. Range queries must use `DATE(transaction_date) >= ?`. Display truncates to `[:10]`.
 - `raw_data` for Apple Wallet transactions is `str(dict)` (Python `repr`), not valid JSON. Re-parsing requires `ast.literal_eval`, not `json.loads`.
 - DB path resolution: `DATA_DIR = "/data" if os.path.isdir("/data") else "data"`. Per-user DB: `{DATA_DIR}/users/{username}/expense_tracker.db`. Admin DB: `{DATA_DIR}/app.db`. The `EXPENSE_DB_PATH` env var overrides only the legacy single-user path, not per-user paths.
-- Migrations in `init_db` wrap each `ALTER TABLE` in bare `except: pass` — SQLite has no `ADD COLUMN IF NOT EXISTS`. All new column migrations must follow this pattern.
+- Legacy baseline migrations remain in `init_db`. New schema changes use ordered, transactional migrations in `src/migrations.py`; do not add new swallowed migration errors.
 - `RecurringDetector` runs inside `IngestionPipeline.ingest()` (both Gmail and Webhook paths). It looks back 90 days and is instantiated per-`UserContext` (stateful — reused across ingestion calls for the same user).
 - The `source` column has no `CHECK` constraint — invalid values insert silently. Valid values: `dbs_paylah`, `uob_card`, `uob_paynow`, `uob_paynow_sent`, `uob_transfer`, `uob_nets`, `apple_wallet`, `manual`, `cash`.
 
 ### Testing Conventions
 
-- The schema in `tests/conftest.py` `in_memory_db` fixture must mirror the fully-migrated schema in `main.py init_db`. When adding a migration column in `main.py`, also add it to the `conftest.py` schema string.
+- The `in_memory_db` fixture calls production `main.init_db(":memory:")`. New additive migrations live in ordered `src/migrations.py` and run in production and tests. Append migrations; never edit released versions.
 - There is no shared `Storage` or `Categorizer` fixture — tests instantiate them inline: `Storage(in_memory_db)`.
 - `sample_categories` fixture uses comma-separated string keywords (`"restaurant,cafe,food"`). `sample_config` uses Python lists. Both mirror real usage: Storage receives the comma-separated string form; Categorizer receives the list form from YAML.
 
@@ -560,7 +572,7 @@ Test files: `test_storage.py`, `test_categorizer.py`, `test_parsers.py`, `test_t
 
 - **Adding a new bank parser:** Create `src/parsers/<bank>.py` extending `BankParser`, add sender filter to `config.yaml`, add test in `tests/test_parsers.py`
 - **Adding a Telegram command:** Add handler in `src/telegram_bot.py`, register in `setup_handlers()`, follow existing command pattern
-- **Changing the schema:** Update `src/main.py` `init_db()` + add `ALTER TABLE` migration, update `tests/conftest.py` schema
+- **Changing the schema:** Append a version in `src/migrations.py`; tests use production `init_db` and those same migrations.
 - **Adding an API endpoint:** Add route in `src/web/app.py` inside `create_dashboard_app()`, add `Depends(require_auth)`. Finance feature routes also need `Depends(_get_storage)`.
 - **Adding a category color:** Add the color to `getCategoryColor()` defaults and the 20-color `PALETTE` array in `src/web/frontend/src/lib/utils.ts`
 - **Adding a new chart component:** Create in `src/components/charts/`. Import all Recharts config from `src/lib/chartTheme.ts`. Wrap in `ChartCard` from `src/components/ui/cards.tsx` if the component owns its card.
