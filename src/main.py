@@ -25,6 +25,7 @@ from src.telegram_bot import TelegramBotService
 from src.webhook import create_webhook_app
 from src.web.app import create_dashboard_app
 from src.exchange import ExchangeRateService
+from src.migrations import migrate
 
 logging.basicConfig(
     level=logging.INFO,
@@ -250,6 +251,7 @@ def init_db(db_path: str) -> sqlite3.Connection:
             "INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)", (key, value)
         )
     conn.commit()
+    migrate(conn)
     tx_count = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
     cat_count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
     logger.info(f"Database ready: {tx_count} transactions, {cat_count} categories")
