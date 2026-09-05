@@ -584,7 +584,7 @@ Test files: `test_storage.py`, `test_categorizer.py`, `test_parsers.py`, `test_t
 
 ### Issue tracker
 
-Issues live in GitHub Issues at `xinweichong/expense-tracker`. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues at `xinweichong/cashe`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
